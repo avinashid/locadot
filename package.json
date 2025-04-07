@@ -1,7 +1,8 @@
 {
   "name": "locadot",
   "version": "1.0.0",
-  "description": "Secure your local development environment with HTTPS and custom domains like https://dev.localhost, powered by mkcert.",
+  "description": "Secure your local development environment with HTTPS and custom domains like dev.localhost.",
+  "homepage": "https://www.npmjs.com/package/locadot",
   "main": "dist/index.js",
   "bin": {
     "local-ssl": "./dist/index.js"
@@ -27,7 +28,6 @@
   "bugs": {
     "url": "https://github.com/avinashid/locadot/issues"
   },
-  "homepage": "https://github.com/avinashid/locadot#readme",
   "dependencies": {
     "@types/http-proxy": "^1.17.16",
     "@types/yargs": "^17.0.33",
