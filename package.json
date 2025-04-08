@@ -5,7 +5,7 @@
   "homepage": "https://www.npmjs.com/package/locadot",
   "main": "dist/index.js",
   "bin": {
-    "local-ssl": "./dist/index.js"
+    "locadot": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsx --watch src/index.ts",
