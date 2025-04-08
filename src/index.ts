@@ -78,13 +78,8 @@ async function run() {
   const domain = argv.host;
   const port = argv.port;
 
-  // registerDomain(domain, port);
-  // startCentralProxy();
   await startCentralProxy();
   await registerDomain(domain as string, port as number);
-  if (argv._[0] === "start") {
-  } else if (argv._[0] === "add") {
-  }
 }
 
 run();
