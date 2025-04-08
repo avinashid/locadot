@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import https from "https";
 import httpProxy from "http-proxy";
 import yargs from "yargs";
@@ -77,7 +79,7 @@ async function run() {
       demandOption: true,
       type: "number",
     })
-    .usage("Usage: npx local-ssl --host local.dev --port 3350")
+    .usage("Usage: npx locadot --host local.dev --port 3350")
     .help().argv;
 
   if (!isValidLocalhostDomain(argv.host)) {
