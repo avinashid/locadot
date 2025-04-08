@@ -1,56 +1,33 @@
 #!/usr/bin/env node
 
 import https from "https";
-import httpProxy from "http-proxy";
+
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { createSSL } from "./certs";
-import { proxyNotFound } from "./utils";
+
+import { registerDomain, startCentralProxy } from "./server";
 
 export function isValidLocalhostDomain(domain: string): boolean {
   const localhostPattern = /^(?:[a-zA-Z0-9-]+\.)*localhost$/;
   return localhostPattern.test(domain);
 }
 
-async function createReverseProxy(targetPort: number, domain: string) {
-  const proxy = httpProxy.createProxyServer({});
-
-  const { key, cert } = await createSSL(domain);
-
-  const options = { key, cert };
-
-  const server = https.createServer(options, (req, res) => {
-    const host = req.headers.host;
-    if (host !== domain && host !== `${domain}:443`) {
-      res.writeHead(502, { "Content-Type": "text/html" });
-      res.end(proxyNotFound(host!));
-      return;
-    }
-
-    proxy.web(req, res, { target: `http://localhost:${targetPort}` }, (err) => {
-      console.error("Proxy error:", err);
-      res.writeHead(502);
-      res.end("Connection failed. Host not found.");
-    });
-  });
-
-  server.listen(443, () => {
-    console.log(`✅ HTTPS available at https://${domain}`);
-  });
-}
-
 export function isDomainRunning(domain: string, port = 443): Promise<boolean> {
   return new Promise((resolve) => {
     const req = https.request(
       {
-        hostname: domain,
+        hostname: "localhost", // we're always connecting to localhost
         port,
         method: "HEAD",
         rejectUnauthorized: false, // ignore self-signed certs
         timeout: 1000,
+        headers: {
+          Host: domain, // 👈 critical: ask the proxy "Do you know this host?"
+        },
       },
       (res) => {
-        resolve(true);
+        // Only return true if it returns a valid 2xx or 3xx status
+        resolve(res.statusCode! >= 200 && res.statusCode! < 400);
         res.destroy();
       }
     );
@@ -101,7 +78,13 @@ async function run() {
   const domain = argv.host;
   const port = argv.port;
 
-  createReverseProxy(port, domain);
+  // registerDomain(domain, port);
+  // startCentralProxy();
+  await startCentralProxy();
+  await registerDomain(domain as string, port as number);
+  if (argv._[0] === "start") {
+  } else if (argv._[0] === "add") {
+  }
 }
 
 run();
