@@ -5,13 +5,13 @@ import http from "http";
 import fs from "fs";
 import { proxyNotFound } from "./utils";
 import path from "path";
+import getAppDataPath from "appdata-path";
 
-export const LOCK_FILE = path.join(require("os").homedir(), ".locadot.lock");
+const CERT_PATH = getAppDataPath("locadot");
 
-export const REGISTRY_FILE = path.join(
-  require("os").homedir(),
-  ".locadot-registry.json"
-);
+export const LOCK_FILE = path.join(CERT_PATH, ".locadot.lock");
+
+export const REGISTRY_FILE = path.join(CERT_PATH, ".locadot-registry.json");
 
 export interface DomainRegistry {
   [domain: string]: number;
