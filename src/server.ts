@@ -40,7 +40,6 @@ class ProxyHandler {
         res,
         { target: `http://localhost:${targetPort}` },
         (err) => {
-          console.error("Proxy error:", err);
           locadotFile.updateLogs(host || "", "warn", "Host not found.");
           res.writeHead(502);
           res.end("Connection failed. Host not found.");

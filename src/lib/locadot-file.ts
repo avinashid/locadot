@@ -69,10 +69,7 @@ export default class locadotFile {
   static async watchRegistry() {
     return fs.watch(locadotPath.REGISTRY_FILE, async (eventType) => {
       if (eventType === "change") {
-        console.log(
-          "🔄 Updated domain mappings:",
-          await locadotFile.getRegistry()
-        );
+        this.updateLogs("🔄 Updated domain mappings.");
       }
     });
   }
@@ -121,15 +118,17 @@ export default class locadotFile {
     let length = logs.logs?.length || 0;
     logs.logs?.forEach((log) => this.printLogs(log));
     fs.watch(locadotPath.LOGS, async (eventType) => {
-      if (eventType === "change") {
-        const newLog = await locadotFile.getLogs();
-        newLog.logs?.forEach((log, i) => {
-          if (i > length - 2) {
-            this.printLogs(log);
-          }
-        });
-        length = newLog.logs?.length || 0;
-      }
+      try {
+        if (eventType === "change") {
+          const newLog = await locadotFile.getLogs();
+          newLog.logs?.forEach((log, i) => {
+            if (i > length - 1) {
+              this.printLogs(log);
+            }
+          });
+          length = newLog.logs?.length || 0;
+        }
+      } catch (error) {}
     });
   }
 
