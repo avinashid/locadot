@@ -21,4 +21,5 @@ export const errorConstants = {
     "❌ Domain already in use. Please choose another domain or stop the existing instance.",
 
   proxyClose: "☑️ Successfully stopped all locadot instances.",
+  softClose: "☑️ Successfully stopped central proxy..",
 };

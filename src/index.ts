@@ -51,6 +51,14 @@ async function run() {
       }
     )
     .command(
+      "log path",
+      "Show log path",
+      () => {},
+      async (argv) => {
+        Commands.logPath();
+      }
+    )
+    .command(
       "restart",
       "Restart locadot",
       () => {},
@@ -60,10 +68,20 @@ async function run() {
     )
     .command(
       "stop",
-      "Stop all kill all locadot hosts",
+      "Stop central proxy and logs.",
       () => {},
       async (argv) => {
         await Commands.stop();
+        console.log(errorConstants.proxyClose);
+        process.exit(0);
+      }
+    )
+    .command(
+      "kill",
+      "Stop central proxy and clear all logs and also port mapping.",
+      () => {},
+      async (argv) => {
+        await Commands.kill();
         console.log(errorConstants.proxyClose);
         process.exit(0);
       }

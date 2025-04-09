@@ -22,21 +22,34 @@ class ProxyHandler {
       domainMap = await locadotFile.getRegistry();
     });
 
-    process.on("SIGINT", async () => await locadotFile.softDestroy(watcher));
-    process.on("SIGTERM", async () => await locadotFile.softDestroy(watcher));
+    process.on("SIGINT", async () => {
+      locadotFile.updateLogs(
+        "🛑 Proxy stopped.",
+        "error",
+        "Proxy soft destroyed as process SIGINT"
+      );
+      await locadotFile.softDestroy(watcher);
+    });
+    process.on("SIGTERM", async () => {
+      locadotFile.updateLogs(
+        "🛑 Proxy stopped.",
+        "error",
+        "Proxy soft destroyed as process SIGTERM"
+      );
+
+      await locadotFile.softDestroy(watcher);
+    });
 
     const requestHandler = (
       req: http.IncomingMessage,
       res: http.ServerResponse
     ) => {
       const host = req.headers.host?.split(":")[0];
-      locadotFile.updateLogs(host || "", "log");
       const targetPort = domainMap[host!];
 
       if (!targetPort) {
         res.writeHead(502, { "Content-Type": "text/html" });
         res.end(proxyNotFound(host!));
-        locadotFile.updateLogs(host || "", "warn", "Proxy not exist.");
       }
 
       proxy.web(
@@ -44,7 +57,11 @@ class ProxyHandler {
         res,
         { target: `http://localhost:${targetPort}` },
         (err) => {
-          locadotFile.updateLogs(host || "", "warn", "Host not found.");
+          locadotFile.updateLogs(
+            host || "",
+            "warn",
+            `${err.name}=> ${err.message}`
+          );
           res.writeHead(502);
           res.end("Connection failed. Host not found.");
         }
@@ -127,6 +144,9 @@ class ProxyHandler {
   }
 
   async stopProxy() {
+    await locadotFile.softDestroy();
+  }
+  async killProxy() {
     await locadotFile.destroy();
   }
   async restartProxy() {

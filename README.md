@@ -3,7 +3,7 @@
 ## ✨ Features
 
 - ✅ Automatically generates trusted local SSL certificates
-- 🔁 Reverse proxies `https://your.custom.domain` → `localhost:your-port`
+- 🔁 Reverse proxies `localhost:PORT ` → `https://your.custom.domain.localhost`
 - 🖥️ Works on Windows, macOS, and Linux
 - 🛠️ OS-specific guidance for host setup
 - ⚠️ Warns and exits if domain isn’t correctly mapped to a local IP
@@ -52,7 +52,13 @@ npx locadot log
 ```bash
 npx locadot clear logs
 ```
+##### 🧹 Show Logs Path
 
+###### Print the path of logged files used.
+
+```bash
+npx locadot log path
+```
 ##### 🔄 Restart Proxy
 
 ###### Restarts the proxy server and reloads configuration.
@@ -67,6 +73,14 @@ npx locadot restart
 
 ```bash
 npx locadot stop
+```
+
+##### 🛑 Kill
+
+###### Stops all running locadot hosts, clear logs and host mapping and shuts down the proxy server.
+
+```bash
+npx locadot kill
 ```
 
 ---

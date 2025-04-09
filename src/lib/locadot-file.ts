@@ -150,6 +150,7 @@ export default class locadotFile {
     try {
       const pid = await locadotFile.getProcessId();
       locadotFile.deleteLockFile();
+      locadotFile.clearLogs();
       watcher?.close();
       if (pid) {
         process.kill(parseInt(pid));

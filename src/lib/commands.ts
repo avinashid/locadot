@@ -1,6 +1,6 @@
 import type yargs from "yargs";
 import Localhost from "./localhost";
-import { errorConstants } from "../utils/constants";
+import { errorConstants, locadotPath } from "../utils/constants";
 import locadotProxy from "../server";
 import locadotFile from "./locadot-file";
 
@@ -31,6 +31,11 @@ export default class Commands {
       await locadotProxy.stopProxy();
     } catch (error) {}
   }
+  static async kill() {
+    try {
+      await locadotProxy.killProxy();
+    } catch (error) {}
+  }
 
   static async restart() {
     await locadotProxy.restartProxy();
@@ -58,5 +63,9 @@ export default class Commands {
       locadotFile.clearLogs();
       console.log("☑️ Logs successfully cleared.");
     } catch (error) {}
+  }
+
+  static async logPath() {
+    console.log(locadotPath.LOGS);
   }
 }
