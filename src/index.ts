@@ -35,8 +35,8 @@ async function run() {
       Commands.getRegistry();
     })
     .command(
-      "log",
-      "Watch logs",
+      "watch logs",
+      "Watch log files",
       () => {},
       async (argv) => {
         Commands.watchLogs();
@@ -51,7 +51,7 @@ async function run() {
       }
     )
     .command(
-      "log path",
+      "path logs",
       "Show log path",
       () => {},
       async (argv) => {

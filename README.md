@@ -42,7 +42,7 @@ npx locadot host
 ###### Continuously watches and outputs proxy logs in real time.
 
 ```bash
-npx locadot log
+npx locadot watch logs
 ```
 
 ##### 🧹 Clear Logs
@@ -57,7 +57,7 @@ npx locadot clear logs
 ###### Print the path of logged files used.
 
 ```bash
-npx locadot log path
+npx locadot path logs
 ```
 ##### 🔄 Restart Proxy
 
