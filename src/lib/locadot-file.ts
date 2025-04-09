@@ -66,10 +66,11 @@ export default class locadotFile {
     );
   }
 
-  static async watchRegistry() {
+  static async watchRegistry(callBackOnChange?: () => void) {
     return fs.watch(locadotPath.REGISTRY_FILE, async (eventType) => {
       if (eventType === "change") {
         this.updateLogs("🔄 Updated domain mappings.");
+        callBackOnChange && callBackOnChange();
       }
     });
   }

@@ -5,7 +5,7 @@ import http from "http";
 import fs from "fs";
 import { proxyNotFound } from "./utils";
 import { locadotPath } from "./utils/constants";
-import locadotFile from "./lib/locadot-file";
+import locadotFile, { type DomainRegistry } from "./lib/locadot-file";
 import { spawn } from "child_process";
 import path from "path";
 
@@ -17,7 +17,10 @@ class ProxyHandler {
 
     const defaultCert = await createSSL("localhost");
 
-    const watcher = await locadotFile.watchRegistry();
+    const watcher = await locadotFile.watchRegistry(async () => {
+      locadotFile.updateLogs("🔄 Updated domain mappings.");
+      domainMap = await locadotFile.getRegistry();
+    });
 
     process.on("SIGINT", async () => await locadotFile.destroy(watcher));
     process.on("SIGTERM", async () => await locadotFile.destroy(watcher));
@@ -27,6 +30,7 @@ class ProxyHandler {
       res: http.ServerResponse
     ) => {
       const host = req.headers.host?.split(":")[0];
+      locadotFile.updateLogs(host || "", "log");
       const targetPort = domainMap[host!];
 
       if (!targetPort) {
@@ -99,8 +103,6 @@ class ProxyHandler {
     }
 
     let registry = await locadotFile.getRegistry();
-
-    console.log(registry);
 
     if (!fs.existsSync(locadotPath.REGISTRY_FILE)) {
       fs.writeFileSync(locadotPath.REGISTRY_FILE, "{}");
