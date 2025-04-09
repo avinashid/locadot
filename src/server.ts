@@ -22,8 +22,8 @@ class ProxyHandler {
       domainMap = await locadotFile.getRegistry();
     });
 
-    process.on("SIGINT", async () => await locadotFile.destroy(watcher));
-    process.on("SIGTERM", async () => await locadotFile.destroy(watcher));
+    process.on("SIGINT", async () => await locadotFile.softDestroy(watcher));
+    process.on("SIGTERM", async () => await locadotFile.softDestroy(watcher));
 
     const requestHandler = (
       req: http.IncomingMessage,
