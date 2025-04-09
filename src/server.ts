@@ -4,141 +4,136 @@ import https from "https";
 import http from "http";
 import fs from "fs";
 import { proxyNotFound } from "./utils";
+import { locadotPath } from "./utils/constants";
+import locadotFile from "./lib/locadot-file";
+import { spawn } from "child_process";
 import path from "path";
-import getAppDataPath from "appdata-path";
 
-const CERT_PATH = getAppDataPath("locadot");
+class ProxyHandler {
+  async startCentralProxy() {
+    let domainMap = await locadotFile.getRegistry();
 
-export const LOCK_FILE = path.join(CERT_PATH, ".locadot.lock");
+    const proxy = httpProxy.createProxyServer({});
 
-export const REGISTRY_FILE = path.join(CERT_PATH, ".locadot-registry.json");
+    const defaultCert = await createSSL("localhost");
 
-export interface DomainRegistry {
-  [domain: string]: number;
-}
+    const watcher = await locadotFile.watchRegistry();
 
-export async function startCentralProxy() {
-  if (await isProxyAlreadyRunning()) {
-    console.log("🔌 Proxy is already running");
-    return;
+    process.on("SIGINT", async () => await locadotFile.destroy(watcher));
+    process.on("SIGTERM", async () => await locadotFile.destroy(watcher));
+
+    const requestHandler = (
+      req: http.IncomingMessage,
+      res: http.ServerResponse
+    ) => {
+      const host = req.headers.host?.split(":")[0];
+      const targetPort = domainMap[host!];
+
+      if (!targetPort) {
+        res.writeHead(502, { "Content-Type": "text/html" });
+        res.end(proxyNotFound(host!));
+        locadotFile.updateLogs(host || "", "warn", "Proxy not exist.");
+      }
+
+      proxy.web(
+        req,
+        res,
+        { target: `http://localhost:${targetPort}` },
+        (err) => {
+          console.error("Proxy error:", err);
+          locadotFile.updateLogs(host || "", "warn", "Host not found.");
+          res.writeHead(502);
+          res.end("Connection failed. Host not found.");
+        }
+      );
+    };
+
+    const httpsServer = https.createServer(defaultCert, requestHandler);
+    const httpServer = http.createServer(requestHandler);
+
+    httpsServer.listen(443, () => {
+      locadotFile.updateLogs("🛜 HTTPS proxy running on port 443");
+    });
+
+    httpServer.listen(80, () => {
+      locadotFile.updateLogs("🛜 HTTP proxy running on port 80");
+    });
   }
 
-  let domainMap: DomainRegistry = {};
-
-  // Create lock file
-  fs.writeFileSync(LOCK_FILE, process.pid.toString());
-
-  if (!fs.existsSync(REGISTRY_FILE)) {
-    fs.writeFileSync(REGISTRY_FILE, "{}");
-  }
-
-  if (fs.existsSync(REGISTRY_FILE)) {
-    domainMap = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf-8"));
-  }
-  const proxy = httpProxy.createProxyServer({});
-
-  const defaultCert = await createSSL("localhost");
-
-  const watcher = fs.watch(REGISTRY_FILE, (eventType) => {
-    if (eventType === "change") {
-      domainMap = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf-8"));
-      console.log("🔄 Updated domain mappings:", domainMap);
-    }
-  });
-
-  process.on("SIGINT", cleanupFn);
-  process.on("SIGTERM", cleanupFn);
-
-  function cleanupFn() {
-    watcher.close();
-    cleanUp();
-    process.exit();
-  }
-
-  const requestHandler = (
-    req: http.IncomingMessage,
-    res: http.ServerResponse
-  ) => {
-    const host = req.headers.host?.split(":")[0];
-    const targetPort = domainMap[host!];
-
-    if (!targetPort) {
-      res.writeHead(502, { "Content-Type": "text/html" });
-      res.end(proxyNotFound(host!));
+  async startProxy() {
+    if (await locadotFile.getProcessId()) {
+      console.error("Proxy is already running");
       return;
     }
-
-    proxy.web(req, res, { target: `http://localhost:${targetPort}` }, (err) => {
-      console.error("Proxy error:", err);
-      res.writeHead(502);
-      res.end("Connection failed. Host not found.");
-    });
-  };
-
-  const httpsServer = https.createServer(defaultCert, requestHandler);
-  const httpServer = http.createServer(requestHandler);
-
-  httpsServer.listen(443, () => {
-    console.log("🌐 HTTPS proxy running on port 443");
-  });
-
-  httpServer.listen(80, () => {
-    console.log("🌐 HTTP proxy running on port 80");
-  });
-}
-
-export async function registerDomain(domain: string, port: number) {
-  if (!(await isProxyAlreadyRunning())) {
-    console.error(
-      '❌ Proxy is not running. Start it first with "locadot start"'
-    );
-    process.exit(1);
-  }
-
-  let registry: DomainRegistry = {};
-
-  if (!fs.existsSync(REGISTRY_FILE)) {
-    fs.writeFileSync(REGISTRY_FILE, "{}");
-  }
-
-  if (fs.existsSync(REGISTRY_FILE)) {
-    registry = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf-8"));
-  }
-  if (registry[domain]) {
-    console.error(`❌ ${domain} already mapped to port ${registry[domain]}`);
-    process.exit(1);
-  }
-
-  registry[domain] = port;
-  fs.writeFileSync(REGISTRY_FILE, JSON.stringify(registry, null, 2));
-  console.log(`✅ ${domain} => http://localhost:${port}`);
-}
-
-export async function isProxyAlreadyRunning(): Promise<boolean> {
-  try {
-    if (fs.existsSync(LOCK_FILE)) {
-      const pid = parseInt(fs.readFileSync(LOCK_FILE, "utf-8"));
-      try {
-        process.kill(pid, 0); // Check if process exists
-        return true;
-      } catch {
-        // PID doesn't exist, remove stale lock file
-        cleanUp();
-        return false;
+    const proxyProcess = spawn(
+      "node",
+      [
+        path.join(
+          __dirname,
+          process.env.NODE_ENV === "production" ? "core.js" : "../dist/core.js"
+        ),
+      ],
+      {
+        detached: true,
+        stdio: "ignore",
       }
-    }
-    cleanUp();
-    return false;
-  } catch (err) {
-    cleanUp();
+    );
 
-    return false;
+    proxyProcess.on("error", (err) => {
+      console.error("Failed to start child process:", err);
+    });
+
+    if (!proxyProcess.pid) {
+      console.error("❌ Central proxy failed to start");
+      process.exit(1);
+    } else {
+      locadotFile.createLockFile(proxyProcess.pid?.toString());
+    }
+
+    proxyProcess.unref();
+    console.log("🚀 Central proxy started in background.");
+  }
+
+  async registerDomain(domain: string, port: number) {
+    if (!(await locadotFile.getProcessId())) {
+      await this.startProxy();
+    }
+
+    let registry = await locadotFile.getRegistry();
+
+    console.log(registry);
+
+    if (!fs.existsSync(locadotPath.REGISTRY_FILE)) {
+      fs.writeFileSync(locadotPath.REGISTRY_FILE, "{}");
+    }
+
+    if (fs.existsSync(locadotPath.REGISTRY_FILE)) {
+      registry = JSON.parse(
+        fs.readFileSync(locadotPath.REGISTRY_FILE, "utf-8")
+      );
+    }
+    if (registry[domain]) {
+      console.error(`❌ ${domain} already mapped to port ${registry[domain]}`);
+      process.exit(1);
+    }
+
+    registry[domain] = port;
+    fs.writeFileSync(
+      locadotPath.REGISTRY_FILE,
+      JSON.stringify(registry, null, 2)
+    );
+    console.log(`✅ ${domain} => http://localhost:${port}`);
+  }
+
+  async stopProxy() {
+    await locadotFile.destroy();
+  }
+  async restartProxy() {
+    await locadotFile.softDestroy();
+    await this.startProxy();
   }
 }
 
-export const cleanUp = () => {
-  try {
-    fs.unlinkSync(LOCK_FILE);
-    fs.rmSync(REGISTRY_FILE);
-  } catch (error) {}
-};
+const locadotProxy = new ProxyHandler();
+
+export default locadotProxy;
