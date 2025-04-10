@@ -55,7 +55,10 @@ class ProxyHandler {
       proxy.web(
         req,
         res,
-        { target: `http://localhost:${targetPort}` },
+        {
+          target: `http://localhost:${targetPort}`,
+          changeOrigin: true,
+        },
         (err) => {
           locadotFile.updateLogs(
             host || "",
@@ -68,16 +71,60 @@ class ProxyHandler {
       );
     };
 
+    const requestUpgrade = (
+      req: http.IncomingMessage,
+      socket: any,
+      head: any
+    ) => {
+      const host = req.headers.host?.split(":")[0];
+      const targetPort = domainMap[host!];
+
+      if (!targetPort) {
+        socket.end();
+        return;
+      }
+
+      // locadotFile.updateLogs(
+      //   host || "",
+      //   "log",
+      //   `WebSocket upgrade request for ${host} → localhost:${targetPort}`
+      // );
+
+      proxy.ws(
+        req,
+        socket,
+        head,
+        {
+          target: `ws://localhost:${targetPort}`,
+          ws: true,
+          changeOrigin: true,
+          headers: {
+            host: `localhost:${targetPort}`,
+          },
+        },
+        (err) => {
+          locadotFile.updateLogs(
+            host || "",
+            "warn",
+            `WebSocket Error: ${err.name}=> ${err.message}`
+          );
+          socket.end();
+        }
+      );
+    };
+
     const httpsServer = https.createServer(defaultCert, requestHandler);
     const httpServer = http.createServer(requestHandler);
 
     httpsServer.listen(443, () => {
       locadotFile.updateLogs("🛜 HTTPS proxy running on port 443");
     });
+    httpsServer.on("upgrade", requestUpgrade);
 
     httpServer.listen(80, () => {
       locadotFile.updateLogs("🛜 HTTP proxy running on port 80");
     });
+    httpServer.on("upgrade", requestUpgrade);
   }
 
   async startProxy() {
