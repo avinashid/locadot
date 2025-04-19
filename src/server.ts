@@ -58,6 +58,9 @@ class ProxyHandler {
         {
           target: `http://localhost:${targetPort}`,
           changeOrigin: true,
+          headers: {
+            "X-Original-Host": host || "localhost",
+          },
         },
         (err) => {
           locadotFile.updateLogs(
