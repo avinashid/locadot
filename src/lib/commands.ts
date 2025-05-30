@@ -93,9 +93,9 @@ export default class Commands {
       locadotFile.watchLogs();
     } catch (error) {}
   }
-  static clearLogs() {
+  static async clearLogs() {
     try {
-      locadotFile.clearLogs();
+      await locadotFile.clearLogs();
       console.log("☑️ Logs successfully cleared.");
     } catch (error) {}
   }

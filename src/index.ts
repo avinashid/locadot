@@ -22,6 +22,7 @@ program
   .requiredOption("-p, --port <port>", "Local port to forward to")
   .action(async (options) => {
     await Commands.add(options);
+    process.exit(0);
   });
 
 program
@@ -32,7 +33,10 @@ program
   )
   .requiredOption("-p, --port <port>", "Local port to forward to")
   .description("Update a domain")
-  .action(async (options) => await Commands.update(options));
+  .action(async (options) => {
+    await Commands.update(options);
+    process.exit(0);
+  });
 
 program
   .command("remove")
@@ -41,13 +45,17 @@ program
     "Host must ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
   )
   .description("Remove a domain")
-  .action(async (options) => await Commands.remove(options));
+  .action(async (options) => {
+    await Commands.remove(options);
+    process.exit(0);
+  });
 
 program
   .command("host")
   .description("Show all hosts")
-  .action(() => {
-    Commands.getRegistry();
+  .action(async () => {
+    await Commands.getRegistry();
+    process.exit(0);
   });
 
 program
@@ -60,15 +68,17 @@ program
 program
   .command("clear:logs")
   .description("Clear logs")
-  .action(() => {
-    Commands.clearLogs();
+  .action(async () => {
+    await Commands.clearLogs();
+    process.exit(0);
   });
 
 program
   .command("clear:hosts")
   .description("Clear all host file.")
-  .action(() => {
-    Commands.clearHosts();
+  .action(async () => {
+    await Commands.clearHosts();
+    process.exit(0);
   });
 
 program
@@ -76,6 +86,7 @@ program
   .description("Show configuration paths.")
   .action(() => {
     Commands.configPath();
+    process.exit(0);
   });
 
 program
@@ -83,20 +94,23 @@ program
   .description("Show logs path file.")
   .action(() => {
     Commands.logPath();
+    process.exit(0);
   });
 
 program
   .command("path:hosts")
   .description("Show hosts path file.")
-  .action(() => {
-    Commands.hostPath();
+  .action(async () => {
+    await Commands.hostPath();
+    process.exit(0);
   });
 
 program
   .command("restart")
   .description("Restart locadot")
-  .action(() => {
-    Commands.restart();
+  .action(async () => {
+    await Commands.restart();
+    process.exit(0);
   });
 
 program
