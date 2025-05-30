@@ -33,7 +33,7 @@ export default class Startup {
       case "windows":
         cmd = `schtasks /Create /TN "${SERVICE_NAME}" /TR "${command} ${commandArgs.join(
           " "
-        )}" /SC ONSTART /F`;
+        )}" /SC ONSTART /RL HIGHEST /RU SYSTEM /F`;
         break;
 
       case "linux":
