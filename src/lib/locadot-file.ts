@@ -76,16 +76,16 @@ export default class locadotFile {
 
   static getStartProxyFile(): { command: string; path: string[] } {
     if (process.env.NODE_ENV === "production") {
-      const filePath = path.join(process.cwd(), "core.js");
+      const filePath = path.join(__dirname, "..", "core.js");
       return {
         command: "node",
         path: [filePath],
       };
     }
-    const filePath = path.join(process.cwd(), "dist", "core.js");
+    const filePath = path.join(__dirname, "../../", "dist", "core.js");
     return {
       command: "node",
-      path: [filePath],
+      path: [ filePath],
     };
   }
 
