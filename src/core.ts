@@ -1,10 +1,10 @@
-import locadotFile from "./lib/locadot-file";
-import locadotProxy from "./server";
+import locadotProxy from "./proxy";
+import logger from "./utils/logger";
 
 async function run() {
-  locadotFile.updateLogs("🔄 Starting central proxy.");
+  logger.info(`🔄 Starting central proxy.`);
   await locadotProxy.startCentralProxy();
-  locadotFile.updateLogs("☑️ Central proxy started.");
+  logger.info("☑️ Central proxy started.");
 }
 
 run();

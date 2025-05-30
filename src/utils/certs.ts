@@ -4,22 +4,23 @@ import path from "path";
 
 const CERT_PATH = getAppDataPath("locadot");
 import { createCA, createCert } from "mkcert";
+import logger from "./logger";
 
 export async function createSSL(domain: string) {
-  console.log(`🔐 Preparing SSL cert for ${domain}`);
+  logger.info(`🔐 Preparing SSL cert for ${domain}`);
 
   const KEY_FILE = path.join(CERT_PATH, domain + ".key");
   const CERT_FILE = path.join(CERT_PATH, domain + ".pem");
 
   if (fs.existsSync(KEY_FILE) && fs.existsSync(CERT_FILE)) {
-    console.log(`🔄 Using existing certificate for ${domain}`);
+    logger.info(`🔄 Using existing certificate for ${domain}`);
     const key = fs.readFileSync(KEY_FILE, "utf-8");
     const cert = fs.readFileSync(CERT_FILE, "utf-8");
     return { key, cert };
   }
 
   // Otherwise, generate a new one
-  console.log(`🔐 Generating SSL cert for ${domain}`);
+  logger.info(`🔐 Generating SSL cert for ${domain}`);
 
   const ca = await createCA({
     organization: "Locadot",

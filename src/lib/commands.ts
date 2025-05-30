@@ -1,8 +1,8 @@
-import type yargs from "yargs";
 import Localhost from "./localhost";
-import { errorConstants, locadotPath } from "../utils/constants";
-import locadotProxy from "../server";
+import locadotProxy from "../proxy";
 import locadotFile from "./locadot-file";
+import logger from "../utils/logger";
+import Constants from "../constants";
 
 export type startCommand = {
   host: string;
@@ -11,24 +11,60 @@ export type startCommand = {
 };
 
 export default class Commands {
-  static async start(argv: yargs.ArgumentsCamelCase<startCommand>) {
+  static async add(argv: startCommand) {
     if (!Localhost.isValidLocalhostDomain(argv.host)) {
-      console.error(errorConstants.invalidHost);
+      console.error(Constants.proxyInfo.invalidHost);
       process.exit(1);
     }
 
     if (await Localhost.isLocalhostOpen(argv.host, argv.port)) {
-      console.error(errorConstants.hostExist);
+      console.error(Constants.proxyInfo.hostExist);
+      process.exit(1);
     }
 
     try {
-      await locadotProxy.registerDomain(argv.host, argv.port);
-    } catch (error) {}
+      await locadotProxy.addProxy(argv.host, argv.port);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  static async remove(argv: { host: string }) {
+    if (!Localhost.isValidLocalhostDomain(argv.host)) {
+      console.error(Constants.proxyInfo.invalidHost);
+      process.exit(1);
+    }
+    try {
+      await locadotProxy.removeProxy(argv.host);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  static async update(argv: startCommand) {
+    if (!Localhost.isValidLocalhostDomain(argv.host)) {
+      console.error(Constants.proxyInfo.invalidHost);
+      process.exit(1);
+    }
+
+    if (!(await Localhost.isLocalhostOpen(argv.host, argv.port))) {
+      console.error(Constants.proxyInfo.hostNotFound);
+      process.exit(1);
+    }
+    try {
+      await locadotProxy.updateProxy(argv.host, argv.port);
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   static async stop() {
     try {
       await locadotProxy.stopProxy();
+    } catch (error) {}
+  }
+  static async clearHosts() {
+    try {
+      await locadotFile.removeAllRegistry();
     } catch (error) {}
   }
   static async kill() {
@@ -54,7 +90,6 @@ export default class Commands {
 
   static watchLogs() {
     try {
-      console.log("☑️ Watching logs files.");
       locadotFile.watchLogs();
     } catch (error) {}
   }
@@ -66,6 +101,13 @@ export default class Commands {
   }
 
   static async logPath() {
-    console.log(locadotPath.LOGS);
+    console.log(Constants.paths.LOGS);
+  }
+  static async hostPath() {
+    console.log(Constants.paths.REGISTRY_FILE);
+  }
+  static async configPath() {
+    console.log(Constants.paths.REGISTRY_FILE);
+    console.log(Constants.paths.LOGS);
   }
 }

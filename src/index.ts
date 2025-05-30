@@ -1,93 +1,120 @@
 #!/usr/bin/env node
-
-import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
+import { Command } from "commander";
 import Commands from "./lib/commands";
-import { errorConstants } from "./utils/constants";
+import logger from "./utils/logger";
+import { version } from "../package.json";
+import Constants from "./constants";
 
-async function run() {
-  await yargs(hideBin(process.argv))
-    .scriptName("locadot")
-    .usage("Usage: npx locadot --host local.dev --port 3350")
-    .command(
-      "$0",
-      "Run the proxy with a domain and port",
-      (yargs) => {
-        return yargs
-          .option("host", {
-            alias: "h",
-            describe: "Domain to map (must point to 127.0.0.1 in hosts file)",
-            demandOption: true,
-            type: "string",
-          })
-          .option("port", {
-            alias: "p",
-            describe: "Local port to forward to",
-            demandOption: true,
-            type: "number",
-          });
-      },
-      async (argv) => {
-        await Commands.start(argv);
-      }
-    )
-    .command("host", "Show all hosts.", () => {
-      Commands.getRegistry();
-    })
-    .command(
-      "watch logs",
-      "Watch log files",
-      () => {},
-      async (argv) => {
-        Commands.watchLogs();
-      }
-    )
-    .command(
-      "clear logs",
-      "Clear logs",
-      () => {},
-      async (argv) => {
-        Commands.clearLogs();
-      }
-    )
-    .command(
-      "path logs",
-      "Show log path",
-      () => {},
-      async (argv) => {
-        Commands.logPath();
-      }
-    )
-    .command(
-      "restart",
-      "Restart locadot",
-      () => {},
-      async (argv) => {
-        Commands.restart();
-      }
-    )
-    .command(
-      "stop",
-      "Stop central proxy and logs.",
-      () => {},
-      async (argv) => {
-        await Commands.stop();
-        console.log(errorConstants.proxyClose);
-        process.exit(0);
-      }
-    )
-    .command(
-      "kill",
-      "Stop central proxy and clear all logs and also port mapping.",
-      () => {},
-      async (argv) => {
-        await Commands.kill();
-        console.log(errorConstants.proxyClose);
-        process.exit(0);
-      }
-    )
+const program = new Command();
 
-    .help().argv;
-}
+program
+  .name("locadot")
+  .description("Locadot CLI - Local domain proxy manager")
+  .version(version);
 
-run();
+program
+  .command("add")
+  .description("Add a new localhost domain and port")
+  .requiredOption(
+    "-h, --host <host>",
+    "Domain to map must be ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
+  )
+  .requiredOption("-p, --port <port>", "Local port to forward to")
+  .action(async (options) => {
+    await Commands.add(options);
+  });
+
+program
+  .command("update")
+  .requiredOption(
+    "-h, --host <host>",
+    "Domain to map must be ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
+  )
+  .requiredOption("-p, --port <port>", "Local port to forward to")
+  .description("Update a domain")
+  .action(async (options) => await Commands.update(options));
+
+program
+  .command("remove")
+  .requiredOption(
+    "-h, --host <host>",
+    "Host must ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
+  )
+  .description("Remove a domain")
+  .action(async (options) => await Commands.remove(options));
+
+program
+  .command("host")
+  .description("Show all hosts")
+  .action(() => {
+    Commands.getRegistry();
+  });
+
+program
+  .command("watch:logs")
+  .description("Watch log files")
+  .action(() => {
+    Commands.watchLogs();
+  });
+
+program
+  .command("clear:logs")
+  .description("Clear logs")
+  .action(() => {
+    Commands.clearLogs();
+  });
+
+program
+  .command("clear:hosts")
+  .description("Clear all host file.")
+  .action(() => {
+    Commands.clearHosts();
+  });
+
+program
+  .command("path")
+  .description("Show configuration paths.")
+  .action(() => {
+    Commands.configPath();
+  });
+
+program
+  .command("path:logs")
+  .description("Show logs path file.")
+  .action(() => {
+    Commands.logPath();
+  });
+
+program
+  .command("path:hosts")
+  .description("Show hosts path file.")
+  .action(() => {
+    Commands.hostPath();
+  });
+
+program
+  .command("restart")
+  .description("Restart locadot")
+  .action(() => {
+    Commands.restart();
+  });
+
+program
+  .command("stop")
+  .description("Stop central proxy and logs")
+  .action(async () => {
+    await Commands.stop();
+    logger.info(Constants.proxyInfo.softClose);
+    process.exit(0);
+  });
+
+program
+  .command("kill")
+  .description("Stop proxy, clear logs, and hosts file.")
+  .action(async () => {
+    await Commands.kill();
+    logger.info(Constants.proxyInfo.softClose);
+    process.exit(0);
+  });
+
+program.parse(process.argv);

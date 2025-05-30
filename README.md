@@ -14,7 +14,7 @@
 ## 🚀 Usage
 
 ```bash
-npx locadot --host dev.localhost --port 3350
+npx locadot add --host dev.localhost --port 3350
 ```
 
 ---
@@ -26,7 +26,24 @@ npx locadot --host dev.localhost --port 3350
 ###### Starts a reverse proxy to the specified localhost port.
 
 ```bash
-npx locadot --host <custom.localhost> --port <localhost-port>
+npx locadot add --host <custom.localhost> --port <localhost-port>
+```
+
+##### 🧾 Update existing host
+
+###### Update domains currently registered with locadot.
+
+```bash
+npx locadot update --host <your.localhost> --port <localhost-port>
+```
+
+
+##### 🧾 Remove existing host
+
+###### Remove domains currently registered with locadot.
+
+```bash
+npx locadot remove --host <your.localhost>
 ```
 
 ##### 🧾 View Registered Hosts
@@ -42,7 +59,7 @@ npx locadot host
 ###### Continuously watches and outputs proxy logs in real time.
 
 ```bash
-npx locadot watch logs
+npx locadot watch:logs
 ```
 
 ##### 🧹 Clear Logs
@@ -50,15 +67,42 @@ npx locadot watch logs
 ###### Clears all saved logs.
 
 ```bash
-npx locadot clear logs
+npx locadot clear:logs
 ```
+
+##### 🧹 Clear Hosts
+
+###### Clears all existing hosts.
+
+```bash
+npx locadot clear:hosts
+```
+
+##### 🧹 Show Config Path
+
+###### Print the path of config files used.
+
+```bash
+npx locadot path
+```
+
 ##### 🧹 Show Logs Path
 
 ###### Print the path of logged files used.
 
 ```bash
-npx locadot path logs
+npx locadot path:logs
 ```
+
+
+##### 🧹 Show Hosts Path
+
+###### Print the path of hosts files used.
+
+```bash
+npx locadot path:hosts
+```
+
 ##### 🔄 Restart Proxy
 
 ###### Restarts the proxy server and reloads configuration.
