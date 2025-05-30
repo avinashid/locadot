@@ -1,5 +1,6 @@
 import getAppDataPath from "appdata-path";
 import path from "path";
+import os from "os";
 
 const PACKAGE_PATH = getAppDataPath("locadot");
 const LOGS = path.join(PACKAGE_PATH, ".locadot.log");
@@ -12,6 +13,19 @@ export default class Constants {
     REGISTRY_FILE: REGISTRY_FILE,
     LOGS: LOGS,
   } as const;
+
+  static platform = () => {
+    const currentPlatform = os.platform();
+    if (currentPlatform === "win32") {
+      return "windows";
+    } else if (currentPlatform === "darwin") {
+      return "mac";
+    } else if (currentPlatform === "linux") {
+      return "linux";
+    } else {
+      return "unknown";
+    }
+  };
 
   static readonly proxyInfo = {
     invalidHost:

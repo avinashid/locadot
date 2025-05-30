@@ -3,6 +3,7 @@ import locadotProxy from "../proxy";
 import locadotFile from "./locadot-file";
 import logger from "../utils/logger";
 import Constants from "../constants";
+import Startup from "../utils/startup";
 
 export type startCommand = {
   host: string;
@@ -109,5 +110,21 @@ export default class Commands {
   static async configPath() {
     console.log(Constants.paths.REGISTRY_FILE);
     console.log(Constants.paths.LOGS);
+  }
+
+  static async enableStartup() {
+    try {
+      await Startup.enable();
+    } catch (error) {}
+  }
+  static async disableStartup() {
+    try {
+      await Startup.disable();
+    } catch (error) {}
+  }
+  static async statusStartup() {
+    try {
+      await Startup.status();
+    } catch (error) {}
   }
 }

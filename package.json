@@ -1,6 +1,6 @@
 {
   "name": "locadot",
-  "version": "1.5.2",
+  "version": "1.5.5",
   "description": "Secure your local development environment with HTTPS and custom domains like dev.localhost.",
   "homepage": "https://www.npmjs.com/package/locadot",
   "main": "dist/index.js",
@@ -29,6 +29,7 @@
     "url": "https://github.com/avinashid/locadot/issues"
   },
   "dependencies": {
+    "@expo/sudo-prompt": "^9.3.2",
     "@types/http-proxy": "^1.17.16",
     "@types/yargs": "^17.0.33",
     "appdata-path": "^1.0.0",

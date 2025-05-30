@@ -106,6 +106,30 @@ program
   });
 
 program
+  .command("startup:enable")
+  .description("Enable locadot on reboot.")
+  .action(async () => {
+    await Commands.enableStartup();
+    process.exit(0);
+  });
+
+program
+  .command("startup:disable")
+  .description("Disable locadot on reboot.")
+  .action(async () => {
+    await Commands.disableStartup();
+    process.exit(0);
+  });
+
+program
+  .command("startup:status")
+  .description("Check locadot status on reboot.")
+  .action(async () => {
+    await Commands.statusStartup();
+    process.exit(0);
+  });
+
+program
   .command("restart")
   .description("Restart locadot")
   .action(async () => {
