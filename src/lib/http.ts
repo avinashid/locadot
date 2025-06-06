@@ -21,6 +21,13 @@ export default class HttpModule {
       if (!targetPort) {
         res.writeHead(502, { "Content-Type": "text/html" });
         res.end(proxyNotFound(host!));
+        // logger.warn(
+        //   `${
+        //     host || ""
+        //   } warn: Connection failed. Host not found. ${targetPort}. Total host available : ${
+        //     Object.keys(domainMap).length
+        //   }`
+        // );
       }
       proxy.web(
         req,
@@ -33,7 +40,9 @@ export default class HttpModule {
           },
         },
         (err) => {
-          logger.warn(host || "", "warn", `${err.name}=> ${err.message}`);
+          logger.warn(
+            `${host || ""} warn ${err.name}=> ${JSON.stringify(err, null, 2)}`
+          );
           res.writeHead(502);
           res.end("Connection failed. Host not found.");
         }

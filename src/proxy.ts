@@ -2,12 +2,10 @@ import httpProxy from "http-proxy";
 import { createSSL } from "./utils/certs";
 import https from "https";
 import http from "http";
-import fs from "fs";
 import locadotFile from "./lib/locadot-file";
 import { spawn } from "child_process";
 import FileModule from "./utils/file";
 import logger from "./utils/logger";
-import Constants from "./constants";
 import HttpModule from "./lib/http";
 
 class ProxyHandler {
@@ -39,10 +37,10 @@ class ProxyHandler {
         await locadotFile.softDestroy(watcher);
       });
 
-      process.on("exit", (code: string, signal: string) => {
-        logger.error(`Process exited with error ${code} and signal ${signal}`);
-        locadotFile.softDestroy(watcher);
-      });
+      // process.on("exit", (code: string, signal: string) => {
+      //   logger.error(`Process exited with error ${code} and signal ${signal}`);
+      //   locadotFile.softDestroy(watcher);
+      // });
 
       const httpsServer = https.createServer(defaultCert, (req, res) => {
         HttpModule.requestHandler(req, res, proxy, domainMap);

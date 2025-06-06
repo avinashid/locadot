@@ -1,6 +1,6 @@
 {
   "name": "locadot",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "description": "Secure your local development environment with HTTPS and custom domains like dev.localhost.",
   "homepage": "https://www.npmjs.com/package/locadot",
   "main": "dist/index.js",
@@ -43,5 +43,6 @@
   "devDependencies": {
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
-  }
+  },
+  "packageManager": "pnpm@10.11.1+sha512.e519b9f7639869dc8d5c3c5dfef73b3f091094b0a006d7317353c72b124e80e1afd429732e28705ad6bfa1ee879c1fce46c128ccebd3192101f43dd67c667912"
 }

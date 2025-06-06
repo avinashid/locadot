@@ -85,7 +85,7 @@ export default class locadotFile {
     const filePath = path.join(__dirname, "../../", "dist", "core.js");
     return {
       command: "node",
-      path: [ filePath],
+      path: [filePath],
     };
   }
 
@@ -109,7 +109,9 @@ export default class locadotFile {
       await locadotFile.clearLogs();
       await watcher?.close();
       if (pid) {
-        process.kill(parseInt(pid));
+        try {
+          process.kill(parseInt(pid));
+        } catch (error) {}
       }
     } catch (error) {
       logger.error(error);
