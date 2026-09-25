@@ -9,7 +9,7 @@ process.env.LOCADOT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-http-"
 
 const httpProxy = require("http-proxy");
 const HttpModule = require("../src/lib/http").default;
-const { hostOf, applyCors } = require("../src/lib/http");
+const { hostOf, applyCors, originMap, rewriteOrigins } = require("../src/lib/http");
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve) => {
@@ -145,4 +145,20 @@ test("applyCors: replaces upstream CORS, keeps Vary, makes cookies cross-site on
   assert.equal(plain["access-control-allow-origin"], "*");
   assert.equal(plain["access-control-allow-credentials"], undefined);
   assert.deepEqual(plain["set-cookie"], ["a=1"]);
+});
+
+test("rewriteOrigins: mapped origins become .localhost, plain and JSON-escaped, longest first", () => {
+  const req = { headers: { host: "app.localhost" }, socket: { encrypted: true } } as any;
+  const httpsPort = require("../src/constants").default.server.httpsPort;
+  const p = httpsPort === 443 ? "" : `:${httpsPort}`;
+  const pairs = originMap(req, {
+    "other.localhost": { target: "https://example.com" },
+    "app.localhost": { target: "https://example.com" },
+    "api.app.localhost": { target: "https://api.example.com" },
+  });
+  const text = 'fetch(`https://api.example.com/v1`);"https:\\/\\/example.com\\/x";https://example.com.evil.net;https://EXAMPLE.com';
+  assert.equal(
+    rewriteOrigins(text, pairs),
+    "fetch(`https://api.app.localhost" + p + "/v1`);\"https:\\/\\/app.localhost" + p + "\\/x\";https://example.com.evil.net;https://app.localhost" + p
+  );
 });

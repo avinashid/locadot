@@ -1,10 +1,12 @@
 import http from "http";
 import type { Duplex } from "stream";
+import zlib from "zlib";
 import httpProxy from "http-proxy";
 import { proxyNotFound, upstreamDown } from "../constants/template";
 import Constants from "../constants";
 import logger from "../utils/logger";
 import type { HostEntry, HostStats } from "../types";
+import { SHIM_PATH, injectShim, isSameOrigin, parseVia, shimScript, viaHeaders, type Via } from "./passthrough";
 
 export interface RouterContext {
   proxy: httpProxy;
@@ -29,7 +31,7 @@ const dashboardUrl = (req: http.IncomingMessage) => {
   return `${tls ? "https" : "http"}://localhost${port === standard ? "" : `:${port}`}/`;
 };
 
-const proxyOptions = (req: http.IncomingMessage, entry: HostEntry): httpProxy.ServerOptions => ({
+const proxyOptions = (req: http.IncomingMessage, entry: HostEntry, lookup: RouterContext["lookup"]): httpProxy.ServerOptions => ({
   target: entry.target,
   changeOrigin: true,
   xfwd: true,
@@ -41,23 +43,129 @@ const proxyOptions = (req: http.IncomingMessage, entry: HostEntry): httpProxy.Se
   hostRewrite: req.headers.host,
   protocolRewrite: isTls(req) ? "https" : "http",
   cookieDomainRewrite: { "*": "" },
-  headers: { "X-Original-Host": req.headers.host || "", ...(entry.cors ? sameOriginHeaders(req, entry) : {}) },
+  headers: { "X-Original-Host": req.headers.host || "", ...(entry.cors ? { ...sameOriginHeaders(req, entry, lookup), ...DECODABLE } : {}) },
 });
 
-// --cors: the upstream should see a request from its own site, so origin/CSRF checks pass.
-const sameOriginHeaders = (req: http.IncomingMessage, entry: HostEntry) => {
-  const origin = new URL(entry.target).origin;
+// --cors bodies are rewritten, so only ask for encodings we can decode (browsers also offer zstd).
+const DECODABLE = { "Accept-Encoding": "gzip, deflate, br" };
+
+const viaOptions = (req: http.IncomingMessage, entry: HostEntry, via: Via): httpProxy.ServerOptions => ({
+  target: `${via.scheme}://${via.host}`,
+  changeOrigin: true,
+  ws: true,
+  secure: !entry.insecure,
+  cookieDomainRewrite: { "*": "" },
+  headers: { ...viaHeaders(req, via, entry.target), ...DECODABLE },
+});
+
+/**
+ * --cors: the upstream should see a request from a site it trusts, so origin/CSRF checks pass.
+ * A page on another mapped domain (signalsant.localhost calling api.signalsant.localhost) is
+ * sent as that domain's real origin; anything else as the target's own origin.
+ */
+const sameOriginHeaders = (req: http.IncomingMessage, entry: HostEntry, lookup: RouterContext["lookup"]) => {
+  const upstreamOrigin = (value: string) => {
+    try {
+      const caller = lookup(new URL(value).hostname);
+      if (caller) return new URL(caller.target).origin;
+    } catch {}
+    return new URL(entry.target).origin;
+  };
   const headers: Record<string, string> = {};
-  if (req.headers.origin) headers.Origin = origin;
+  if (req.headers.origin) headers.Origin = upstreamOrigin(req.headers.origin);
   if (req.headers.referer) {
     try {
       const referer = new URL(req.headers.referer);
-      headers.Referer = origin + referer.pathname + referer.search;
+      headers.Referer = upstreamOrigin(referer.href) + referer.pathname + referer.search;
     } catch {
-      headers.Referer = origin + "/";
+      headers.Referer = new URL(entry.target).origin + "/";
     }
   }
   return headers;
+};
+
+const REWRITABLE = /^(text\/(?!event-stream)|application\/(javascript|x-javascript|ecmascript|json|xml|[\w.+-]+\+(json|xml))\b)/i;
+const DECODERS: Record<string, (body: Buffer) => Buffer> = {
+  gzip: zlib.gunzipSync,
+  "x-gzip": zlib.gunzipSync,
+  deflate: zlib.inflateSync,
+  br: zlib.brotliDecompressSync,
+};
+
+/** [real origin, local origin] for every mapping, e.g. https://api.x.com → https://api.x.localhost. */
+export const originMap = (req: http.IncomingMessage, hosts: Record<string, HostEntry>): [string, string][] => {
+  const tls = isTls(req);
+  const port = tls ? Constants.server.httpsPort : Constants.server.httpPort;
+  const suffix = port === (tls ? 443 : 80) ? "" : `:${port}`;
+  const self = hostOf(req);
+  const pairs: [string, string, boolean][] = [];
+  for (const [host, entry] of Object.entries(hosts)) {
+    try {
+      pairs.push([new URL(entry.target).origin, `${tls ? "https" : "http"}://${host}${suffix}`, host === self]);
+    } catch {}
+  }
+  // Longest first, so https://a.x.com is not half-replaced by a mapping for https://x.com;
+  // when two domains share a target, the one serving this response wins.
+  return pairs
+    .sort((a, b) => b[0].length - a[0].length || Number(b[2]) - Number(a[2]))
+    .map(([from, to]) => [from, to]);
+};
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Replaces real origins with local ones, plain and JSON-escaped (https:\/\/…). */
+export const rewriteOrigins = (text: string, pairs: [string, string][]) => {
+  for (const [from, to] of pairs) {
+    for (const [a, b] of [[from, to], [from.replace(/\//g, "\\/"), to.replace(/\//g, "\\/")]]) {
+      text = text.replace(new RegExp(escapeRegex(a) + "(?![\\w.-])", "gi"), b);
+    }
+  }
+  return text;
+};
+
+/**
+ * --cors: pages that call other domains by absolute URL (`https://api.x.com`) bypass the proxy,
+ * so the browser applies the real API's CORS policy. Rewriting mapped origins in text bodies
+ * keeps those calls on .localhost. Buffers the body; streams (SSE, binary) pass through.
+ */
+export const rewriteBody = (
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  proxyRes: http.IncomingMessage,
+  pairs: [string, string][],
+  inject = false
+) => {
+  const headers = proxyRes.headers;
+  const encoding = String(headers["content-encoding"] || "identity").toLowerCase();
+  if (!pairs.length || req.method === "HEAD" || !REWRITABLE.test(String(headers["content-type"] || ""))) return;
+  if (encoding !== "identity" && !DECODERS[encoding]) return;
+  if (proxyRes.statusCode === 204 || proxyRes.statusCode === 304) return;
+
+  delete headers["content-length"];
+  delete headers["content-encoding"];
+  delete headers["transfer-encoding"];
+  const chunks: Buffer[] = [];
+  const end = res.end.bind(res);
+  res.write = ((chunk: any) => {
+    if (chunk) chunks.push(Buffer.from(chunk));
+    return true;
+  }) as any;
+  res.end = ((chunk?: any) => {
+    if (chunk && typeof chunk !== "function") chunks.push(Buffer.from(chunk));
+    let body: Buffer = Buffer.concat(chunks);
+    try {
+      if (encoding !== "identity") body = DECODERS[encoding](body);
+      let text = rewriteOrigins(body.toString("utf8"), pairs);
+      if (inject && /^text\/html/i.test(String(headers["content-type"]))) text = injectShim(text);
+      body = Buffer.from(text, "utf8");
+    } catch (error) {
+      logger.warn(`${hostOf(req)}: could not rewrite response body: ${error}`);
+      res.statusCode = 502;
+      body = Buffer.alloc(0);
+    }
+    if (!res.headersSent) res.setHeader("Content-Length", body.length);
+    return end(body);
+  }) as any;
 };
 
 const isPreflight = (req: http.IncomingMessage) =>
@@ -133,20 +241,39 @@ export default class HttpModule {
         return;
       }
 
+      if (entry.cors && req.url?.split("?")[0] === SHIM_PATH) {
+        res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(shimScript);
+        return;
+      }
+      const via = entry.cors ? parseVia(req.url) : undefined;
+      if (via && !isSameOrigin(req)) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("locadot: the pass-through only serves the page's own requests.\n");
+        return;
+      }
+
       const started = Date.now();
       res.once("finish", () => {
         record(ctx.stats, host, res.statusCode, Date.now() - started, res.statusCode >= 500);
       });
 
-      ctx.proxy.web(req, res, proxyOptions(req, entry), (err: any) => {
-        logger.warn(`${host} → ${entry.target}: ${err?.code || err?.message}`);
+      let options = proxyOptions(req, entry, ctx.lookup);
+      if (via) {
+        (req as any).locadotVia = via;
+        options = viaOptions(req, entry, via);
+        req.url = via.path;
+      }
+      const upstream = via ? `${via.scheme}://${via.host}` : entry.target;
+      ctx.proxy.web(req, res, options, (err: any) => {
+        logger.warn(`${host} → ${upstream}: ${err?.code || err?.message}`);
         if (res.headersSent) {
           res.destroy();
           return;
         }
         // With --cors the page should see a 502, not a CORS error.
         res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...(entry.cors ? allowOrigin(req) : {}) });
-        res.end(upstreamDown(host, entry.target, err?.code || err?.message || "error", dashboardUrl(req)));
+        res.end(upstreamDown(host, upstream, err?.code || err?.message || "error", dashboardUrl(req)));
       });
     } catch (error) {
       logger.error(error);
@@ -164,9 +291,19 @@ export default class HttpModule {
         socket.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
         return;
       }
+      const via = entry.cors ? parseVia(req.url) : undefined;
+      if (via && !isSameOrigin(req)) {
+        socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        return;
+      }
       logger.debug(`WebSocket upgrade for ${host}`);
-      ctx.proxy.ws(req, socket, head, proxyOptions(req, entry), (err: any) => {
-        logger.warn(`${host} WebSocket → ${entry.target}: ${err?.code || err?.message}`);
+      let options = proxyOptions(req, entry, ctx.lookup);
+      if (via) {
+        options = viaOptions(req, entry, via);
+        req.url = via.path;
+      }
+      ctx.proxy.ws(req, socket, head, options, (err: any) => {
+        logger.warn(`${host} WebSocket → ${via ? `${via.scheme}://${via.host}` : entry.target}: ${err?.code || err?.message}`);
         socket.destroy();
       });
     } catch (error) {

@@ -8,8 +8,9 @@ import type { FSWatcher } from "chokidar";
 import Constants from "./constants";
 import RegistryStore from "./lib/registry";
 import locadotFile from "./lib/locadot-file";
-import HttpModule, { applyCors, hostOf, type RouterContext } from "./lib/http";
+import HttpModule, { applyCors, hostOf, originMap, rewriteBody, rewriteOrigins, type RouterContext } from "./lib/http";
 import Localhost from "./lib/localhost";
+import { rewriteViaResponse, type Via } from "./lib/passthrough";
 import FileModule from "./utils/file";
 import logger from "./utils/logger";
 import { createSNICallback, defaultContext, getCertFor } from "./utils/certs";
@@ -74,7 +75,7 @@ export async function startCentralProxy() {
   // Hop-by-hop headers describe the upstream connection, not ours. Apache sends
   // `Connection: Upgrade, close` + `Upgrade: h2`, which made us close the browser's
   // socket after every response (ERR_TOO_MANY_RETRIES on asset-heavy pages).
-  proxy.on("proxyRes", (proxyRes, req) => {
+  proxy.on("proxyRes", (proxyRes, req, res) => {
     if (proxyRes.statusCode === 101) return;
     const listed = String(proxyRes.headers.connection || "")
       .split(",")
@@ -83,7 +84,14 @@ export async function startCentralProxy() {
     for (const name of [...listed, "connection", "keep-alive", "upgrade", "proxy-connection"]) {
       delete proxyRes.headers[name];
     }
-    if (registry.hosts[hostOf(req)]?.cors) applyCors(req, proxyRes.headers);
+    const entry = registry.hosts[hostOf(req)];
+    if (!entry?.cors) return;
+    applyCors(req, proxyRes.headers);
+    const via: Via | undefined = (req as any).locadotVia;
+    const pairs = originMap(req, registry.hosts);
+    if (via) rewriteViaResponse(proxyRes.headers, via, entry.target);
+    else if (proxyRes.headers.location) proxyRes.headers.location = rewriteOrigins(proxyRes.headers.location, pairs);
+    rewriteBody(req, res, proxyRes, pairs, !via);
   });
 
   const info: ProxyInfo = {

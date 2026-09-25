@@ -3,7 +3,7 @@
 Something is wrong: it contradicts the README, a command's own output, or obvious intent.
 Process: [`../README.md#part-3--how-the-tracker-works`](../README.md#part-3--how-the-tracker-works) · Template: [`../templates/bug.md`](../templates/bug.md)
 
-**Baseline:** 2026-09-24, `main` @ `475b4d0` · **0 open · 14 resolved**
+**Baseline:** 2026-09-24, `main` @ `475b4d0` · **0 open · 15 resolved**
 
 | ID | P | Title | Area | Status |
 | --- | --- | --- | --- | --- |
@@ -338,6 +338,32 @@ launcher script. Not run on a real Windows machine.
 
 ---
 
+### BUG-15
+**`--cors` still gives CORS errors when the site calls its API by absolute URL** · P1 · proxy · Resolved
+
+**Where:** `src/lib/http.ts`, `src/server.ts`
+
+**What happens:** `signalsant.localhost` → `https://signalsant.com --cors` loads, but every API call fails with a
+CORS error. The bundle has `SERVER_URL: "https://api.signalsant.com"` built in, so the browser calls the real API
+directly and never goes through locadot. That API only allows `Origin: https://signalsant.com`.
+
+**Fix direction:** For `--cors` hosts, rewrite text bodies (HTML, JS, CSS, JSON, XML, decoded from gzip/deflate/br)
+and `Location` so every mapped target origin points at its `.localhost` name. Also send a caller that is itself a
+mapped domain as that domain's real origin (`https://signalsant.localhost` → `Origin: https://signalsant.com`).
+Mapping every API by hand doesn't scale (a frontend may call many domains), so the page also gets a shim
+(`src/lib/passthrough.ts`) that sends `fetch`/XHR/EventSource/WebSocket/sendBeacon calls to other origins through
+`/__locadot/x/<scheme>/<host>/…` on its own origin. Only same-origin callers may use it (`Sec-Fetch-Site`/`Origin`,
+otherwise 403). Cookies are forwarded to the same site only; third-party `Set-Cookie` is dropped.
+
+**Related:** ENH-12
+
+**Resolution:** 2026-09-25. **Verified:** `pnpm test` (87/87), including a gzip bundle rewritten end to end,
+the pass-through with the cross-site 403, and the shim run in a VM.
+Live on spare ports, `SERVER_URL` in the signalsant bundle became `https://api.signalsant.localhost:18443`, and the
+API answered the local origin with CORS allowed.
+
+---
+
 ## Resolved
 
 | ID | P | Title | Resolved | Commit |
@@ -356,3 +382,4 @@ launcher script. Not run on a real Windows machine.
 | [BUG-12](#bug-12) | P2 | Upstream hop-by-hop headers forwarded; browser socket closed after every response | 2026-09-25 | uncommitted |
 | [BUG-14](#bug-14) | P1 | Windows: `startup:enable` fails with "Access is denied" | 2026-09-25 | uncommitted |
 | [BUG-13](#bug-13) | P2 | Windows: console windows flash up and vanish while the proxy runs | 2026-09-25 | uncommitted |
+| [BUG-15](#bug-15) | P1 | `--cors` still gives CORS errors when the site calls its API by absolute URL | 2026-09-25 | uncommitted |
