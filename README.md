@@ -54,6 +54,7 @@ Options for `add` / `update`:
 | `-p, --port <port>` | Shorthand for `--target http://localhost:<port>`. |
 | `-t, --target <url>` | Any http(s) upstream. A bare `host:port` means `http://host:port`. |
 | `-k, --insecure` | Don't verify the TLS certificate of an `https` target (self-signed upstreams). |
+| `--cors` / `--no-cors` | Bypass CORS for this domain. The upstream gets `Origin`/`Referer` as its own origin, preflights are answered locally, any origin may read responses (with credentials), and cookies become `SameSite=None` over HTTPS. URLs hard-coded in pages still go to the real domain. |
 | `--no-start` | Save the mapping without starting the proxy. |
 
 ### Proxy
@@ -93,7 +94,7 @@ are answered by locadot itself, not proxied. The page is a dark control panel:
 
 - **System:** whether the proxy runs as root/admin, whether ports below 1024 can be bound (with the Linux sysctl fix when they
   can't), CA trust with an on/off toggle, start-at-boot with an on/off toggle, ports, bind addresses and state dir. It also has a **Stop proxy** button.
-- **Proxies:** add a mapping (host + port / host:port / URL, and an optional "insecure TLS" box), edit a target inline, or remove one. The table shows
+- **Proxies:** add a mapping (host + port / host:port / URL, and optional "Insecure TLS" and "Bypass CORS" boxes), edit a target inline, or remove one. The table shows
   each source → destination with up/down, status, latency, hits, errors, last access and average ms. It refreshes every 5 s.
 - **Logs:** a live tail with refresh and clear.
 - **CLI / API snippets** you can copy.
@@ -113,8 +114,8 @@ each time the proxy starts.
 | `GET /api/status` | | Proxy info, uptime, host count, and `system` (`platform`, `isRoot`, `canBindPrivileged`, `unprivilegedPortStart`, `caTrusted`, `startup`, `stateDir`). |
 | `GET /api/hosts` | | Every mapping with urls, probe (`up`, `status`, `ms`) and stats. |
 | `GET /api/logs?lines=200` | | `{ lines: [...] }` |
-| `POST /api/hosts` | `{ "host": "app.localhost", "target": "3000", "insecure": false }` | Add a mapping (201; 409 if it exists). |
-| `PUT /api/hosts/:host` | `{ "target": "https://example.com", "insecure": false }` | Change a mapping (404 if unknown). |
+| `POST /api/hosts` | `{ "host": "app.localhost", "target": "3000", "insecure": false, "cors": false }` | Add a mapping (201; 409 if it exists). |
+| `PUT /api/hosts/:host` | `{ "target": "https://example.com", "insecure": false, "cors": true }` | Change a mapping (404 if unknown). |
 | `DELETE /api/hosts/:host` | | Remove a mapping. |
 | `POST /api/startup` | `{ "enabled": true }` | Start at boot on/off. |
 | `POST /api/trust` | `{ "trusted": true }` | Trust or untrust the CA. |

@@ -8,7 +8,7 @@ import type { FSWatcher } from "chokidar";
 import Constants from "./constants";
 import RegistryStore from "./lib/registry";
 import locadotFile from "./lib/locadot-file";
-import HttpModule, { type RouterContext } from "./lib/http";
+import HttpModule, { applyCors, hostOf, type RouterContext } from "./lib/http";
 import Localhost from "./lib/localhost";
 import FileModule from "./utils/file";
 import logger from "./utils/logger";
@@ -74,7 +74,7 @@ export async function startCentralProxy() {
   // Hop-by-hop headers describe the upstream connection, not ours. Apache sends
   // `Connection: Upgrade, close` + `Upgrade: h2`, which made us close the browser's
   // socket after every response (ERR_TOO_MANY_RETRIES on asset-heavy pages).
-  proxy.on("proxyRes", (proxyRes) => {
+  proxy.on("proxyRes", (proxyRes, req) => {
     if (proxyRes.statusCode === 101) return;
     const listed = String(proxyRes.headers.connection || "")
       .split(",")
@@ -83,6 +83,7 @@ export async function startCentralProxy() {
     for (const name of [...listed, "connection", "keep-alive", "upgrade", "proxy-connection"]) {
       delete proxyRes.headers[name];
     }
+    if (registry.hosts[hostOf(req)]?.cors) applyCors(req, proxyRes.headers);
   });
 
   const info: ProxyInfo = {

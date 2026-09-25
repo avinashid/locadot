@@ -9,7 +9,7 @@ process.env.LOCADOT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-http-"
 
 const httpProxy = require("http-proxy");
 const HttpModule = require("../src/lib/http").default;
-const { hostOf } = require("../src/lib/http");
+const { hostOf, applyCors } = require("../src/lib/http");
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve) => {
@@ -123,4 +123,26 @@ test("http router", async (t) => {
 test("hostOf parses host header edge cases", () => {
   assert.equal(hostOf({ headers: { host: "[::1]:443" } } as any), "::1");
   assert.equal(hostOf({ headers: { host: "Dev.Localhost.:80" } } as any), "dev.localhost");
+});
+
+test("applyCors: replaces upstream CORS, keeps Vary, makes cookies cross-site on TLS", () => {
+  const req = { headers: { origin: "https://localhost:5173" }, socket: { encrypted: true } } as any;
+  const headers: http.IncomingHttpHeaders = {
+    "access-control-allow-origin": "https://example.com",
+    vary: "Accept-Encoding",
+    "content-type": "application/json",
+    "set-cookie": ["sid=1; Path=/; SameSite=Lax; Secure; HttpOnly", "a=2; Path=/"],
+  };
+  applyCors(req, headers);
+  assert.equal(headers["access-control-allow-origin"], "https://localhost:5173");
+  assert.equal(headers["access-control-allow-credentials"], "true");
+  assert.equal(headers.vary, "Accept-Encoding, Origin");
+  assert.equal(headers["access-control-expose-headers"], "content-type");
+  assert.deepEqual(headers["set-cookie"], ["sid=1; Path=/; HttpOnly; SameSite=None; Secure", "a=2; Path=/; SameSite=None; Secure"]);
+
+  const plain: http.IncomingHttpHeaders = { "set-cookie": ["a=1"] };
+  applyCors({ headers: {}, socket: {} } as any, plain);
+  assert.equal(plain["access-control-allow-origin"], "*");
+  assert.equal(plain["access-control-allow-credentials"], undefined);
+  assert.deepEqual(plain["set-cookie"], ["a=1"]);
 });

@@ -21,15 +21,22 @@ function freePort(): Promise<number> {
   });
 }
 
-function httpGet(port: number, host: string, urlPath = "/"): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
+function httpGet(
+  port: number,
+  host: string,
+  urlPath = "/",
+  extra: { method?: string; headers?: Record<string, string> } = {}
+): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: "127.0.0.1", port, path: urlPath, headers: { Host: host }, timeout: 3000, agent: false }, (res) => {
+    const options = { host: "127.0.0.1", port, path: urlPath, method: extra.method || "GET", headers: { Host: host, ...extra.headers }, timeout: 3000, agent: false };
+    const req = http.request(options, (res) => {
       let body = "";
       res.on("data", (c) => (body += c));
       res.on("end", () => resolve({ status: res.statusCode!, body, headers: res.headers }));
     });
     req.on("timeout", () => req.destroy(new Error("timeout")));
     req.on("error", reject);
+    req.end();
   });
 }
 
@@ -62,6 +69,11 @@ test("locadot CLI e2e", { timeout: 120_000 }, async (t) => {
   const upstream = http.createServer((req, res) => {
     // Mimic Apache advertising h2c on a plain HTTP/1.1 response.
     if (req.url === "/hop") res.setHeader("Connection", "Upgrade, close"), res.setHeader("Upgrade", "h2,h2c");
+    if (req.url === "/echo") {
+      res.setHeader("Access-Control-Allow-Origin", "https://only-this.example");
+      res.setHeader("X-Request-Id", "abc");
+      return res.end(JSON.stringify({ method: req.method, origin: req.headers.origin, referer: req.headers.referer }));
+    }
     res.end("upstream-ok");
   });
   const upstreamPort: number = await new Promise((resolve) => upstream.listen(0, "127.0.0.1", () => resolve((upstream.address() as any).port)));
@@ -85,6 +97,53 @@ test("locadot CLI e2e", { timeout: 120_000 }, async (t) => {
     assert.equal(res.status, 200);
     assert.equal(res.headers.upgrade, undefined);
     assert.notEqual(res.headers.connection, "Upgrade, close");
+  });
+
+  await t.test("--cors: preflight answered, Origin/Referer rewritten, CORS headers replaced", async () => {
+    const r = run("add", "--host", "api.localhost", "--port", String(upstreamPort), "--cors", "--no-start");
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    const origin = "http://localhost:5173";
+    const cors = async () => {
+      for (let i = 0; i < 30; i++) {
+        const pre = await httpGet(httpPort, "api.localhost", "/echo", {
+          method: "OPTIONS",
+          headers: { Origin: origin, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "content-type,x-token" },
+        });
+        if (pre.status === 204) return pre;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.fail("registry reload did not pick up api.localhost");
+    };
+    const pre = await cors();
+    assert.equal(pre.headers["access-control-allow-origin"], origin);
+    assert.equal(pre.headers["access-control-allow-credentials"], "true");
+    assert.equal(pre.headers["access-control-allow-methods"], "PUT");
+    assert.equal(pre.headers["access-control-allow-headers"], "content-type,x-token");
+
+    const res = await httpGet(httpPort, "api.localhost", "/echo", { headers: { Origin: origin, Referer: `${origin}/page?q=1` } });
+    assert.equal(res.status, 200);
+    const seen = JSON.parse(res.body);
+    const upstreamOrigin = `http://localhost:${upstreamPort}`;
+    assert.equal(seen.origin, upstreamOrigin);
+    assert.equal(seen.referer, `${upstreamOrigin}/page?q=1`);
+    assert.equal(res.headers["access-control-allow-origin"], origin);
+    assert.match(String(res.headers["access-control-expose-headers"]), /x-request-id/);
+    assert.match(String(res.headers.vary), /Origin/);
+  });
+
+  await t.test("without --cors, Origin passes through and OPTIONS reaches the upstream", async () => {
+    const r = run("update", "--host", "api.localhost", "--port", String(upstreamPort), "--no-cors", "--no-start");
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    let res;
+    for (let i = 0; i < 30; i++) {
+      res = await httpGet(httpPort, "api.localhost", "/echo", { method: "OPTIONS", headers: { Origin: "http://x.test", "Access-Control-Request-Method": "PUT" } });
+      if (res.status === 200) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(res!.status, 200);
+    assert.equal(JSON.parse(res!.body).origin, "http://x.test");
+    assert.equal(res!.headers["access-control-allow-origin"], "https://only-this.example");
+    run("remove", "--host", "api.localhost");
   });
 
   await t.test("duplicate add exits 1", () => {

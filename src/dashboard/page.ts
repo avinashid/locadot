@@ -303,6 +303,9 @@ tr:last-child td { border-bottom: none; }
   width: 100%;
   min-width: 160px;
 }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.badge-cors { color: var(--accent-cyan); border-color: var(--accent-cyan); background: rgba(34, 211, 238, 0.1); }
+td .inline-check + .inline-check { margin-top: 4px; }
 .inline-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .dim { color: var(--muted-dim); }
 
@@ -448,6 +451,7 @@ const clientJs = `
   var addHostInput = document.getElementById("add-host");
   var addTargetInput = document.getElementById("add-target");
   var addInsecureInput = document.getElementById("add-insecure");
+  var addCorsInput = document.getElementById("add-cors");
   var addSubmitBtn = document.getElementById("add-submit");
   var addErrorEl = document.getElementById("add-error");
 
@@ -756,9 +760,10 @@ const clientJs = `
     }
     if (hostVal.indexOf(".") === -1) hostVal = hostVal + ".localhost";
     var insecureVal = !!addInsecureInput.checked;
+    var corsVal = !!addCorsInput.checked;
     addSubmitBtn.disabled = true;
     addSubmitBtn.classList.add("busy");
-    apiFetch("/api/hosts", { method: "POST", body: JSON.stringify({ host: hostVal, target: targetVal, insecure: insecureVal }) })
+    apiFetch("/api/hosts", { method: "POST", body: JSON.stringify({ host: hostVal, target: targetVal, insecure: insecureVal, cors: corsVal }) })
       .then(function () {
         addForm.reset();
         showToast("Added " + hostVal, "success");
@@ -821,17 +826,24 @@ const clientJs = `
     tr.appendChild(makeCell("\\u2192", "arrow"));
     tr.appendChild(makeCell(row.target, "mono"));
 
-    var insecureTd = document.createElement("td");
-    if (row.insecure) {
-      var badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = "insecure";
-      insecureTd.appendChild(badge);
+    var optionsTd = document.createElement("td");
+    var flags = [];
+    if (row.insecure) flags.push(["insecure", "Upstream TLS certificate is not verified"]);
+    if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host"]);
+    if (flags.length) {
+      optionsTd.className = "badges";
+      flags.forEach(function (flag) {
+        var badge = document.createElement("span");
+        badge.className = "badge" + (flag[0] === "cors" ? " badge-cors" : "");
+        badge.textContent = flag[0];
+        badge.title = flag[1];
+        optionsTd.appendChild(badge);
+      });
     } else {
-      insecureTd.className = "dim";
-      insecureTd.textContent = "\\u2014";
+      optionsTd.className = "dim";
+      optionsTd.textContent = "\\u2014";
     }
-    tr.appendChild(insecureTd);
+    tr.appendChild(optionsTd);
 
     var statusTd = document.createElement("td");
     statusTd.appendChild(statusPill(row));
@@ -898,6 +910,14 @@ const clientJs = `
     insecureLabel.appendChild(insecureInput);
     insecureLabel.appendChild(document.createTextNode("insecure"));
     insecureTd.appendChild(insecureLabel);
+    var corsLabel = document.createElement("label");
+    corsLabel.className = "inline-check";
+    var corsInput = document.createElement("input");
+    corsInput.type = "checkbox";
+    corsInput.checked = !!row.cors;
+    corsLabel.appendChild(corsInput);
+    corsLabel.appendChild(document.createTextNode("cors"));
+    insecureTd.appendChild(corsLabel);
     tr.appendChild(insecureTd);
 
     tr.appendChild(makeCell("\\u2014", "dim"));
@@ -926,7 +946,7 @@ const clientJs = `
       cancelBtn.disabled = true;
       apiFetch("/api/hosts/" + encodeURIComponent(row.host), {
         method: "PUT",
-        body: JSON.stringify({ target: newTarget, insecure: !!insecureInput.checked })
+        body: JSON.stringify({ target: newTarget, insecure: !!insecureInput.checked, cors: !!corsInput.checked })
       })
         .then(function () {
           editingHost = null;
@@ -1134,6 +1154,10 @@ export function renderPage(nonce: string, token: string): string {
           <input type="checkbox" id="add-insecure" name="insecure">
           <label for="add-insecure">Insecure TLS</label>
         </div>
+        <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
+          <input type="checkbox" id="add-cors" name="cors">
+          <label for="add-cors">Bypass CORS</label>
+        </div>
         <button type="submit" id="add-submit" class="btn btn-primary">Add proxy</button>
       </div>
       <div id="add-error" class="field-error" role="alert" hidden></div>
@@ -1153,7 +1177,7 @@ export function renderPage(nonce: string, token: string): string {
             <th scope="col">Host</th>
             <th scope="col" class="visually-hidden">Flow</th>
             <th scope="col">Target</th>
-            <th scope="col">Insecure</th>
+            <th scope="col">Options</th>
             <th scope="col">Status</th>
             <th scope="col">Hits</th>
             <th scope="col">Errors</th>

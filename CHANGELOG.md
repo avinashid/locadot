@@ -13,6 +13,7 @@ breaking items below.
 - Bare `localhost` is reserved for the dashboard and can't be mapped.
 
 ### Added
+- `--cors` per mapping (CLI, API and dashboard). `Origin`/`Referer` are sent as the target's own origin, CORS preflights are answered locally, and any origin may call the domain with credentials. (ENH-12)
 - A control panel at `https://localhost` with a dark theme. You can add, edit and remove mappings, toggle CA trust and start-at-boot, see root/admin and privileged-port status,
   tail and clear logs, and stop the proxy. (FEAT-05)
 - A token-protected JSON API for scripts and AI agents (`POST/PUT/DELETE /api/hosts`, `/api/startup`, `/api/trust`, `/api/logs`, `/api/proxy/stop`),

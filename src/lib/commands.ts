@@ -19,6 +19,7 @@ export type TargetOptions = {
   port?: string;
   target?: string;
   insecure?: boolean;
+  cors?: boolean;
   start?: boolean;
 };
 
@@ -60,7 +61,7 @@ const warnIfDown = async (entry: HostEntry) => {
 
 export default class Commands {
   static async add(options: TargetOptions) {
-    const { host, entry } = await HostOps.add({ host: options.host, target: resolveTarget(options), insecure: options.insecure });
+    const { host, entry } = await HostOps.add({ host: options.host, target: resolveTarget(options), insecure: options.insecure, cors: options.cors });
     const { target } = entry;
     await ensureRunning(options);
     print(`✅ ${urlFor(host)} → ${target}`);
@@ -71,7 +72,7 @@ export default class Commands {
   }
 
   static async update(options: TargetOptions) {
-    const { host, entry } = await HostOps.update({ host: options.host, target: resolveTarget(options), insecure: options.insecure });
+    const { host, entry } = await HostOps.update({ host: options.host, target: resolveTarget(options), insecure: options.insecure, cors: options.cors });
     const { target } = entry;
     await ensureRunning(options);
     print(`✅ Updated ${urlFor(host)} → ${target}`);
@@ -95,7 +96,7 @@ export default class Commands {
     }
     const width = Math.max(...hosts.map(([host]) => urlFor(host).length));
     for (const [host, entry] of hosts) {
-      print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}`);
+      print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}`);
     }
     print(`☑️ Total: ${hosts.length}.`);
   }

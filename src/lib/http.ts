@@ -41,8 +41,56 @@ const proxyOptions = (req: http.IncomingMessage, entry: HostEntry): httpProxy.Se
   hostRewrite: req.headers.host,
   protocolRewrite: isTls(req) ? "https" : "http",
   cookieDomainRewrite: { "*": "" },
-  headers: { "X-Original-Host": req.headers.host || "" },
+  headers: { "X-Original-Host": req.headers.host || "", ...(entry.cors ? sameOriginHeaders(req, entry) : {}) },
 });
+
+// --cors: the upstream should see a request from its own site, so origin/CSRF checks pass.
+const sameOriginHeaders = (req: http.IncomingMessage, entry: HostEntry) => {
+  const origin = new URL(entry.target).origin;
+  const headers: Record<string, string> = {};
+  if (req.headers.origin) headers.Origin = origin;
+  if (req.headers.referer) {
+    try {
+      const referer = new URL(req.headers.referer);
+      headers.Referer = origin + referer.pathname + referer.search;
+    } catch {
+      headers.Referer = origin + "/";
+    }
+  }
+  return headers;
+};
+
+const isPreflight = (req: http.IncomingMessage) =>
+  req.method === "OPTIONS" && !!req.headers.origin && !!req.headers["access-control-request-method"];
+
+/** Headers that let the calling page read the response, credentials included. */
+const allowOrigin = (req: http.IncomingMessage): Record<string, string> =>
+  req.headers.origin
+    ? { "Access-Control-Allow-Origin": req.headers.origin, "Access-Control-Allow-Credentials": "true", Vary: "Origin" }
+    : { "Access-Control-Allow-Origin": "*" };
+
+/**
+ * Rewrites an upstream response for a --cors host: our CORS headers replace the upstream's,
+ * and cookies become SameSite=None so a page on another origin can send them back.
+ */
+export const applyCors = (req: http.IncomingMessage, headers: http.IncomingHttpHeaders) => {
+  for (const name of Object.keys(headers)) {
+    if (name.startsWith("access-control-")) delete headers[name];
+  }
+  const exposed = Object.keys(headers).filter((name) => name !== "set-cookie" && name !== "vary");
+  headers["access-control-allow-origin"] = req.headers.origin || "*";
+  if (req.headers.origin) {
+    headers["access-control-allow-credentials"] = "true";
+    const vary = String(headers.vary || "");
+    if (!/(^|,)\s*(origin|\*)\s*(,|$)/i.test(vary)) headers.vary = vary ? `${vary}, Origin` : "Origin";
+  }
+  if (exposed.length) headers["access-control-expose-headers"] = exposed.join(", ");
+  if (isTls(req) && headers["set-cookie"]) {
+    headers["set-cookie"] = headers["set-cookie"].map(
+      (cookie) => cookie.replace(/;\s*samesite=[^;]*/gi, "").replace(/;\s*secure\b(?!=)/gi, "") + "; SameSite=None; Secure"
+    );
+  }
+};
 
 const record = (stats: Map<string, HostStats>, host: string, status: number, ms: number, error: boolean) => {
   const current = stats.get(host) || { hits: 0, errors: 0 };
@@ -70,6 +118,21 @@ export default class HttpModule {
         return;
       }
 
+      // Answered here: upstreams often reject OPTIONS or don't send the headers the browser wants.
+      if (entry.cors && isPreflight(req)) {
+        const requested = req.headers["access-control-request-headers"];
+        res.writeHead(204, {
+          ...allowOrigin(req),
+          "Access-Control-Allow-Methods": String(req.headers["access-control-request-method"]),
+          ...(requested ? { "Access-Control-Allow-Headers": String(requested) } : {}),
+          ...(req.headers["access-control-request-private-network"] ? { "Access-Control-Allow-Private-Network": "true" } : {}),
+          "Access-Control-Max-Age": "600",
+          "Content-Length": "0",
+        });
+        res.end();
+        return;
+      }
+
       const started = Date.now();
       res.once("finish", () => {
         record(ctx.stats, host, res.statusCode, Date.now() - started, res.statusCode >= 500);
@@ -81,7 +144,8 @@ export default class HttpModule {
           res.destroy();
           return;
         }
-        res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+        // With --cors the page should see a 502, not a CORS error.
+        res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...(entry.cors ? allowOrigin(req) : {}) });
         res.end(upstreamDown(host, entry.target, err?.code || err?.message || "error", dashboardUrl(req)));
       });
     } catch (error) {

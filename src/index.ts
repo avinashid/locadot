@@ -31,6 +31,8 @@ const destinationOptions = (command: Command) =>
     .option("-p, --port <port>", "Local port to forward to (shorthand for --target http://localhost:<port>)")
     .option("-t, --target <url>", "Any upstream: 3000, 127.0.0.1:8080, http://192.168.1.5:8080, https://google.com")
     .option("-k, --insecure", "Don't verify the TLS certificate of an https target")
+    .option("--cors", "Send Origin/Referer as the target's own and let any origin call this domain")
+    .option("--no-cors", "Turn --cors off again (update)")
     .option("--no-start", "Only save the mapping; don't start the proxy");
 
 program

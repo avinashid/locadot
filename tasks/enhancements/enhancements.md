@@ -3,7 +3,7 @@
 Something works but should work better: clearer, safer, friendlier.
 Process: [`../README.md#part-3--how-the-tracker-works`](../README.md#part-3--how-the-tracker-works) · Template: [`../templates/enhancement.md`](../templates/enhancement.md)
 
-**Baseline:** 2026-09-24, `main` @ `475b4d0` · **0 open · 11 resolved**
+**Baseline:** 2026-09-24, `main` @ `475b4d0` · **0 open · 12 resolved**
 
 | ID | P | Title | Status |
 | --- | --- | --- | --- |
@@ -168,6 +168,30 @@ correctly mapped to a local IP" (no such check exists; see FEAT-02). The "Defaul
 
 ---
 
+### ENH-12
+**`--cors`: make the upstream think requests come from itself, and let any origin call it** · P1 · Resolved
+
+**Why:** Proxying a remote API or site (e.g. `api.localhost` → `https://api.example.com`) still hit CORS and origin
+checks. The upstream saw `Origin: https://api.localhost` and rejected it or sent no `Access-Control-*` headers, and
+preflights went upstream, where they often fail.
+
+**Resolution:** 2026-09-25. Opt-in per mapping (`add/update --cors`, `--no-cors`, the API's `cors` field, and the
+dashboard's "Bypass CORS" box and row toggle).
+- Requests: `Origin` and `Referer` are rewritten to the target's origin. This includes WebSocket upgrades.
+- Preflights (`OPTIONS` with `Access-Control-Request-Method`) are answered locally with a 204 that allows the
+  requested method, headers and private-network access.
+- Responses: the upstream's `Access-Control-*` headers are replaced. The caller's origin is echoed with credentials
+  allowed, every response header is exposed, and `Vary: Origin` is added.
+- Over HTTPS, `Set-Cookie` becomes `SameSite=None; Secure`.
+- locadot's own 502 page also carries the CORS headers.
+- Out of scope: URLs hard-coded in page bodies still go to the real domain. That would need body rewriting.
+
+**Verified:** `pnpm test` (78/78), with new e2e cases in `test/cli.e2e.test.ts` and an `applyCors` unit test in
+`test/http.test.ts`. Also a live run against `https://example.com` and API validation on spare ports. The dashboard
+script was syntax-checked but not clicked through: headless Chromium can't start on this host.
+
+---
+
 ## Resolved
 
 | ID | P | Title | Resolved | Commit |
@@ -182,4 +206,5 @@ correctly mapped to a local IP" (no such check exists; see FEAT-02). The "Defaul
 | [ENH-08](#enh-08) | P1 | Generic upstream targets: any port, host:port or URL, e.g. `google.localhost` → `https://google.com` | 2026-09-25 | uncommitted |
 | [ENH-09](#enh-09) | P1 | Dashboard at `http(s)://localhost`: every source → destination with health and traffic | 2026-09-25 | uncommitted |
 | [ENH-10](#enh-10) | P2 | Useful commands: `open`, `start`, `logs -n/--no-follow`, `list --json`, `status --json`, `rm`/`ls` aliases, `--no-start` | 2026-09-25 | uncommitted |
+| [ENH-12](#enh-12) | P1 | `--cors`: rewrite Origin/Referer to the target, answer preflights, allow any origin | 2026-09-25 | uncommitted |
 | [ENH-11](#enh-11) | P1 | Reliability: readiness-checked start, graceful stop, cert warm-up, no broken log pipe | 2026-09-25 | uncommitted |

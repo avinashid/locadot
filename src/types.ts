@@ -3,6 +3,8 @@ export interface HostEntry {
   target: string;
   /** Skip TLS verification of an https target (self-signed upstreams). */
   insecure?: boolean;
+  /** Make the upstream think requests come from itself, and let any origin call it. */
+  cors?: boolean;
   createdAt: string;
   updatedAt: string;
 }

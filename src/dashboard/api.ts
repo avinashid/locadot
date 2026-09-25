@@ -133,7 +133,7 @@ export async function route(
 
   try {
     if (path === "/api/hosts") {
-      const { host, entry } = await HostOps.add({ host: body.host, target: body.target, insecure: optionalBool(body.insecure, "insecure") });
+      const { host, entry } = await HostOps.add({ host: body.host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
       ctx.reload();
       logger.info(`➕ dashboard: ${host} → ${entry.target}`);
       return { status: 201, body: { ok: true, host, ...entry, url: hostUrl(host, ctx) } };
@@ -146,7 +146,7 @@ export async function route(
         logger.info(`🗑️ dashboard: removed ${host}`);
         return { status: 200, body: { ok: true, host } };
       }
-      const updated = await HostOps.update({ host, target: body.target, insecure: optionalBool(body.insecure, "insecure") });
+      const updated = await HostOps.update({ host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
       ctx.reload();
       logger.info(`✏️ dashboard: ${updated.host} → ${updated.entry.target}`);
       return { status: 200, body: { ok: true, host: updated.host, ...updated.entry, url: hostUrl(updated.host, ctx) } };
