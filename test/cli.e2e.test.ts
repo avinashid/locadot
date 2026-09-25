@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import net from "node:net";
+import zlib from "node:zlib";
 import { spawnSync } from "node:child_process";
 
 const repoRoot = path.resolve(__dirname, "..");
@@ -74,13 +75,28 @@ test("locadot CLI e2e", { timeout: 120_000 }, async (t) => {
       res.setHeader("X-Request-Id", "abc");
       return res.end(JSON.stringify({ method: req.method, origin: req.headers.origin, referer: req.headers.referer }));
     }
+    if (req.url === "/app.js") {
+      // A page that calls another mapped domain by absolute URL, like a Vite bundle's API base.
+      const body = `const API="http://127.0.0.1:${apiPort}/v1";const SELF="http://localhost:${upstreamPort}";`;
+      res.setHeader("Content-Type", "application/javascript");
+      res.setHeader("Content-Encoding", "gzip");
+      return res.end(zlib.gzipSync(body));
+    }
+    if (req.url === "/page") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.end("<!DOCTYPE html><html><head><title>t</title></head><body></body></html>");
+    }
     res.end("upstream-ok");
   });
+  // Stands in for a separate API that only trusts the real site's origin.
+  const api = http.createServer((req, res) => res.end(JSON.stringify({ origin: req.headers.origin, cookie: req.headers.cookie, url: req.url })));
+  const apiPort: number = await new Promise((resolve) => api.listen(0, "127.0.0.1", () => resolve((api.address() as any).port)));
   const upstreamPort: number = await new Promise((resolve) => upstream.listen(0, "127.0.0.1", () => resolve((upstream.address() as any).port)));
 
   t.after(async () => {
     run("kill");
     await new Promise((resolve) => upstream.close(resolve));
+    await new Promise((resolve) => api.close(resolve));
     fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
@@ -129,6 +145,53 @@ test("locadot CLI e2e", { timeout: 120_000 }, async (t) => {
     assert.equal(res.headers["access-control-allow-origin"], origin);
     assert.match(String(res.headers["access-control-expose-headers"]), /x-request-id/);
     assert.match(String(res.headers.vary), /Origin/);
+  });
+
+  await t.test("--cors: absolute URLs of mapped domains rewritten in bodies, Origin sent as the real site", async () => {
+    assert.equal(run("add", "--host", "site.localhost", "--port", String(upstreamPort), "--cors", "--no-start").status, 0);
+    assert.equal(run("add", "--host", "backend.localhost", "--target", `http://127.0.0.1:${apiPort}`, "--cors", "--no-start").status, 0);
+    let js;
+    for (let i = 0; i < 30; i++) {
+      js = await httpGet(httpPort, "site.localhost", "/app.js");
+      if (js.body.includes("backend.localhost")) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(js!.body, `const API="http://backend.localhost:${httpPort}/v1";const SELF="http://site.localhost:${httpPort}";`);
+    assert.equal(js!.headers["content-encoding"], undefined);
+    assert.equal(Number(js!.headers["content-length"]), Buffer.byteLength(js!.body));
+
+    const res = await httpGet(httpPort, "backend.localhost", "/v1", { headers: { Origin: `http://site.localhost:${httpPort}` } });
+    assert.equal(JSON.parse(res.body).origin, `http://localhost:${upstreamPort}`);
+    assert.equal(res.headers["access-control-allow-origin"], `http://site.localhost:${httpPort}`);
+    run("remove", "--host", "site.localhost");
+    run("remove", "--host", "backend.localhost");
+  });
+
+  await t.test("--cors pass-through: unmapped origins reached via the page's own origin, as the real site", async () => {
+    assert.equal(run("add", "--host", "site.localhost", "--port", String(upstreamPort), "--cors", "--no-start").status, 0);
+    let page;
+    for (let i = 0; i < 30; i++) {
+      page = await httpGet(httpPort, "site.localhost", "/page");
+      if (page.body.includes("__locadot")) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.match(page!.body, /<head><script src="\/__locadot\/shim\.js"><\/script><title>/);
+
+    const shim = await httpGet(httpPort, "site.localhost", "/__locadot/shim.js");
+    assert.equal(shim.status, 200);
+    assert.match(String(shim.headers["content-type"]), /javascript/);
+
+    const via = `/__locadot/x/http/127.0.0.1:${apiPort}/v1/me?x=1`;
+    const res = await httpGet(httpPort, "site.localhost", via, { headers: { "Sec-Fetch-Site": "same-origin", Cookie: "session=secret" } });
+    assert.equal(res.status, 200);
+    const seen = JSON.parse(res.body);
+    assert.equal(seen.url, "/v1/me?x=1");
+    assert.equal(seen.origin, `http://localhost:${upstreamPort}`);
+    assert.equal(seen.cookie, undefined, "the page's cookies must not reach a third-party host");
+
+    const blocked = await httpGet(httpPort, "site.localhost", via, { headers: { "Sec-Fetch-Site": "cross-site" } });
+    assert.equal(blocked.status, 403);
+    run("remove", "--host", "site.localhost");
   });
 
   await t.test("without --cors, Origin passes through and OPTIONS reaches the upstream", async () => {
@@ -264,4 +327,35 @@ test("locadot CLI e2e", { timeout: 120_000 }, async (t) => {
     const list = JSON.parse(run("list", "--json").stdout);
     assert.deepEqual(list, []);
   });
+});
+
+test("locadot start --port/--https-port picks the ports and remembers them", { timeout: 60_000 }, async (t) => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-ports-"));
+  const { LOCADOT_HTTP_PORT, LOCADOT_HTTPS_PORT, ...rest } = process.env;
+  const env = { ...rest, LOCADOT_HOME: tmpHome };
+  const cli = (...args: string[]) => spawnSync(process.execPath, [CLI, ...args], { env, encoding: "utf8", timeout: 20_000 });
+  t.after(() => {
+    cli("stop");
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  const [httpPort, httpsPort, nextPort] = [await freePort(), await freePort(), await freePort()];
+  const started = cli("start", "--port", String(httpPort), "--https-port", String(httpsPort));
+  assert.equal(started.status, 0, started.stdout + started.stderr);
+  assert.equal((await httpGet(httpPort, "localhost", "/healthz")).status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmpHome, ".locadot-config.json"), "utf8")), { httpPort, httpsPort });
+
+  const added = cli("add", "--host", "ports.localhost", "--port", "3999", "--no-start");
+  assert.match(added.stdout + added.stderr, new RegExp(`https://ports\\.localhost:${httpsPort}`));
+
+  // A new --port while running moves the proxy; the https port is kept.
+  const moved = cli("start", "--port", String(nextPort));
+  assert.equal(moved.status, 0, moved.stdout + moved.stderr);
+  assert.equal((await httpGet(nextPort, "localhost", "/healthz")).status, 200);
+  const status = JSON.parse(cli("status", "--json").stdout);
+  assert.equal(status.httpPort, nextPort);
+  assert.equal(status.httpsPort, httpsPort);
+
+  assert.equal(cli("start", "--port", "abc").status, 1);
+  assert.equal(cli("start", "--port", String(httpsPort)).status, 1);
 });

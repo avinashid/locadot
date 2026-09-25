@@ -23,7 +23,27 @@ export type TargetOptions = {
   start?: boolean;
 };
 
+export type PortOptions = { port?: string; httpsPort?: string };
+
 const print = (message: string) => logger.info(message);
+
+/** Applies --port/--https-port and saves them, so `add`, `status`, `open` and boot startup use the same ports. */
+const usePorts = (options: PortOptions) => {
+  if (options.port === undefined && options.httpsPort === undefined) return false;
+  const parse = (value: string | undefined, flag: string) => {
+    if (value === undefined) return undefined;
+    const port = Constants.validPort(value);
+    if (!port) throw new InputError(`❌ ${flag} must be a port between 1 and 65535, got "${value}".`);
+    return port;
+  };
+  const httpPort = parse(options.port, "--port") ?? Constants.server.httpPort;
+  const httpsPort = parse(options.httpsPort, "--https-port") ?? Constants.server.httpsPort;
+  if (httpPort === httpsPort) throw new InputError(`❌ HTTP and HTTPS can't share port ${httpPort}.`);
+  Object.assign(Constants.server, { httpPort, httpsPort });
+  FileModule.ensureDir();
+  fs.writeFileSync(Constants.paths.CONFIG_FILE, JSON.stringify({ httpPort, httpsPort }, null, 2) + "\n");
+  return true;
+};
 
 export const urlFor = (host: string, secure = true) => {
   const port = secure ? Constants.server.httpsPort : Constants.server.httpPort;
@@ -148,7 +168,7 @@ export default class Commands {
       if (info) {
         check(listening, `Port ${port} answering`, "The proxy is running but not listening; check `locadot logs`.");
       } else if (listening) {
-        check(false, `Port ${port} is free`, `Something else holds port ${port}. Find it with \`sudo lsof -i :${port}\`, or set LOCADOT_${port === Constants.server.httpPort ? "HTTP" : "HTTPS"}_PORT.`);
+        check(false, `Port ${port} is free`, `Something else holds port ${port}. Find it with \`sudo lsof -i :${port}\`, or pick another with \`locadot start ${port === Constants.server.httpPort ? "--port" : "--https-port"} <port>\`.`);
       }
     }
 
@@ -194,10 +214,18 @@ export default class Commands {
     if (failures) process.exitCode = 1;
   }
 
-  static async start() {
-    const wasRunning = locadotProxy.running();
-    const info: ProxyInfo = await locadotProxy.start();
-    print(wasRunning ? `☑️ Proxy already running (pid ${info.pid}).` : `🚀 Central proxy started (pid ${info.pid}).`);
+  static async start(options: PortOptions = {}) {
+    const moved = usePorts(options);
+    const running = locadotProxy.running();
+    // Already up on other ports: the new ones only take effect after a restart.
+    if (running && (running.httpPort !== Constants.server.httpPort || running.httpsPort !== Constants.server.httpsPort)) {
+      const info = await locadotProxy.restart();
+      print(`🔁 Proxy restarted on http ${info.httpPort}, https ${info.httpsPort} (pid ${info.pid}).`);
+    } else {
+      const info: ProxyInfo = await locadotProxy.start();
+      print(running ? `☑️ Proxy already running (pid ${info.pid}).` : `🚀 Central proxy started (pid ${info.pid}).`);
+      if (moved || !running) print(`   Ports:     http ${info.httpPort}, https ${info.httpsPort}`);
+    }
     print(`   Dashboard: ${urlFor("localhost")}`);
   }
 
@@ -206,9 +234,10 @@ export default class Commands {
     print(stopped ? Constants.proxyInfo.softClose : "☑️ Proxy was not running.");
   }
 
-  static async restart() {
+  static async restart(options: PortOptions = {}) {
+    usePorts(options);
     const info = await locadotProxy.restart();
-    print(`☑️ Proxy restarted (pid ${info.pid}).`);
+    print(`☑️ Proxy restarted on http ${info.httpPort}, https ${info.httpsPort} (pid ${info.pid}).`);
   }
 
   static async kill() {
@@ -252,6 +281,7 @@ export default class Commands {
       ["Certs", Constants.paths.CERT_DIR],
       ["CA cert", caCertPath()],
       ["API token", Constants.paths.API_TOKEN],
+      ["Config", Constants.paths.CONFIG_FILE],
     ];
     rows.forEach(([label, value]) => console.log(`${label.padEnd(10)} ${value}`));
   }

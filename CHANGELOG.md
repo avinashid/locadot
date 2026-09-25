@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-The version in `package.json` is 1.6.0-beta.3 (published under the `beta` tag). The owner decides the bump. **2.0.0** is suggested because of the
+The version in `package.json` is 1.6.0-beta.4 (published under the `beta` tag). The owner decides the bump. **2.0.0** is suggested because of the
 breaking items below.
 
 ### Breaking
@@ -13,7 +13,8 @@ breaking items below.
 - Bare `localhost` is reserved for the dashboard and can't be mapped.
 
 ### Added
-- `--cors` per mapping (CLI, API and dashboard). `Origin`/`Referer` are sent as the target's own origin, CORS preflights are answered locally, and any origin may call the domain with credentials. (ENH-12)
+- `locadot start --port <http> --https-port <https>` (also on `restart`) runs the proxy on other ports than 80/443. The choice is saved in the state dir, so `add`, `status`, `open` and start-at-boot keep using it; `--port 80 --https-port 443` goes back. Running it while the proxy is up on other ports restarts it on the new ones.
+- `--cors` per mapping (CLI, API and dashboard). `Origin`/`Referer` are sent as the target's own origin, CORS preflights are answered locally, and any origin may call the domain with credentials. Absolute URLs of other mapped domains in text responses are rewritten to their `.localhost` names, and a mapped caller is sent as its real origin, so a site plus its API both work locally. Pages also get a small script that sends calls to any other origin through the page's own origin (`/__locadot/x/…`), so no mapping per API or third-party domain is needed. (ENH-12, BUG-15)
 - A control panel at `https://localhost` with a dark theme. You can add, edit and remove mappings, toggle CA trust and start-at-boot, see root/admin and privileged-port status,
   tail and clear logs, and stop the proxy. (FEAT-05)
 - A token-protected JSON API for scripts and AI agents (`POST/PUT/DELETE /api/hosts`, `/api/startup`, `/api/trust`, `/api/logs`, `/api/proxy/stop`),

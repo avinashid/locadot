@@ -1,4 +1,5 @@
 import getAppDataPath from "appdata-path";
+import fs from "fs";
 import path from "path";
 import os from "os";
 
@@ -7,10 +8,23 @@ const PACKAGE_PATH = process.env.LOCADOT_HOME
   ? path.resolve(process.env.LOCADOT_HOME)
   : getAppDataPath("locadot");
 
-const envPort = (name: string, fallback: number) => {
-  const value = Number(process.env[name]);
-  return Number.isInteger(value) && value > 0 && value < 65536 ? value : fallback;
+const CONFIG_FILE = path.join(PACKAGE_PATH, ".locadot-config.json");
+
+const validPort = (value: unknown) => {
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port < 65536 ? port : undefined;
 };
+
+// Ports chosen with `locadot start --port/--https-port`, so later commands and boot startup reuse them.
+const savedPorts = (): { httpPort?: unknown; httpsPort?: unknown } => {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) || {};
+  } catch {
+    return {};
+  }
+};
+
+const envPort = (name: string, saved: unknown, fallback: number) => validPort(process.env[name]) ?? validPort(saved) ?? fallback;
 
 export default class Constants {
   static paths = {
@@ -22,11 +36,14 @@ export default class Constants {
     CERT_DIR: path.join(PACKAGE_PATH, "certs"),
     // Secret for the dashboard's mutating API; rotated on every proxy start.
     API_TOKEN: path.join(PACKAGE_PATH, ".locadot-token"),
+    CONFIG_FILE,
   } as const;
 
+  static validPort = validPort;
+
   static server = {
-    httpPort: envPort("LOCADOT_HTTP_PORT", 80),
-    httpsPort: envPort("LOCADOT_HTTPS_PORT", 443),
+    httpPort: envPort("LOCADOT_HTTP_PORT", savedPorts().httpPort, 80),
+    httpsPort: envPort("LOCADOT_HTTPS_PORT", savedPorts().httpsPort, 443),
     // Loopback only unless the user opts in; see tasks/enhancements ENH-06.
     bind: (process.env.LOCADOT_BIND || "127.0.0.1,::1")
       .split(",")

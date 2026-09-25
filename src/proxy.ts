@@ -51,7 +51,13 @@ class ProxyHandler {
     const child = spawn(command, args, {
       detached: true,
       stdio: ["ignore", logFd, logFd],
-      env: { ...process.env, LOCADOT_HOME: Constants.paths.HOME, LOCADOT_ROLE: "proxy" },
+      env: {
+        ...process.env,
+        LOCADOT_HOME: Constants.paths.HOME,
+        LOCADOT_ROLE: "proxy",
+        LOCADOT_HTTP_PORT: String(Constants.server.httpPort),
+        LOCADOT_HTTPS_PORT: String(Constants.server.httpsPort),
+      },
       windowsHide: true,
     });
     fs.closeSync(logFd);

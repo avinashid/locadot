@@ -29,7 +29,8 @@ npx locadot open                                    # opens the dashboard at htt
 ```
 
 > **Linux:** ports 80/443 need root. Either run locadot with `sudo`, or allow unprivileged binding once:
-> `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80` (persist it in `/etc/sysctl.d/`). `locadot doctor` checks this for you.
+> `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80` (persist it in `/etc/sysctl.d/`). Or use other ports:
+> `locadot start --port 8080 --https-port 8443` (URLs then include the port). `locadot doctor` checks this for you.
 
 ---
 
@@ -54,16 +55,16 @@ Options for `add` / `update`:
 | `-p, --port <port>` | Shorthand for `--target http://localhost:<port>`. |
 | `-t, --target <url>` | Any http(s) upstream. A bare `host:port` means `http://host:port`. |
 | `-k, --insecure` | Don't verify the TLS certificate of an `https` target (self-signed upstreams). |
-| `--cors` / `--no-cors` | Bypass CORS for this domain. The upstream gets `Origin`/`Referer` as its own origin, preflights are answered locally, any origin may read responses (with credentials), and cookies become `SameSite=None` over HTTPS. URLs hard-coded in pages still go to the real domain. |
+| `--cors` / `--no-cors` | Bypass CORS for this domain. The upstream gets `Origin`/`Referer` as its own origin, preflights are answered locally, any origin may read responses (with credentials), and cookies become `SameSite=None` over HTTPS. The page's calls to other domains go through locadot automatically, with no extra mapping (see [Sites that call other domains](#sites-that-call-other-domains---cors)). |
 | `--no-start` | Save the mapping without starting the proxy. |
 
 ### Proxy
 
 | Command | What it does |
 | --- | --- |
-| `locadot start` | Start the central proxy. Fails loudly with the reason if it can't bind its ports. |
+| `locadot start [--port 8080] [--https-port 8443]` | Start the central proxy. Default ports are 80 and 443. Ports you pass are remembered for later commands and start-at-boot, and a running proxy is moved to them. Fails loudly with the reason if it can't bind its ports. |
 | `locadot stop` | Stop the proxy. Mappings and logs are kept. |
-| `locadot restart` | Stop, then start. |
+| `locadot restart [--port …] [--https-port …]` | Stop, then start. |
 | `locadot kill` | Stop the proxy, remove all mappings and clear the logs. |
 | `locadot status [--json]` | Is it running, its PID, ports, number of hosts, CA trust, start-at-boot, dashboard URL. |
 | `locadot doctor [--host h]` | Check the proxy, ports, permissions, CA trust, the registry and every target. Exits 1 if anything fails. |
@@ -148,8 +149,8 @@ All optional, via environment variables. Set them for the CLI; the proxy it star
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `LOCADOT_HOME` | OS app-data dir (`~/.config/locadot` on Linux) | Where the registry, logs, lock file and certs live. |
-| `LOCADOT_HTTP_PORT` | `80` | HTTP port of the proxy. |
-| `LOCADOT_HTTPS_PORT` | `443` | HTTPS port of the proxy. |
+| `LOCADOT_HTTP_PORT` | `80` | HTTP port of the proxy. Overrides the port saved by `locadot start --port`. |
+| `LOCADOT_HTTPS_PORT` | `443` | HTTPS port of the proxy. Overrides the port saved by `locadot start --https-port`. |
 | `LOCADOT_BIND` | `127.0.0.1,::1` | Comma-separated addresses to listen on. Use `0.0.0.0` to expose your mappings to your LAN (not recommended). |
 | `LOCADOT_LOG_LEVEL` | `info` | winston log level (`debug` logs every WebSocket upgrade). |
 
@@ -164,6 +165,26 @@ With non-standard ports, URLs include the port: `https://app.localhost:8443`.
 redirect to a *different* domain (for example `google.com` → `www.google.com`) takes the browser there directly. To stay on
 locadot, map the final host instead (`--target https://www.google.com`). Some sites refuse to be framed or proxied; that's up to
 the site.
+
+### Sites that call other domains (`--cors`)
+
+A frontend that calls its API or third-party services by absolute URL works with just the site mapped:
+
+```bash
+locadot add --host signalsant.localhost --target https://signalsant.com --cors
+```
+
+- **Pass-through.** HTML pages get a small script (`/__locadot/shim.js`) as the first thing in `<head>`. It sends `fetch`,
+  `XMLHttpRequest`, `EventSource`, `WebSocket` and `sendBeacon` calls to other origins through the page's own origin
+  (`/__locadot/x/https/api.signalsant.com/…`). The browser sees a same-origin request, so CORS never applies, and locadot
+  forwards it with `Origin: https://signalsant.com`. Only the page itself can use it: requests from other sites get a 403.
+- **Cookies.** The page's cookies are forwarded only to the same site (`api.signalsant.com`), never to third parties.
+  Cookies set by third parties are dropped.
+- **Mapped domains.** If you also map a domain (`api.signalsant.localhost` → `https://api.signalsant.com --cors`), its URLs in
+  HTML/JS/CSS/JSON are rewritten to the `.localhost` name and it's called there directly.
+
+Rewritten responses are buffered and sent uncompressed. Event streams and binary files pass through untouched. Not covered:
+requests made by web workers or service workers, and `<form>` posts or `<img>`/`<script>` tags (these don't need CORS).
 
 ---
 

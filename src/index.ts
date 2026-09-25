@@ -80,9 +80,14 @@ program
   .description("Open a domain, or the dashboard when no host is given, in the browser")
   .action(run((host?: string) => Commands.open(host)));
 
-program.command("start").description("Start the central proxy").action(run(() => Commands.start()));
+const portOptions = (command: Command) =>
+  command
+    .option("-p, --port <port>", "HTTP port (default 80, or the last one you chose)")
+    .option("--https-port <port>", "HTTPS port (default 443, or the last one you chose)");
+
+portOptions(program.command("start").description("Start the central proxy")).action(run((options) => Commands.start(options)));
 program.command("stop").description("Stop the central proxy (keeps hosts and logs)").action(run(() => Commands.stop()));
-program.command("restart").description("Restart the central proxy").action(run(() => Commands.restart()));
+portOptions(program.command("restart").description("Restart the central proxy")).action(run((options) => Commands.restart(options)));
 program.command("kill").description("Stop the proxy, remove all hosts and clear logs").action(run(() => Commands.kill()));
 
 program.command("trust").description("Install the locadot CA in the system trust store (sudo)").action(run(() => Commands.trust()));
