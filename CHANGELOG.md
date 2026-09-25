@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-The version in `package.json` is still 1.5.7. The owner decides the bump. **2.0.0** is suggested because of the
+The version in `package.json` is 1.6.0-beta.2 (published under the `beta` tag). The owner decides the bump. **2.0.0** is suggested because of the
 breaking items below.
 
 ### Breaking
