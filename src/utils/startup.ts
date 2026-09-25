@@ -1,155 +1,205 @@
 import path from "path";
 import os from "os";
 import fs from "fs";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import sudo from "@expo/sudo-prompt";
 import Constants from "../constants";
 import locadotFile from "../lib/locadot-file";
+import logger from "./logger";
 
-const SERVICE_NAME = "reboot-locadot";
-const { command, path: commandArgs } = locadotFile.getStartProxyFile();
+const SERVICE_NAME = "locadot-proxy";
+const MAC_LABEL = "com.locadot.proxy";
+const CRON_MARK = "# locadot-proxy";
+const MARKER = path.join(Constants.paths.HOME, "startup.json");
+// Per-user Startup folder: unlike an ONLOGON scheduled task it needs no admin rights.
+const windowsLauncher = () =>
+  path.join(
+    process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+    "Microsoft", "Windows", "Start Menu", "Programs", "Startup", `${SERVICE_NAME}.vbs`
+  );
+// Earlier versions registered an ONLOGON scheduled task and kept the script in the state dir.
+const LEGACY_LAUNCHER = path.join(Constants.paths.HOME, "startup-hidden.vbs");
 
-const sudoOptions = {
-  name: "Locadot",
+const plistPath = () => path.join(os.homedir(), "Library", "LaunchAgents", `${MAC_LABEL}.plist`);
+
+const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+
+// Resolved on use, not import: the entry path depends on how locadot was launched.
+const launchArgs = () => {
+  const { command, path: args } = locadotFile.getStartProxyFile();
+  return { command, args: [...args, "--home", Constants.paths.HOME] };
+};
+
+/**
+ * Launching node.exe directly at logon opens a console window, and closing it kills the
+ * proxy. Explorer runs the .vbs with wscript, which has no console, and Run(…, 0) keeps cmd
+ * and node hidden too. cmd also appends the output to the log, like the cron line does.
+ */
+export const windowsLauncherScript = (command: string, args: string[]) => {
+  const env = `set LOCADOT_HTTP_PORT=${Constants.server.httpPort}&& set LOCADOT_HTTPS_PORT=${Constants.server.httpsPort}&&`;
+  const line = `cmd /d /c ${env} ${[command, ...args].map((a) => `"${a}"`).join(" ")} >> "${Constants.paths.LOGS}" 2>&1`;
+  return `CreateObject("WScript.Shell").Run "${line.replace(/"/g, '""')}", 0, False\r\n`;
+};
+
+/** Best effort: deleting a task the user created without elevation needs none. */
+const removeLegacyTask = () => {
+  try {
+    execFileSync("schtasks", ["/Delete", "/TN", SERVICE_NAME, "/F"], { stdio: "ignore", windowsHide: true });
+  } catch {}
+  fs.rmSync(LEGACY_LAUNCHER, { force: true });
 };
 
 function execSudo(cmd: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    sudo.exec(cmd, sudoOptions, (error, stdout, stderr) => {
+    sudo.exec(cmd, { name: "Locadot" }, (error, stdout, stderr) => {
       if (error) return reject(error);
-      if (stderr) console.error(stderr);
-      if (stdout) console.log(stdout);
+      if (stderr) logger.warn(String(stderr).trim());
+      if (stdout) logger.info(String(stdout).trim());
       resolve();
     });
   });
 }
 
+/** Linux needs root for ports below 1024 unless the sysctl allows otherwise. */
+const linuxNeedsRoot = () => {
+  if (process.getuid?.() === 0) return false;
+  const lowest = Math.min(Constants.server.httpPort, Constants.server.httpsPort);
+  try {
+    const start = Number(fs.readFileSync("/proc/sys/net/ipv4/ip_unprivileged_port_start", "utf8"));
+    return lowest < start;
+  } catch {
+    return lowest < 1024;
+  }
+};
+
+const cronEdit = (line?: string) =>
+  `(crontab -l 2>/dev/null | grep -v ${quote(CRON_MARK)}${line ? `; echo ${quote(line)}` : ""}) | crontab -`;
+
 export default class Startup {
   static async enable() {
+    const { command, args } = launchArgs();
     const platform = Constants.platform();
-    let cmd = "";
+    let method = "";
 
     switch (platform) {
-      case "windows":
-        cmd = `schtasks /Create /TN "${SERVICE_NAME}" /TR "${command} ${commandArgs.join(
-          " "
-        )}" /SC ONSTART /RL HIGHEST /RU SYSTEM /F`;
+      case "windows": {
+        // Runs at the user's logon; ports 80/443 need no elevation on Windows.
+        removeLegacyTask();
+        fs.mkdirSync(path.dirname(windowsLauncher()), { recursive: true });
+        fs.writeFileSync(windowsLauncher(), windowsLauncherScript(command, args));
+        method = "startup-folder";
         break;
-
-      case "linux":
-        const cronLine = `@reboot ${command} ${commandArgs.join(" ")}`;
-        cmd = `crontab -l | grep -v '${commandArgs[0]}' | { cat; echo '${cronLine}'; } | crontab -`;
+      }
+      case "linux": {
+        const env = `LOCADOT_HOME=${quote(Constants.paths.HOME)} LOCADOT_HTTP_PORT=${Constants.server.httpPort} LOCADOT_HTTPS_PORT=${Constants.server.httpsPort}`;
+        const line = `@reboot ${env} ${[command, ...args].map(quote).join(" ")} >> ${quote(Constants.paths.LOGS)} 2>&1 ${CRON_MARK}`;
+        const edit = cronEdit(line);
+        if (linuxNeedsRoot()) {
+          await execSudo(`sh -c ${quote(edit)}`);
+          method = "root-crontab";
+        } else {
+          execFileSync("sh", ["-c", edit], { stdio: "inherit", windowsHide: true });
+          method = "user-crontab";
+        }
         break;
-
-      case "mac":
-        const plistPath = path.join(
-          os.homedir(),
-          "Library",
-          "LaunchAgents",
-          "com.local.reboot.plist"
-        );
+      }
+      case "mac": {
+        // macOS (10.14+) lets unprivileged processes bind 80/443, so a user LaunchAgent is enough.
         const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.local.reboot</string>
+  <string>${MAC_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${command}</string>
-    ${commandArgs.map((arg) => `<string>${arg}</string>`).join("\n    ")}
+    ${[command, ...args].map((arg) => `<string>${arg}</string>`).join("\n    ")}
   </array>
   <key>RunAtLoad</key>
   <true/>
+  <key>StandardOutPath</key>
+  <string>${Constants.paths.LOGS}</string>
+  <key>StandardErrorPath</key>
+  <string>${Constants.paths.LOGS}</string>
 </dict>
 </plist>`;
-        fs.writeFileSync(plistPath, plist);
-        cmd = `launchctl load "${plistPath}"`;
+        fs.mkdirSync(path.dirname(plistPath()), { recursive: true });
+        fs.writeFileSync(plistPath(), plist);
+        execFileSync("launchctl", ["load", "-w", plistPath()], { stdio: "inherit", windowsHide: true });
+        method = "launch-agent";
         break;
-
+      }
       default:
         throw new Error("Unknown platform");
     }
 
-    try {
-      await execSudo(cmd);
-      console.log("✅ Reboot task enabled.");
-    } catch (err) {
-      console.error("❌ Failed to enable reboot task:", err);
-    }
+    fs.mkdirSync(Constants.paths.HOME, { recursive: true });
+    fs.writeFileSync(MARKER, JSON.stringify({ platform, method, enabledAt: new Date().toISOString() }, null, 2));
+    logger.info(`✅ locadot will start at ${platform === "windows" ? "logon" : "boot"} (${method}).`);
   }
 
   static async disable() {
     const platform = Constants.platform();
-    let cmd = "";
+    const method = Startup.marker()?.method;
 
     switch (platform) {
       case "windows":
-        cmd = `schtasks /Delete /TN "${SERVICE_NAME}" /F`;
+        removeLegacyTask();
+        fs.rmSync(windowsLauncher(), { force: true });
         break;
-
       case "linux":
-        cmd = `crontab -l | grep -v '${commandArgs[0]}' | crontab -`;
+        if (method === "root-crontab") await execSudo(`sh -c ${quote(cronEdit())}`);
+        else execFileSync("sh", ["-c", cronEdit()], { stdio: "inherit", windowsHide: true });
         break;
-
       case "mac":
-        const plistPath = path.join(
-          os.homedir(),
-          "Library",
-          "LaunchAgents",
-          "com.local.reboot.plist"
-        );
-        cmd = `launchctl unload "${plistPath}" && rm "${plistPath}"`;
+        if (fs.existsSync(plistPath())) {
+          try {
+            execFileSync("launchctl", ["unload", "-w", plistPath()], { stdio: "ignore", windowsHide: true });
+          } catch {}
+          fs.rmSync(plistPath(), { force: true });
+        }
         break;
-
       default:
         throw new Error("Unknown platform");
     }
 
+    fs.rmSync(MARKER, { force: true });
+    logger.info("✅ Start at boot disabled.");
+  }
+
+  private static marker(): { method?: string } | undefined {
     try {
-      await execSudo(cmd);
-      console.log("✅ Reboot task disabled.");
-    } catch (err) {
-      console.error("❌ Failed to disable reboot task:", err);
+      return JSON.parse(fs.readFileSync(MARKER, "utf8"));
+    } catch {
+      return undefined;
     }
   }
 
-  static async status() {
-    const platform = Constants.platform();
+  static async info(): Promise<{ enabled: boolean; method: string | null }> {
+    const enabled = await Startup.isEnabled();
+    return { enabled, method: enabled ? Startup.marker()?.method ?? null : null };
+  }
 
+  /**
+   * The marker is the source of truth for root crontabs, which an unprivileged
+   * status check cannot read. Other methods are verified directly.
+   */
+  static async isEnabled(): Promise<boolean> {
+    const marker = Startup.marker();
     try {
-      switch (platform) {
-        case "linux": {
-          const output = execSync("crontab -l", { encoding: "utf-8" });
-          console.log(output.includes(commandArgs[0]) ? "enabled" : "disabled");
-          break;
-        }
-        case "windows": {
-          try {
-            const output = execSync(`schtasks /Query /TN "${SERVICE_NAME}"`, {
-              encoding: "utf-8",
-            });
-            console.log(output.includes(SERVICE_NAME) ? "enabled" : "disabled");
-          } catch {
-            console.log("disabled");
-          }
-          break;
-        }
-        case "mac": {
-          const plistPath = path.join(
-            os.homedir(),
-            "Library",
-            "LaunchAgents",
-            "com.local.reboot.plist"
-          );
-          console.log(fs.existsSync(plistPath) ? "enabled" : "disabled");
-          break;
-        }
+      switch (Constants.platform()) {
+        case "linux":
+          if (marker?.method === "root-crontab") return true;
+          return execFileSync("sh", ["-c", "crontab -l 2>/dev/null || true"], { encoding: "utf8", windowsHide: true }).includes(CRON_MARK);
+        case "mac":
+          return fs.existsSync(plistPath());
+        case "windows":
+          return fs.existsSync(windowsLauncher());
         default:
-          throw new Error("Unknown platform");
+          return false;
       }
-    } catch (err) {
-      console.error("❌ Failed to check status:", err);
+    } catch {
+      return false;
     }
   }
 }

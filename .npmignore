@@ -4,3 +4,8 @@
 pnpm-lock.yaml
 tsconfig.json
 settings.json
+/.env
+/.env.*
+/tasks
+/test
+/.claude

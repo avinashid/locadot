@@ -1,120 +1,79 @@
-import FileModule from "../utils/file";
-import logger from "../utils/logger";
 import path from "path";
-import type { FSWatcher } from "chokidar";
-export interface DomainRegistry {
-  [domain: string]: number;
-}
+import FileModule from "../utils/file";
+import type { ProxyInfo } from "../types";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default class locadotFile {
-  static async createLockFile(processId: string) {
-    await FileModule.writeFileSync("LOCK_FILE", processId);
+  /** Written by the proxy itself once it is listening, so boot-started proxies are visible too. */
+  static writeProxyInfo(info: ProxyInfo) {
+    FileModule.writeAtomic("LOCK_FILE", JSON.stringify(info, null, 2));
   }
 
-  static async getProcessId(): Promise<string | undefined | null> {
+  static readProxyInfo(): ProxyInfo | undefined {
+    const raw = FileModule.read("LOCK_FILE")?.trim();
+    if (!raw) return undefined;
     try {
-      const lockFile = await FileModule.readFileSync("LOCK_FILE");
-      return parseInt(lockFile).toString();
-    } catch (err) {
-      await FileModule.removeFileSync("LOCK_FILE");
-      return;
-    }
-  }
-  static async deleteLockFile() {
-    await FileModule.removeFileSync("LOCK_FILE");
-  }
-
-  static async getRegistry(): Promise<DomainRegistry> {
-    try {
-      return JSON.parse(await FileModule.readFileSync("REGISTRY_FILE"));
-    } catch (error) {
-      logger.error(error);
-      return {};
-    }
-  }
-  static async addRegistry(domain: string, port: number) {
-    const registry = await locadotFile.getRegistry();
-    registry[domain] = port;
-    FileModule.writeFileSync("REGISTRY_FILE", JSON.stringify(registry));
-  }
-  static async removeAllRegistry() {
-    FileModule.writeFileSync("REGISTRY_FILE", "{}");
-  }
-  static async updateRegistry(domain: string, port: number) {
-    const registry = await locadotFile.getRegistry();
-    registry[domain] = port;
-    FileModule.writeFileSync("REGISTRY_FILE", JSON.stringify(registry));
-  }
-  static async deleteRegistry(domain: string) {
-    const registry = await locadotFile.getRegistry();
-    delete registry[domain];
-    FileModule.writeFileSync("REGISTRY_FILE", JSON.stringify(registry));
-  }
-
-  static async watchRegistry(callBackOnChange?: () => void) {
-    return FileModule.watchFileWithInit("REGISTRY_FILE", () =>
-      callBackOnChange?.()
-    );
-  }
-
-  static async getLogs(): Promise<string> {
-    try {
-      return await FileModule.readFileSync("LOGS");
-    } catch (error) {
-      FileModule.removeFileSync("LOGS");
-      return "";
+      const info = JSON.parse(raw);
+      if (typeof info === "number") return locadotFile.legacyInfo(info);
+      return Number.isInteger(info?.pid) && info.pid > 0 ? (info as ProxyInfo) : undefined;
+    } catch {
+      return locadotFile.legacyInfo(Number(raw));
     }
   }
 
-  static async clearLogs() {
-    FileModule.writeFileSync("LOGS", "");
+  // Lock files from <=1.5.7 hold a bare PID.
+  private static legacyInfo(pid: number): ProxyInfo | undefined {
+    if (!Number.isInteger(pid) || pid <= 0) return undefined;
+    return { pid } as ProxyInfo;
   }
 
-  static async watchLogs() {
-    FileModule.tailFile("LOGS");
+  static getProcessId(): number | undefined {
+    return locadotFile.readProxyInfo()?.pid;
+  }
+
+  static deleteLockFile(expectedPid?: number) {
+    if (expectedPid && locadotFile.getProcessId() !== expectedPid) return;
+    FileModule.remove("LOCK_FILE");
+  }
+
+  static isAlive(pid: number | undefined) {
+    if (!pid) return false;
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error: any) {
+      // EPERM: alive but owned by another user (e.g. a root-started proxy).
+      return error?.code === "EPERM";
+    }
+  }
+
+  static async waitForExit(pid: number, timeoutMs: number) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (!locadotFile.isAlive(pid)) return true;
+      await sleep(50);
+    }
+    return !locadotFile.isAlive(pid);
+  }
+
+  static clearLogs() {
+    if (FileModule.exists("LOGS")) FileModule.write("LOGS", "");
+  }
+
+  static watchLogs(lines?: number) {
+    FileModule.tailFile("LOGS", lines);
   }
 
   static getStartProxyFile(): { command: string; path: string[] } {
-    if (process.env.NODE_ENV === "production") {
-      const filePath = path.join(__dirname, "..", "core.js");
-      return {
-        command: "node",
-        path: [filePath],
-      };
-    }
-    const filePath = path.join(__dirname, "../../", "dist", "core.js");
+    // Compiled layout: dist/lib/locadot-file.js -> dist/core.js. Under tsx
+    // (src/lib) the compiled dist/core.js is still what gets spawned.
+    const compiled = path.join(__dirname, "..", "core.js");
+    const fromSource = path.join(__dirname, "..", "..", "dist", "core.js");
     return {
-      command: "node",
-      path: [filePath],
+      command: process.execPath,
+      // http-proxy uses util._extend; keep its deprecation warning out of the log.
+      path: ["--no-deprecation", __filename.endsWith(".ts") ? fromSource : compiled],
     };
-  }
-
-  static async destroy(watcher?: FSWatcher) {
-    try {
-      const pid = await locadotFile.getProcessId();
-      await locadotFile.deleteLockFile();
-      await locadotFile.removeAllRegistry();
-      await locadotFile.clearLogs();
-      await watcher?.close();
-      if (pid) {
-        process.kill(parseInt(pid));
-      }
-    } catch (error) {}
-  }
-
-  static async softDestroy(watcher?: FSWatcher) {
-    try {
-      const pid = await locadotFile.getProcessId();
-      await locadotFile.deleteLockFile();
-      await locadotFile.clearLogs();
-      await watcher?.close();
-      if (pid) {
-        try {
-          process.kill(parseInt(pid));
-        } catch (error) {}
-      }
-    } catch (error) {
-      logger.error(error);
-    }
   }
 }

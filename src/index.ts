@@ -1,158 +1,114 @@
 #!/usr/bin/env node
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import Commands from "./lib/commands";
+import { InputError } from "./lib/localhost";
+import { RegistryError } from "./lib/registry";
+import { ProxyError } from "./proxy";
 import logger from "./utils/logger";
 import { version } from "../package.json";
-import Constants from "./constants";
 
 const program = new Command();
 
+/** One place that turns failures into a message and a non-zero exit code. */
+const run =
+  <A extends unknown[]>(fn: (...args: A) => unknown, { exit = true } = {}) =>
+  async (...args: A) => {
+    try {
+      await fn(...args);
+      if (exit) process.exit(process.exitCode ?? 0);
+    } catch (error: any) {
+      const known = error instanceof InputError || error instanceof ProxyError || error instanceof RegistryError;
+      logger.error(known ? error.message : `❌ ${error?.stack || error}`);
+      process.exit(1);
+    }
+  };
+
+const hostOption = () =>
+  new Option("-h, --host <host>", "Domain ending in .localhost, e.g. dev.localhost or google.localhost").makeOptionMandatory();
+
+const destinationOptions = (command: Command) =>
+  command
+    .option("-p, --port <port>", "Local port to forward to (shorthand for --target http://localhost:<port>)")
+    .option("-t, --target <url>", "Any upstream: 3000, 127.0.0.1:8080, http://192.168.1.5:8080, https://google.com")
+    .option("-k, --insecure", "Don't verify the TLS certificate of an https target")
+    .option("--no-start", "Only save the mapping; don't start the proxy");
+
 program
   .name("locadot")
-  .description("Locadot CLI - Local domain proxy manager")
-  .version(version);
+  .description("HTTPS custom *.localhost domains for any local or remote upstream")
+  .version(version)
+  .helpOption("--help", "Display help for command");
 
-program
-  .command("add")
-  .description("Add a new localhost domain and port")
-  .requiredOption(
-    "-h, --host <host>",
-    "Domain to map must be ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
-  )
-  .requiredOption("-p, --port <port>", "Local port to forward to")
-  .action(async (options) => {
-    await Commands.add(options);
-    process.exit(0);
-  });
+destinationOptions(program.command("add").description("Map a new domain to a port or URL").addOption(hostOption())).action(
+  run((options) => Commands.add(options))
+);
 
-program
-  .command("update")
-  .requiredOption(
-    "-h, --host <host>",
-    "Domain to map must be ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
-  )
-  .requiredOption("-p, --port <port>", "Local port to forward to")
-  .description("Update a domain")
-  .action(async (options) => {
-    await Commands.update(options);
-    process.exit(0);
-  });
+destinationOptions(
+  program.command("update").description("Change the destination of a mapped domain").addOption(hostOption())
+).action(run((options) => Commands.update(options)));
 
 program
   .command("remove")
-  .requiredOption(
-    "-h, --host <host>",
-    "Host must ends with localhost. Example: dev.localhost, localhost, test.localhost, etc."
-  )
+  .alias("rm")
   .description("Remove a domain")
-  .action(async (options) => {
-    await Commands.remove(options);
-    process.exit(0);
-  });
+  .addOption(hostOption())
+  .action(run((options) => Commands.remove(options)));
 
 program
-  .command("host")
-  .description("Show all hosts")
-  .action(async () => {
-    await Commands.getRegistry();
-    process.exit(0);
-  });
+  .command("list")
+  .aliases(["host", "ls"])
+  .description("Show all mapped domains")
+  .option("--json", "Machine-readable output")
+  .action(run((options) => Commands.list(options)));
 
+program
+  .command("status")
+  .description("Show proxy state, ports, CA trust and startup")
+  .option("--json", "Machine-readable output")
+  .action(run((options) => Commands.status(options)));
+
+program
+  .command("doctor")
+  .description("Diagnose why a domain isn't working")
+  .option("-h, --host <host>", "Only check this domain")
+  .action(run((options) => Commands.doctor(options)));
+
+program
+  .command("open [host]")
+  .description("Open a domain, or the dashboard when no host is given, in the browser")
+  .action(run((host?: string) => Commands.open(host)));
+
+program.command("start").description("Start the central proxy").action(run(() => Commands.start()));
+program.command("stop").description("Stop the central proxy (keeps hosts and logs)").action(run(() => Commands.stop()));
+program.command("restart").description("Restart the central proxy").action(run(() => Commands.restart()));
+program.command("kill").description("Stop the proxy, remove all hosts and clear logs").action(run(() => Commands.kill()));
+
+program.command("trust").description("Install the locadot CA in the system trust store (sudo)").action(run(() => Commands.trust()));
+program.command("untrust").description("Remove the locadot CA from the system trust store (sudo)").action(run(() => Commands.untrust()));
+
+program
+  .command("logs")
+  .description("Print recent logs and follow new ones")
+  .option("-n, --lines <n>", "Number of lines to show", "50")
+  .option("--no-follow", "Print and exit")
+  .action(run((options) => Commands.logs(options), { exit: false }));
 program
   .command("watch:logs")
-  .description("Watch log files")
-  .action(() => {
-    Commands.watchLogs();
-  });
+  .description("Alias of `logs`")
+  .action(run(() => Commands.logs({}), { exit: false }));
+program.command("clear:logs").description("Clear logs").action(run(() => Commands.clearLogs()));
+program.command("clear:hosts").description("Remove all hosts").action(run(() => Commands.clearHosts()));
 
+program.command("path").description("Show every file locadot uses").action(run(() => Commands.configPath()));
+program.command("path:logs").description("Show the log file path").action(run(() => Commands.logPath()));
 program
-  .command("clear:logs")
-  .description("Clear logs")
-  .action(async () => {
-    await Commands.clearLogs();
-    process.exit(0);
-  });
+  .command("token")
+  .description("Print the dashboard API token (X-Locadot-Token) for scripts and AI agents")
+  .action(run(() => Commands.token()));
+program.command("path:hosts").description("Show the registry file path").action(run(() => Commands.hostPath()));
 
-program
-  .command("clear:hosts")
-  .description("Clear all host file.")
-  .action(async () => {
-    await Commands.clearHosts();
-    process.exit(0);
-  });
+program.command("startup:enable").description("Start locadot on boot/logon").action(run(() => Commands.enableStartup()));
+program.command("startup:disable").description("Don't start locadot on boot/logon").action(run(() => Commands.disableStartup()));
+program.command("startup:status").description("Is start on boot enabled?").action(run(() => Commands.statusStartup()));
 
-program
-  .command("path")
-  .description("Show configuration paths.")
-  .action(() => {
-    Commands.configPath();
-    process.exit(0);
-  });
-
-program
-  .command("path:logs")
-  .description("Show logs path file.")
-  .action(() => {
-    Commands.logPath();
-    process.exit(0);
-  });
-
-program
-  .command("path:hosts")
-  .description("Show hosts path file.")
-  .action(async () => {
-    await Commands.hostPath();
-    process.exit(0);
-  });
-
-program
-  .command("startup:enable")
-  .description("Enable locadot on reboot.")
-  .action(async () => {
-    await Commands.enableStartup();
-    process.exit(0);
-  });
-
-program
-  .command("startup:disable")
-  .description("Disable locadot on reboot.")
-  .action(async () => {
-    await Commands.disableStartup();
-    process.exit(0);
-  });
-
-program
-  .command("startup:status")
-  .description("Check locadot status on reboot.")
-  .action(async () => {
-    await Commands.statusStartup();
-    process.exit(0);
-  });
-
-program
-  .command("restart")
-  .description("Restart locadot")
-  .action(async () => {
-    await Commands.restart();
-    process.exit(0);
-  });
-
-program
-  .command("stop")
-  .description("Stop central proxy and logs")
-  .action(async () => {
-    await Commands.stop();
-    logger.info(Constants.proxyInfo.softClose);
-    process.exit(0);
-  });
-
-program
-  .command("kill")
-  .description("Stop proxy, clear logs, and hosts file.")
-  .action(async () => {
-    await Commands.kill();
-    logger.info(Constants.proxyInfo.softClose);
-    process.exit(0);
-  });
-
-program.parse(process.argv);
+program.parseAsync(process.argv);

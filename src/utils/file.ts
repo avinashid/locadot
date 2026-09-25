@@ -6,216 +6,107 @@ import Constants from "../constants";
 
 export type filePath = keyof typeof Constants.paths;
 
+const resolve = (key: filePath) => path.resolve(Constants.paths[key]);
+
 export default class FileModule {
-  /**
-   * Watches a file: creates folder and file if they do not exist, and listens to changes.
-   * @param filePath - Path to the file (relative or absolute)
-   * @param onChange - Callback to execute on file change
-   * @returns Chokidar watcher instance
-   */
-  static watchFileWithInit(
-    filePath: filePath,
-    onChange: () => void
-  ): FSWatcher {
-    const resolvedPath = path.resolve(Constants.paths[filePath]);
-    const folderPath = path.dirname(resolvedPath);
+  static ensureDir(dir: string = Constants.paths.HOME) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
-    // Ensure folder exists
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-      // logger.info(`Created folder: ${folderPath}`);
+  static exists(key: filePath) {
+    return fs.existsSync(resolve(key));
+  }
+
+  /** Returns undefined for a missing file instead of creating it. */
+  static read(key: filePath): string | undefined {
+    try {
+      return fs.readFileSync(resolve(key), "utf8");
+    } catch (error: any) {
+      if (error?.code === "ENOENT") return undefined;
+      throw error;
     }
+  }
 
-    // Ensure file exists
-    if (!fs.existsSync(resolvedPath)) {
-      fs.writeFileSync(resolvedPath, "", "utf8");
-      // logger.info(`Created file: ${resolvedPath}`);
-    }
+  /** Write to a temp file and rename, so readers never see a half-written file. */
+  static writeAtomic(key: filePath, data: string) {
+    const target = resolve(key);
+    FileModule.ensureDir(path.dirname(target));
+    const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmp, data, "utf8");
+    fs.renameSync(tmp, target);
+  }
 
-    // Watch the file
-    const watcher = chokidar.watch(resolvedPath, {
+  static write(key: filePath, data: string) {
+    const target = resolve(key);
+    FileModule.ensureDir(path.dirname(target));
+    fs.writeFileSync(target, data, "utf8");
+  }
+
+  static remove(key: filePath) {
+    fs.rmSync(resolve(key), { force: true });
+  }
+
+  static appendStream(key: filePath) {
+    const target = resolve(key);
+    FileModule.ensureDir(path.dirname(target));
+    return fs.createWriteStream(target, { flags: "a" });
+  }
+
+  static watch(key: filePath, onChange: () => void): FSWatcher {
+    const target = resolve(key);
+    FileModule.ensureDir(path.dirname(target));
+    // Watch the directory: atomic writes replace the file's inode, which a
+    // plain file watch can miss on some platforms.
+    const watcher = chokidar.watch(path.dirname(target), {
       persistent: true,
       ignoreInitial: true,
-      awaitWriteFinish: true,
+      depth: 0,
+      awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 20 },
     });
-
     watcher
-      .on("change", (changedPath) => {
+      .on("all", (_event, changed) => {
+        if (path.resolve(changed) !== target) return;
         try {
-          if (!fs.existsSync(resolvedPath)) {
-            console.log(
-              `\n[Info] File ${resolvedPath} no longer exists. Stopping watch.`
-            );
-            if (watcher) watcher.close();
-            return;
-          }
-
           onChange();
         } catch (error) {
           logger.error(error);
         }
       })
-      .on("error", (error) => {
-        console.error("Watcher error:", error);
-        watcher.close();
-      });
-
+      .on("error", (error) => logger.error(`Watcher error: ${error}`));
     return watcher;
   }
 
-  static writeFileStream(filePath: filePath, stream: boolean) {
-    const resolvedPath = path.resolve(Constants.paths[filePath]);
-    const folderPath = path.dirname(resolvedPath);
+  static tailFile(key: filePath, maxLines = 20) {
+    const target = resolve(key);
+    FileModule.ensureDir(path.dirname(target));
+    if (!fs.existsSync(target)) fs.writeFileSync(target, "", "utf8");
 
-    // Ensure folder exists
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-      // logger.info(`Created folder: ${folderPath}`);
-    }
+    const lines = fs.readFileSync(target, "utf8").split(/\r?\n/).filter(Boolean);
+    if (lines.length) process.stdout.write(lines.slice(-maxLines).join("\n") + "\n");
 
-    // Ensure file exists
-    if (!fs.existsSync(resolvedPath)) {
-      fs.writeFileSync(resolvedPath, "", "utf8");
-      // logger.info(`Created file: ${resolvedPath}`);
-    }
-
-    return fs.createWriteStream(resolvedPath, stream ? { flags: "a" } : {});
-  }
-
-  static async writeFileSync(filePath: filePath, data: string) {
-    const resolvedPath = path.resolve(Constants.paths[filePath]);
-    const folderPath = path.dirname(resolvedPath);
-
-    // Ensure folder exists
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-      logger.info(`Created folder: ${folderPath}`);
-    }
-    return fs.writeFileSync(resolvedPath, data, "utf8");
-  }
-
-  static async readFileSync(
-    filePath: filePath,
-    defaultValue: string | undefined | null = ""
-  ) {
-    const resolvedPath = path.resolve(Constants.paths[filePath]);
-    const folderPath = path.dirname(resolvedPath);
-
-    // Ensure folder exists
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-      // logger.info(`Created folder: ${folderPath}`);
-    }
-    if (!fs.existsSync(resolvedPath)) {
-      fs.writeFileSync(resolvedPath, defaultValue || "", "utf8");
-      // logger.info(`Created file: ${resolvedPath}`);
-    }
-    return fs.readFileSync(resolvedPath, "utf8");
-  }
-
-  static async removeFileSync(filePath: filePath) {
-    const resolvedPath = path.resolve(Constants.paths[filePath]);
-    const folderPath = path.dirname(resolvedPath);
-    if (!fs.existsSync(folderPath)) {
-      return;
-    }
-    if (!fs.existsSync(resolvedPath)) {
-      return;
-    }
-    fs.rmSync(resolvedPath, { force: true, recursive: true });
-  }
-
-  static async tailFile(filePathKey: filePath, maxLines = 10) {
-    const resolvedPath = path.resolve(Constants.paths[filePathKey]);
-
-    try {
-      const initialContent = await this.readFileSync(filePathKey);
-      const lines = initialContent.trim().split(/\r?\n/);
-      const nonEmptyLines = lines.filter((line) => line.length > 0);
-      if (nonEmptyLines.length > 0) {
-        const lastNLines = nonEmptyLines.slice(-Math.abs(maxLines)).join("\n");
-        if (lastNLines) {
-          process.stdout.write(lastNLines + "\n");
-        }
+    let lastKnownSize = fs.statSync(target).size;
+    const watcher = FileModule.watch(key, () => {
+      const currentSize = fs.existsSync(target) ? fs.statSync(target).size : 0;
+      if (currentSize > lastKnownSize) {
+        fs.createReadStream(target, {
+          start: lastKnownSize,
+          end: currentSize - 1,
+          encoding: "utf8",
+        }).on("data", (chunk) => process.stdout.write(chunk));
+      } else if (currentSize < lastKnownSize) {
+        process.stdout.write("\n--- log truncated or rotated ---\n");
       }
-    } catch (err) {
-      console.error(
-        `[Error] Reading initial content from ${resolvedPath}:`,
-        err
-      );
-    }
+      lastKnownSize = currentSize;
+    });
 
-    let lastKnownSize = 0;
-    try {
-      lastKnownSize = fs.statSync(resolvedPath).size;
-    } catch (err) {
-      console.error(
-        `[Error] Getting initial size of ${resolvedPath}. Assuming 0. Error:`,
-        err
-      );
-    }
+    const stop = () => {
+      watcher.close().finally(() => process.exit(0));
+    };
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
+  }
 
-    let watcher: FSWatcher | null = null;
-
-    try {
-      watcher = this.watchFileWithInit(filePathKey, () => {
-        if (!watcher) return;
-
-        try {
-          const stats = fs.statSync(resolvedPath);
-          const currentSize = stats.size;
-
-          if (currentSize > lastKnownSize) {
-            const stream = fs.createReadStream(resolvedPath, {
-              start: lastKnownSize,
-              end: currentSize - 1, // end is inclusive for createReadStream
-              encoding: "utf8",
-            });
-            stream.on("data", (chunk) => {
-              process.stdout.write(chunk);
-            });
-            stream.on("error", (readErr) => {
-              console.error(
-                `[Error] Reading new content from ${resolvedPath}:`,
-                readErr
-              );
-            });
-            lastKnownSize = currentSize;
-          } else if (currentSize < lastKnownSize) {
-            process.stdout.write(
-              `\n[Info] --- File ${resolvedPath} truncated or replaced. Tailing from new end. ---\n`
-            );
-            lastKnownSize = currentSize;
-          }
-        } catch (err) {
-          console.error(
-            `[Error] Processing file change for ${resolvedPath}:`,
-            err
-          );
-        }
-      });
-
-      const cleanup = (err: string) => {
-        console.error(`Tailing file exiting with error: ${err}`);
-        watcher?.close();
-        process.exit(0);
-      };
-
-      process.on("exit", () => cleanup("exit"));
-      process.on("SIGINT", () => cleanup("stop"));
-      process.on("SIGTERM", () => cleanup("stop"));
-      process.on("uncaughtException", () => cleanup("uncaughtException"));
-
-      return {
-        stop: () => {
-          cleanup("stop");
-        },
-      };
-    } catch (watchSetupError) {
-      console.error(
-        `[Error] Failed to setup watcher for ${resolvedPath}:`,
-        watchSetupError
-      );
-    }
+  static lastLines(key: filePath, count: number) {
+    return (FileModule.read(key) || "").split(/\r?\n/).filter(Boolean).slice(-count);
   }
 }

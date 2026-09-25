@@ -1,6 +1,6 @@
 {
   "name": "locadot",
-  "version": "1.5.7",
+  "version": "1.6.0-beta.1",
   "description": "Secure your local development environment with HTTPS and custom domains like dev.localhost.",
   "homepage": "https://www.npmjs.com/package/locadot",
   "main": "dist/index.js",
@@ -9,7 +9,9 @@
   },
   "scripts": {
     "dev": "tsx --watch src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "tsc && node --import tsx --test test/*.test.ts",
+    "prepublishOnly": "pnpm build"
   },
   "repository": {
     "type": "git",
@@ -21,7 +23,7 @@
     "ssl",
     "https-proxy",
     "localhost",
-    "https"
+    "dashboard"
   ],
   "author": "avinashid",
   "license": "MIT",
@@ -30,17 +32,16 @@
   },
   "dependencies": {
     "@expo/sudo-prompt": "^9.3.2",
-    "@types/http-proxy": "^1.17.16",
-    "@types/yargs": "^17.0.33",
     "appdata-path": "^1.0.0",
     "chokidar": "^4.0.3",
     "commander": "^14.0.0",
     "http-proxy": "^1.18.1",
-    "https": "^1.0.0",
     "mkcert": "^3.2.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@types/http-proxy": "^1.17.17",
+    "@types/node": "^26.6.2",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   },

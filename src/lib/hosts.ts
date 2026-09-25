@@ -1,0 +1,62 @@
+import Constants from "../constants";
+import Localhost, { InputError } from "./localhost";
+import RegistryStore from "./registry";
+
+export class NotFoundError extends InputError {}
+export class ConflictError extends InputError {}
+
+// Mapping changes shared by the CLI and the dashboard API, so both validate identically.
+
+const requireHost = (value: unknown) => {
+  const host = typeof value === "string" ? Localhost.normalizeHost(value) : undefined;
+  if (!host) throw new InputError(Constants.proxyInfo.invalidHost);
+  return host;
+};
+
+const requireTarget = (value: unknown) => {
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new InputError("❌ Missing destination: a port, host:port or http(s) URL.");
+  }
+  return Localhost.parseTarget(String(value));
+};
+
+export default class HostOps {
+  static async add(input: { host: unknown; target: unknown; insecure?: boolean }) {
+    const host = requireHost(input.host);
+    const target = requireTarget(input.target);
+    const now = new Date().toISOString();
+    const entry = await RegistryStore.mutate((registry) => {
+      const existing = registry.hosts[host];
+      if (existing) {
+        throw new ConflictError(
+          `❌ ${host} is already mapped to ${existing.target}. Use \`locadot update --host ${host} ...\` instead.`
+        );
+      }
+      registry.hosts[host] = { target, insecure: input.insecure || undefined, createdAt: now, updatedAt: now };
+      return registry.hosts[host];
+    });
+    return { host, entry };
+  }
+
+  static async update(input: { host: unknown; target: unknown; insecure?: boolean }) {
+    const host = requireHost(input.host);
+    const target = requireTarget(input.target);
+    const entry = await RegistryStore.mutate((registry) => {
+      const existing = registry.hosts[host];
+      if (!existing) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+      const insecure = input.insecure ?? existing.insecure;
+      registry.hosts[host] = { ...existing, target, insecure: insecure || undefined, updatedAt: new Date().toISOString() };
+      return registry.hosts[host];
+    });
+    return { host, entry };
+  }
+
+  static async remove(input: { host: unknown }) {
+    const host = requireHost(input.host);
+    await RegistryStore.mutate((registry) => {
+      if (!registry.hosts[host]) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+      delete registry.hosts[host];
+    });
+    return { host };
+  }
+}

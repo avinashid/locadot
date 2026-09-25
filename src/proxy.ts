@@ -1,156 +1,122 @@
-import httpProxy from "http-proxy";
-import { createSSL } from "./utils/certs";
-import https from "https";
-import http from "http";
-import locadotFile from "./lib/locadot-file";
+import fs from "fs";
 import { spawn } from "child_process";
+import Constants from "./constants";
+import locadotFile from "./lib/locadot-file";
+import RegistryStore from "./lib/registry";
 import FileModule from "./utils/file";
 import logger from "./utils/logger";
-import HttpModule from "./lib/http";
+import type { ProxyInfo } from "./types";
+
+const START_TIMEOUT_MS = 10_000;
+const STOP_TIMEOUT_MS = 5_000;
+const LOG_ROTATE_BYTES = 5 * 1024 * 1024;
+
+export class ProxyError extends Error {}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 class ProxyHandler {
-  async startCentralProxy() {
-    try {
-      let domainMap = await locadotFile.getRegistry();
-
-      const proxy = httpProxy.createProxyServer({});
-
-      const defaultCert = await createSSL("localhost");
-
-      const watcher = await locadotFile.watchRegistry(async () => {
-        logger.info("🔄 Updated domain mapping");
-        domainMap = await locadotFile.getRegistry();
-      });
-
-      process.on("SIGINT", async (err) => {
-        logger.error(
-          "🛑 Proxy stopped. Proxy soft destroyed as process SIGINT",
-          err
-        );
-        await locadotFile.softDestroy(watcher);
-      });
-      process.on("SIGTERM", async (err) => {
-        logger.error(
-          "🛑 Proxy stopped. Proxy soft destroyed as process SIGTERM",
-          err
-        );
-        await locadotFile.softDestroy(watcher);
-      });
-
-      // process.on("exit", (code: string, signal: string) => {
-      //   logger.error(`Process exited with error ${code} and signal ${signal}`);
-      //   locadotFile.softDestroy(watcher);
-      // });
-
-      const httpsServer = https.createServer(defaultCert, (req, res) => {
-        HttpModule.requestHandler(req, res, proxy, domainMap);
-      });
-      const httpServer = http.createServer((req, res) => {
-        HttpModule.requestHandler(req, res, proxy, domainMap);
-      });
-
-      httpsServer.listen(443, () => {
-        logger.info("🛜 HTTPS proxy running on port 443");
-      });
-      httpsServer.on("upgrade", (req, res, head) => {
-        HttpModule.requestUpgrade(req, res, head, proxy, domainMap);
-      });
-
-      httpServer.listen(80, () => {
-        logger.info("🛜 HTTP proxy running on port 80");
-      });
-      httpServer.on("upgrade", (req, socket, head) => {
-        HttpModule.requestUpgrade(req, socket, head, proxy, domainMap);
-      });
-    } catch (error) {
-      logger.error("Failed to start central proxy", error);
-    }
+  running(): ProxyInfo | undefined {
+    const info = locadotFile.readProxyInfo();
+    return info && locadotFile.isAlive(info.pid) ? info : undefined;
   }
 
-  static async isProxyRunning() {
+  private rotateLogs() {
     try {
-      const pid = Number(await locadotFile.getProcessId());
-      if (!pid || isNaN(pid)) {
-        return false;
+      if (fs.statSync(Constants.paths.LOGS).size > LOG_ROTATE_BYTES) {
+        fs.renameSync(Constants.paths.LOGS, `${Constants.paths.LOGS}.1`);
       }
-      process.kill(pid, 0);
-      return true;
-    } catch (error) {
+    } catch {}
+  }
+
+  /** Spawns the proxy and waits until it reports it is listening, or fails loudly. */
+  async start(): Promise<ProxyInfo> {
+    const existing = this.running();
+    if (existing) return existing;
+    locadotFile.deleteLockFile();
+
+    FileModule.ensureDir();
+    this.rotateLogs();
+    const logFd = fs.openSync(Constants.paths.LOGS, "a");
+    const logOffset = fs.fstatSync(logFd).size;
+    const { command, path: args } = locadotFile.getStartProxyFile();
+    const entry = args[args.length - 1];
+    if (!fs.existsSync(entry)) {
+      fs.closeSync(logFd);
+      throw new ProxyError(`❌ ${entry} not found. Run \`pnpm build\` first.`);
+    }
+
+    // The log fd is handed to the child directly: a pipe through this CLI
+    // would break as soon as the CLI exits.
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: ["ignore", logFd, logFd],
+      env: { ...process.env, LOCADOT_HOME: Constants.paths.HOME, LOCADOT_ROLE: "proxy" },
+      windowsHide: true,
+    });
+    fs.closeSync(logFd);
+
+    let exitCode: number | null = null;
+    child.once("exit", (code) => (exitCode = code ?? -1));
+    child.unref();
+
+    const deadline = Date.now() + START_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const info = locadotFile.readProxyInfo();
+      if (info && info.pid === child.pid) return info;
+      if (exitCode !== null) break;
+      await sleep(100);
+    }
+
+    if (exitCode === null && child.pid) {
+      try {
+        process.kill(child.pid);
+      } catch {}
+    }
+    const tail = fs.readFileSync(Constants.paths.LOGS).subarray(logOffset).toString("utf8").trim().split(/\r?\n/).slice(-8).join("\n  ");
+    throw new ProxyError(
+      `❌ Central proxy failed to start${exitCode !== null ? ` (exit ${exitCode})` : " (timed out)"}.\n  ${tail}\n  Full log: ${Constants.paths.LOGS}`
+    );
+  }
+
+  /** SIGTERM, wait, then SIGKILL. Returns false if nothing was running. */
+  async stop(): Promise<boolean> {
+    const info = locadotFile.readProxyInfo();
+    if (!info || !locadotFile.isAlive(info.pid)) {
+      locadotFile.deleteLockFile();
       return false;
     }
-  }
-  async startProxy() {
     try {
-      if (await ProxyHandler.isProxyRunning()) {
-        logger.error("Proxy is already running");
-        return;
+      process.kill(info.pid, "SIGTERM");
+    } catch (error: any) {
+      if (error?.code === "EPERM") {
+        throw new ProxyError(
+          `❌ The proxy (pid ${info.pid}) belongs to another user, probably root. Re-run this command with sudo.`
+        );
       }
-      const command = locadotFile.getStartProxyFile();
-      const proxyProcess = spawn(command.command, command.path, {
-        detached: true,
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-      const logStream = FileModule.writeFileStream("LOGS", true);
-      proxyProcess.stderr.pipe(logStream);
-      proxyProcess.on("error", (err) => {
-        console.error("Failed to start child process:", err);
-      });
-
-      if (!proxyProcess.pid) {
-        logger.error("❌ Central proxy failed to start");
-        process.exit(1);
-      } else {
-        locadotFile.createLockFile(proxyProcess.pid?.toString());
-      }
-
-      proxyProcess.unref();
-      logger.info("🚀 Central proxy started in background.");
-    } catch (error) {
-      logger.error("Failed to start central proxy", error);
+      if (error?.code !== "ESRCH") throw error;
     }
-  }
-
-  async addProxy(domain: string, port: number) {
-    if (!(await ProxyHandler.isProxyRunning())) {
-      await this.startProxy();
+    if (!(await locadotFile.waitForExit(info.pid, STOP_TIMEOUT_MS))) {
+      logger.warn(`⚠️ Proxy (pid ${info.pid}) ignored SIGTERM, forcing it to stop.`);
+      try {
+        process.kill(info.pid, "SIGKILL");
+      } catch {}
+      await locadotFile.waitForExit(info.pid, 2_000);
     }
-
-    let registry = await locadotFile.getRegistry();
-
-    if (registry[domain]) {
-      console.error(
-        `❌ ${domain} already mapped to port ${registry[domain]} use update instead.`
-      );
-      process.exit(1);
-    }
-
-    await locadotFile.addRegistry(domain, port);
-
-    logger.info(`✅ ${domain} => http://localhost:${port}`);
+    locadotFile.deleteLockFile(info.pid);
+    return true;
   }
 
-  async removeProxy(domain: string) {
-    if (!(await ProxyHandler.isProxyRunning())) {
-      await this.startProxy();
-    }
-    await locadotFile.deleteRegistry(domain);
+  async restart() {
+    await this.stop();
+    return this.start();
   }
 
-  async updateProxy(domain: string, port: number) {
-    if (!(await ProxyHandler.isProxyRunning())) {
-      await this.startProxy();
-    }
-    await locadotFile.updateRegistry(domain, port);
-  }
-  async stopProxy() {
-    await locadotFile.softDestroy();
-  }
-  async killProxy() {
-    await locadotFile.destroy();
-  }
-  async restartProxy() {
-    await locadotFile.softDestroy();
-    await this.startProxy();
+  async kill() {
+    const stopped = await this.stop();
+    await RegistryStore.mutate((registry) => (registry.hosts = {}));
+    locadotFile.clearLogs();
+    return stopped;
   }
 }
 
