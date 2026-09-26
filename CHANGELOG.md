@@ -6,6 +6,7 @@ The version in `package.json` is 1.6.0-beta.6 (published under the `beta` tag). 
 breaking items below.
 
 ### Changed
+- Dashboard: two-column layout, host filter, and a System / Light / Dark theme toggle (saved per browser).
 - Internal restructure into `cli/commands/*`, `server/*` and `proxy/*` modules. There are no behaviour changes; see `tasks/README.md`.
 
 ### Breaking

@@ -4,6 +4,32 @@ import { escapeHtml } from "./escape";
 // (and mutated via /api/*) and rendered with DOM APIs (never innerHTML), so
 // nothing server-supplied besides the per-response nonce and the auth token
 // is interpolated into this markup.
+const lightVars = `
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f4f5f7;
+  --surface-3: #eceef1;
+  --border: #e5e7eb;
+  --border-strong: #d4d8de;
+  --fg: #111318;
+  --fg-2: #3a3f47;
+  --muted: #6b7280;
+  --muted-dim: #9ca3af;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-bg: rgba(37, 99, 235, 0.09);
+  --accent-fg: #ffffff;
+  --up: #16a34a;
+  --up-bg: rgba(22, 163, 74, 0.1);
+  --down: #dc2626;
+  --down-bg: rgba(220, 38, 38, 0.08);
+  --warn: #d97706;
+  --warn-bg: rgba(217, 119, 6, 0.1);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 12px 32px rgba(16, 24, 40, 0.14);
+  color-scheme: light;
+`;
+
 const css = `
 :root {
   --bg: #0a0b0d;
@@ -33,34 +59,13 @@ const css = `
   --radius-sm: 8px;
   --radius-xs: 6px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
 }
 @media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f6f7f9;
-    --surface: #ffffff;
-    --surface-2: #f4f5f7;
-    --surface-3: #eceef1;
-    --border: #e5e7eb;
-    --border-strong: #d4d8de;
-    --fg: #111318;
-    --fg-2: #3a3f47;
-    --muted: #6b7280;
-    --muted-dim: #9ca3af;
-    --accent: #2563eb;
-    --accent-strong: #1d4ed8;
-    --accent-bg: rgba(37, 99, 235, 0.09);
-    --accent-fg: #ffffff;
-    --up: #16a34a;
-    --up-bg: rgba(22, 163, 74, 0.1);
-    --down: #dc2626;
-    --down-bg: rgba(220, 38, 38, 0.08);
-    --warn: #d97706;
-    --warn-bg: rgba(217, 119, 6, 0.1);
-    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-    --shadow-md: 0 12px 32px rgba(16, 24, 40, 0.14);
-  }
+  :root:not([data-theme="dark"]) {${lightVars}}
 }
+:root[data-theme="light"] {${lightVars}}
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
@@ -145,6 +150,10 @@ header {
 }
 #version { font-size: 12px; color: var(--muted); }
 .header-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.btn.theme-toggle { width: 28px; height: 28px; padding: 0; border-radius: 999px; color: var(--muted); flex-shrink: 0; }
+.btn.theme-toggle:hover { color: var(--fg); }
+.theme-toggle svg { width: 15px; height: 15px; flex-shrink: 0; display: none; }
+.theme-toggle[data-mode="system"] .i-system, .theme-toggle[data-mode="light"] .i-light, .theme-toggle[data-mode="dark"] .i-dark { display: block; }
 #updated { color: var(--muted-dim); font-size: 12px; }
 .chip {
   display: inline-flex;
@@ -738,6 +747,23 @@ footer a { color: var(--muted); }
 const clientJs = `
 (function () {
   "use strict";
+  (function () {
+    var btn = document.getElementById("theme-toggle");
+    var order = ["system", "light", "dark"];
+    var mode = document.documentElement.getAttribute("data-theme") || "system";
+    function apply(next) {
+      mode = next;
+      if (mode === "system") document.documentElement.removeAttribute("data-theme");
+      else document.documentElement.setAttribute("data-theme", mode);
+      try { if (mode === "system") localStorage.removeItem("locadot.theme"); else localStorage.setItem("locadot.theme", mode); } catch (e) {}
+      var label = "Theme: " + mode;
+      btn.setAttribute("data-mode", mode);
+      btn.title = label;
+      btn.setAttribute("aria-label", label + " (click to change)");
+    }
+    apply(mode);
+    btn.addEventListener("click", function () { apply(order[(order.indexOf(mode) + 1) % order.length]); });
+  })();
 
   var tokenMeta = document.querySelector('meta[name="locadot-token"]');
   var TOKEN = tokenMeta ? tokenMeta.getAttribute("content") : "";
@@ -1647,6 +1673,7 @@ export function renderPage(nonce: string, token: string): string {
 <meta name="color-scheme" content="dark light">
 <meta name="locadot-token" content="${safeToken}">
 <title>locadot dashboard</title>
+<script nonce="${safeNonce}">try { var t = localStorage.getItem("locadot.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <style nonce="${safeNonce}">${css}</style>
 </head>
 <body class="boot">
@@ -1662,6 +1689,11 @@ export function renderPage(nonce: string, token: string): string {
       <span id="uptime" class="chip"></span>
       <span id="pid" class="chip"></span>
       <span id="updated"></span>
+      <button type="button" id="theme-toggle" class="btn theme-toggle" data-mode="system" title="Theme: system" aria-label="Theme: system (click to change)">
+        <svg class="i-system" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        <svg class="i-light" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-dark" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
     </div>
   </div>
 </header>
