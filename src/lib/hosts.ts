@@ -7,12 +7,6 @@ export class ConflictError extends InputError {}
 
 // Mapping changes shared by the CLI and the dashboard API, so both validate identically.
 
-const requireHost = (value: unknown) => {
-  const host = typeof value === "string" ? Localhost.normalizeHost(value) : undefined;
-  if (!host) throw new InputError(Constants.proxyInfo.invalidHost);
-  return host;
-};
-
 const requireTarget = (value: unknown) => {
   if (typeof value !== "string" && typeof value !== "number") {
     throw new InputError("❌ Missing destination: a port, host:port or http(s) URL.");
@@ -22,7 +16,7 @@ const requireTarget = (value: unknown) => {
 
 export default class HostOps {
   static async add(input: { host: unknown; target: unknown; insecure?: boolean; cors?: boolean }) {
-    const host = requireHost(input.host);
+    const host = Localhost.requireHost(input.host);
     const target = requireTarget(input.target);
     const now = new Date().toISOString();
     const entry = await RegistryStore.mutate((registry) => {
@@ -39,7 +33,7 @@ export default class HostOps {
   }
 
   static async update(input: { host: unknown; target: unknown; insecure?: boolean; cors?: boolean }) {
-    const host = requireHost(input.host);
+    const host = Localhost.requireHost(input.host);
     const target = requireTarget(input.target);
     const entry = await RegistryStore.mutate((registry) => {
       const existing = registry.hosts[host];
@@ -53,7 +47,7 @@ export default class HostOps {
   }
 
   static async setTunnel(input: { host: unknown; tunnel: boolean }) {
-    const host = requireHost(input.host);
+    const host = Localhost.requireHost(input.host);
     const entry = await RegistryStore.mutate((registry) => {
       const existing = registry.hosts[host];
       if (!existing) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
@@ -64,7 +58,7 @@ export default class HostOps {
   }
 
   static async remove(input: { host: unknown }) {
-    const host = requireHost(input.host);
+    const host = Localhost.requireHost(input.host);
     await RegistryStore.mutate((registry) => {
       if (!registry.hosts[host]) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
       delete registry.hosts[host];

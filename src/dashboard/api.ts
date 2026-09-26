@@ -9,7 +9,8 @@ import { trustCA, untrustCA } from "../utils/trust";
 import FileModule from "../utils/file";
 import logger from "../utils/logger";
 import { invalidateSystemStatus } from "../lib/system";
-import { installCloudflared } from "../lib/tunnel";
+import { installCloudflared } from "../proxy/tunnel";
+import { formatUrl } from "../lib/urls";
 import type { DashboardContext } from "../types";
 
 const MAX_BODY = 64 * 1024;
@@ -105,8 +106,7 @@ const privileged = async (action: () => Promise<void>, command: string) => {
   }
 };
 
-const hostUrl = (host: string, ctx: DashboardContext) =>
-  `https://${host}${ctx.proxyInfo.httpsPort === 443 ? "" : `:${ctx.proxyInfo.httpsPort}`}`;
+const hostUrl = (host: string, ctx: DashboardContext) => formatUrl(host, true, ctx.proxyInfo.httpsPort);
 
 /** Routes under /api/ other than the read-only status/hosts. Returns undefined when nothing matched. */
 export async function route(

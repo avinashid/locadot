@@ -4,7 +4,8 @@ import { DashboardContext, HostEntry, HostStats, ProbeResult, TunnelState } from
 import { renderPage } from "./page";
 import { ApiError, route } from "./api";
 import { systemStatus } from "../lib/system";
-import { cloudflaredInfo as cloudflared } from "../lib/tunnel";
+import { cloudflaredInfo as cloudflared } from "../proxy/tunnel";
+import { formatUrl } from "../lib/urls";
 
 interface HostRow {
   host: string;
@@ -20,9 +21,7 @@ interface HostRow {
 }
 
 function hostUrls(host: string, httpPort: number, httpsPort: number): { https: string; http: string } {
-  const https = `https://${host}` + (httpsPort !== 443 ? `:${httpsPort}` : "");
-  const http_ = `http://${host}` + (httpPort !== 80 ? `:${httpPort}` : "");
-  return { https, http: http_ };
+  return { https: formatUrl(host, true, httpsPort), http: formatUrl(host, false, httpPort) };
 }
 
 function setCommonHeaders(res: http.ServerResponse, nonce: string): void {

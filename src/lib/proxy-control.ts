@@ -1,11 +1,11 @@
 import fs from "fs";
 import { spawn } from "child_process";
-import Constants from "./constants";
-import locadotFile from "./lib/locadot-file";
-import RegistryStore from "./lib/registry";
-import FileModule from "./utils/file";
-import logger from "./utils/logger";
-import type { ProxyInfo } from "./types";
+import Constants from "../constants";
+import locadotFile from "./locadot-file";
+import RegistryStore from "./registry";
+import FileModule from "../utils/file";
+import logger from "../utils/logger";
+import type { ProxyInfo } from "../types";
 
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 5_000;

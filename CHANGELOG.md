@@ -5,6 +5,9 @@
 The version in `package.json` is 1.6.0-beta.4 (published under the `beta` tag). The owner decides the bump. **2.0.0** is suggested because of the
 breaking items below.
 
+### Changed
+- Internal restructure into `cli/commands/*`, `server/*` and `proxy/*` modules. There are no behaviour changes; see `tasks/README.md`.
+
 ### Breaking
 - The proxy binds to `127.0.0.1` and `::1` only. Set `LOCADOT_BIND=0.0.0.0` for the old LAN-exposed behaviour.
 - The registry format is now v2 (`{version, hosts:{host:{target,…}}}`). The old `{host: port}` files are migrated
@@ -13,6 +16,8 @@ breaking items below.
 - Bare `localhost` is reserved for the dashboard and can't be mapped.
 
 ### Added
+- `locadot tunnel --host <h>` (with `--off`, and `tunnel:install`) shares a mapping on a public `https://*.trycloudflare.com` URL through a Cloudflare quick tunnel, with no account needed. `cloudflared` is downloaded on demand into the state dir. The dashboard has a Cloudflare Tunnel card, a Public URL column and Share/Unshare per row. The API accepts `PUT /api/hosts/:host {"tunnel": true}` and has `POST /api/cloudflared/install`. The `--cors` pass-through is disabled for tunnel visitors.
+- The dashboard is redesigned: a neutral palette that follows the system light/dark theme, a responsive grid and a single Traffic column.
 - `locadot start --port <http> --https-port <https>` (also on `restart`) runs the proxy on other ports than 80/443. The choice is saved in the state dir, so `add`, `status`, `open` and start-at-boot keep using it; `--port 80 --https-port 443` goes back. Running it while the proxy is up on other ports restarts it on the new ones.
 - `--cors` per mapping (CLI, API and dashboard). `Origin`/`Referer` are sent as the target's own origin, CORS preflights are answered locally, and any origin may call the domain with credentials. Absolute URLs of other mapped domains in text responses are rewritten to their `.localhost` names, and a mapped caller is sent as its real origin, so a site plus its API both work locally. Pages also get a small script that sends calls to any other origin through the page's own origin (`/__locadot/x/…`), so no mapping per API or third-party domain is needed. (ENH-12, BUG-15)
 - A control panel at `https://localhost` with a dark theme. You can add, edit and remove mappings, toggle CA trust and start-at-boot, see root/admin and privileged-port status,

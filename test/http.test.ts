@@ -8,8 +8,10 @@ import path from "node:path";
 process.env.LOCADOT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-http-"));
 
 const httpProxy = require("http-proxy");
-const HttpModule = require("../src/lib/http").default;
-const { hostOf, applyCors, originMap, rewriteOrigins } = require("../src/lib/http");
+const { handleRequest } = require("../src/proxy/router");
+const { hostOf } = require("../src/proxy/request");
+const { applyCors } = require("../src/proxy/cors");
+const { originMap, rewriteOrigins } = require("../src/proxy/rewrite");
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve) => {
@@ -53,7 +55,7 @@ test("http router", async (t) => {
     stats: new Map<string, any>(),
     dashboard: (_req: any, res: http.ServerResponse) => res.end("DASH"),
   };
-  const front = http.createServer((req, res) => HttpModule.requestHandler(req, res, ctx));
+  const front = http.createServer((req, res) => handleRequest(req, res, ctx));
   const frontPort = await listen(front);
 
   t.after(() => {

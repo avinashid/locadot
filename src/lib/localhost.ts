@@ -1,6 +1,7 @@
 import net from "net";
 import http from "http";
 import https from "https";
+import Constants from "../constants";
 import type { ProbeResult } from "../types";
 
 export class InputError extends Error {}
@@ -17,6 +18,12 @@ export default class Localhost {
   static normalizeHost(domain: string) {
     const host = String(domain || "").trim().toLowerCase().replace(/\.$/, "");
     if (!Localhost.isValidLocalhostDomain(host)) return undefined;
+    return host;
+  }
+
+  static requireHost(value: unknown) {
+    const host = typeof value === "string" ? Localhost.normalizeHost(value) : undefined;
+    if (!host) throw new InputError(Constants.proxyInfo.invalidHost);
     return host;
   }
 

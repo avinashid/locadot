@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command, Option } from "commander";
-import Commands from "./lib/commands";
+import Commands from "./cli/commands";
 import { InputError } from "./lib/localhost";
 import { RegistryError } from "./lib/registry";
-import { ProxyError } from "./proxy";
+import { ProxyError } from "./lib/proxy-control";
 import logger from "./utils/logger";
 import { version } from "../package.json";
 

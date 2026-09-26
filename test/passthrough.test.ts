@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 
-const { parseVia, injectShim, shimTag, shimScript, isSameSite, isSameOrigin, rewriteViaResponse } = require("../src/lib/passthrough");
+const { parseVia, injectShim, shimTag, shimScript, isSameSite, isSameOrigin, rewriteViaResponse } = require("../src/proxy/passthrough");
 
 test("parseVia: splits scheme, host and path; rejects anything else", () => {
   assert.deepEqual(parseVia("/__locadot/x/https/api.x.com:8443/v1?q=1"), { scheme: "https", host: "api.x.com:8443", path: "/v1?q=1" });

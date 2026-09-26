@@ -61,13 +61,15 @@ Environment: `LOCADOT_HOME`, `LOCADOT_HTTP_PORT`, `LOCADOT_HTTPS_PORT`, `LOCADOT
 
 | File | Responsibility |
 | --- | --- |
-| `src/index.ts` | Commander definitions. `run()` maps `InputError` / `ProxyError` / `RegistryError` to a message and exit 1. `-h` is `--host`; help is `--help`. |
-| `src/lib/commands.ts` | Command handlers: add/update/remove/list/status/doctor/open/start/stop/restart/kill/trust/logs/path/startup. |
-| `src/proxy.ts` | CLI side of the lifecycle: `start` (spawn + readiness wait), `stop` (SIGTERM → SIGKILL), `restart`, `kill`. |
-| `src/core.ts` → `src/server.ts` | The proxy process: listeners per (port, bind address), registry reload, cert warm-up, stats, signal handling. |
-| `src/lib/http.ts` | Per-request routing: dashboard hosts, 502 for unknown hosts, `http-proxy` web and WebSocket with redirect and cookie rewriting, stats. |
+| `src/index.ts` | Commander definitions (bin `dist/index.js`). `run()` maps `InputError` / `ProxyError` / `RegistryError` to a message and exit 1. `-h` is `--host`; help is `--help`. |
+| `src/cli/commands/` | Command handlers, one module per area: `hosts.ts` (add/update/remove/list/clear:hosts), `proxy.ts` (status/start/stop/restart/kill, `--port`/`--https-port`), `doctor.ts`, `files.ts` (logs/path/token), `system.ts` (open/trust/untrust/startup), `tunnel.ts`; `index.ts` merges them into `Commands`. |
+| `src/cli/shared.ts` | CLI output (`print`) and `ensureRunning`. |
+| `src/lib/proxy-control.ts` | CLI side of the lifecycle: `start` (spawn + readiness wait), `stop` (SIGTERM → SIGKILL), `restart`, `kill`, `ProxyError`. |
+| `src/core.ts` → `src/server/` | The proxy process. `index.ts` composes: `state.ts` (registry reload + cert warm-up), `token.ts` (API token), `listeners.ts` (one server per port × bind address, bind error messages), `lifecycle.ts` (shutdown + signals). |
+| `src/proxy/` | Per-request proxying. `router.ts` (`handleRequest`/`handleUpgrade`, `RouterContext`: dashboard hosts, 502 for unknown hosts, preflight, pass-through, stats); `request.ts` (`hostOf`, `isTls`, typed per-request tags: tunnel host, via); `options.ts` (http-proxy options, normal and pass-through); `cors.ts` (preflight, `allowOrigin`, `applyCors`, same-origin Origin/Referer); `rewrite.ts` (`originMap`, `rewriteOrigins`, `rewriteBody`); `response.ts` (`proxyRes` pipeline: hop-by-hop headers, --cors rewriting); `stats.ts`; `passthrough.ts` (--cors shim and `/__locadot/x/` pass-through); `tunnel.ts` (cloudflared install, `TunnelManager`). |
+| `src/lib/urls.ts` | `formatUrl` / `urlFor`: http(s)://host with the port only when non-default. Use it for every user-facing URL. |
 | `src/lib/registry.ts` | `RegistryStore`: parse/migrate, locked atomic `mutate`, corruption backup. |
-| `src/lib/localhost.ts` | `normalizeHost`, `parsePort`, `parseTarget`, `probe`, `InputError`. |
+| `src/lib/localhost.ts` | `normalizeHost`, `requireHost`, `parsePort`, `parseTarget`, `probe`, `InputError`. |
 | `src/lib/locadot-file.ts` | Lock file `ProxyInfo` read/write, `isAlive`, `waitForExit`, spawn command. |
 | `src/dashboard/` | `index.ts` read routes (`/`, `/api/status`, `/api/hosts`, `/healthz`) and dispatch; `api.ts` guarded mutating routes (hosts CRUD, startup, trust, logs, stop) and `assertTrusted`; `page.ts` control-panel HTML/CSS/JS; `escape.ts`. |
 | `src/lib/hosts.ts` | `HostOps` add/update/remove, shared by the CLI and the API so validation is identical. `NotFoundError` / `ConflictError`. |
@@ -80,6 +82,8 @@ Environment: `LOCADOT_HOME`, `LOCADOT_HTTP_PORT`, `LOCADOT_HTTPS_PORT`, `LOCADOT
 | `src/constants/` | Paths, ports, bind, messages, error HTML pages. |
 | `src/types.ts` | Shared types (`HostEntry`, `Registry`, `ProxyInfo`, `HostStats`, …). |
 | `test/` | node:test suites (`pnpm test`). |
+
+Dependency direction: `index.ts` / `cli/` → `lib/`, `proxy/`, `utils/`; `server/` → `proxy/`, `dashboard/`, `lib/`. `lib/`, `proxy/` and `utils/` never import `cli/`, `server/` or `dashboard/` (one exception: `constants/template.ts` uses `dashboard/escape.ts`).
 
 ### Invariants worth knowing before you change anything
 
