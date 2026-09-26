@@ -2,8 +2,9 @@ import http from "http";
 import httpProxy from "http-proxy";
 import type { HostEntry } from "../types";
 import { sameOriginHeaders, type Lookup } from "./cors";
+import { publicOnlyAgents } from "./guard";
 import { viaHeaders, type Via } from "./passthrough";
-import { isTls } from "./request";
+import { fromTunnel, isTls } from "./request";
 
 // --cors bodies are rewritten, so only ask for encodings we can decode (browsers also offer zstd).
 const DECODABLE = { "Accept-Encoding": "gzip, deflate, br" };
@@ -30,6 +31,7 @@ export const viaOptions = (req: http.IncomingMessage, entry: HostEntry, via: Via
   secure: !entry.insecure,
   cookieDomainRewrite: { "*": "" },
   headers: { ...viaHeaders(req, via, entry.target), ...DECODABLE },
+  ...(fromTunnel(req) ? { agent: via.scheme === "https" || via.scheme === "wss" ? publicOnlyAgents.https : publicOnlyAgents.http } : {}),
 });
 
 export const viaOrigin = (via: Via) => `${via.scheme}://${via.host}`;

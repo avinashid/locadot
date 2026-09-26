@@ -4,7 +4,7 @@ import logger from "../utils/logger";
 import { urlFor } from "../lib/urls";
 import type { HostEntry } from "../types";
 import { injectShim } from "./passthrough";
-import { hostOf, isTls } from "./request";
+import { fromTunnel, hostOf, isTls, mappedHost } from "./request";
 
 const REWRITABLE = /^(text\/(?!event-stream)|application\/(javascript|x-javascript|ecmascript|json|xml|[\w.+-]+\+(json|xml))\b)/i;
 const DECODERS: Record<string, (body: Buffer) => Buffer> = {
@@ -14,14 +14,24 @@ const DECODERS: Record<string, (body: Buffer) => Buffer> = {
   br: zlib.brotliDecompressSync,
 };
 
-/** [real origin, local origin] for every mapping, e.g. https://api.x.com → https://api.x.localhost. */
-export const originMap = (req: http.IncomingMessage, hosts: Record<string, HostEntry>): [string, string][] => {
+/** A shared mapping's tunnel URL, e.g. https://xyz.trycloudflare.com. */
+export type PublicUrl = (host: string) => string | undefined;
+
+/**
+ * [real origin, local origin] for every mapping, e.g. https://api.x.com → https://api.x.localhost.
+ * A tunnel visitor can't reach .localhost, so for them only shared mappings are rewritten, to
+ * their public URLs; the shim sends calls to the rest through the pass-through.
+ */
+export const originMap = (req: http.IncomingMessage, hosts: Record<string, HostEntry>, publicUrl: PublicUrl = () => undefined): [string, string][] => {
   const tls = isTls(req);
-  const self = hostOf(req);
+  const self = mappedHost(req);
+  const tunnel = fromTunnel(req);
   const pairs: [string, string, boolean][] = [];
   for (const [host, entry] of Object.entries(hosts)) {
+    const local = tunnel ? publicUrl(host) : urlFor(host, tls);
+    if (!local) continue;
     try {
-      pairs.push([new URL(entry.target).origin, urlFor(host, tls), host === self]);
+      pairs.push([new URL(entry.target).origin, local, host === self]);
     } catch {}
   }
   // Longest first, so https://a.x.com is not half-replaced by a mapping for https://x.com;

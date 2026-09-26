@@ -2,8 +2,8 @@ import http from "http";
 import type { HostEntry } from "../types";
 import { applyCors } from "./cors";
 import { rewriteViaResponse } from "./passthrough";
-import { fromTunnel, mappedHost, viaOf } from "./request";
-import { originMap, rewriteBody, rewriteOrigins } from "./rewrite";
+import { mappedHost, viaOf } from "./request";
+import { originMap, rewriteBody, rewriteOrigins, type PublicUrl } from "./rewrite";
 
 // Hop-by-hop headers describe the upstream connection, not ours. Apache sends
 // `Connection: Upgrade, close` + `Upgrade: h2`, which made us close the browser's
@@ -23,17 +23,16 @@ export const handleProxyResponse = (
   proxyRes: http.IncomingMessage,
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  hosts: Record<string, HostEntry>
+  hosts: Record<string, HostEntry>,
+  publicUrl: PublicUrl = () => undefined
 ) => {
   if (proxyRes.statusCode === 101) return;
   stripHopByHop(proxyRes.headers);
   const entry = hosts[mappedHost(req)];
   if (!entry?.cors) return;
   applyCors(req, proxyRes.headers);
-  // Rewriting to .localhost names only helps a browser on this machine.
-  if (fromTunnel(req)) return;
   const via = viaOf(req);
-  const pairs = originMap(req, hosts);
+  const pairs = originMap(req, hosts, publicUrl);
   if (via) rewriteViaResponse(proxyRes.headers, via, entry.target);
   else if (proxyRes.headers.location) proxyRes.headers.location = rewriteOrigins(proxyRes.headers.location, pairs);
   rewriteBody(req, res, proxyRes, pairs, !via);

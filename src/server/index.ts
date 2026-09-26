@@ -30,7 +30,7 @@ export async function startCentralProxy() {
   const stats = new Map<string, HostStats>();
   const proxy = httpProxy.createProxyServer({});
   proxy.on("error", (err) => logger.warn(`proxy error: ${err.message}`));
-  proxy.on("proxyRes", (proxyRes, req, res) => handleProxyResponse(proxyRes, req, res, registry.get().hosts));
+  proxy.on("proxyRes", (proxyRes, req, res) => handleProxyResponse(proxyRes, req, res, registry.get().hosts, (host) => tunnels.state(host).url));
 
   const info: ProxyInfo = {
     pid: process.pid,
@@ -54,7 +54,7 @@ export async function startCentralProxy() {
   const ctx: RouterContext = {
     proxy,
     stats,
-    lookup: (host) => registry.get().hosts[host],
+    lookup: (host) => registry.get().hosts[tunnels.hostFor(host) ?? host],
     tunnelFor: (host) => tunnels.hostFor(host),
     dashboard: (req, res) =>
       handleDashboardRequest(req, res, {

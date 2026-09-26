@@ -8,7 +8,8 @@ import { urlFor } from "../lib/urls";
 import type { HostEntry, HostStats } from "../types";
 import { allowOrigin, isPreflight, preflightHeaders, type Lookup } from "./cors";
 import { proxyOptions, viaOptions, viaOrigin } from "./options";
-import { SHIM_PATH, isSameOrigin, parseVia, shimScript } from "./passthrough";
+import { isPublicHost } from "./guard";
+import { SHIM_PATH, isSameOrigin, parseVia, shimScript, type Via } from "./passthrough";
 import { fromTunnel, hostOf, isTls, tag } from "./request";
 import { record } from "./stats";
 
@@ -31,8 +32,10 @@ const resolveHost = (req: http.IncomingMessage, ctx: RouterContext) => {
 
 const dashboardUrl = (req: http.IncomingMessage) => `${urlFor("localhost", isTls(req))}/`;
 
-// The pass-through fetches arbitrary URLs from this machine; never offer it to the internet.
-const passThrough = (req: http.IncomingMessage, entry: HostEntry) => Boolean(entry.cors) && !fromTunnel(req);
+const passThrough = (req: http.IncomingMessage, entry: HostEntry) => Boolean(entry.cors);
+
+/** Same-origin only, and a tunnel visitor may only reach public hosts (see guard.ts). */
+const viaAllowed = (req: http.IncomingMessage, via: Via) => isSameOrigin(req) && (!fromTunnel(req) || isPublicHost(via.host));
 
 const reason = (err: NodeJS.ErrnoException | undefined) => err?.code || err?.message;
 
@@ -64,9 +67,9 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
       return;
     }
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;
-    if (via && !isSameOrigin(req)) {
+    if (via && !viaAllowed(req, via)) {
       res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("locadot: the pass-through only serves the page's own requests.\n");
+      res.end("locadot: the pass-through only serves the page's own requests, and only public hosts through a tunnel.\n");
       return;
     }
 
@@ -109,7 +112,7 @@ export function handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: B
       return;
     }
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;
-    if (via && !isSameOrigin(req)) {
+    if (via && !viaAllowed(req, via)) {
       socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       return;
     }

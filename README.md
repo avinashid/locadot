@@ -80,8 +80,11 @@ Options for `add` / `update`:
 
 The tunnel runs inside the proxy, so a shared mapping keeps working after `restart` and comes back at boot. Redirects to the
 target are rewritten to the public URL. **Anyone with the link can reach the mapping**, so only share what you'd put online.
-For safety, the `--cors` pass-through (`/__locadot/x/…`) is turned off for visitors coming through the tunnel, so the tunnel
-can't be used to reach other hosts from your machine. The dashboard can also do this: use **Share** / **Unshare** on a row.
+`--cors` works through the tunnel too: CORS headers and preflights, the pass-through shim, and the target's own
+origin in pages rewritten to the public URL (other shared mappings get their public URLs too). For safety, a tunnel visitor's
+pass-through calls may only go to public addresses: loopback, LAN, link-local and cloud-metadata addresses are refused, checked
+on the address actually dialled, so the tunnel can't be used to reach your machine or network. The dashboard can also do this:
+use **Share** / **Unshare** on a row.
 
 ### Certificates
 

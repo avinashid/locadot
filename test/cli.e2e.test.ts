@@ -360,7 +360,7 @@ test("locadot start --port/--https-port picks the ports and remembers them", { t
   assert.equal(cli("start", "--port", String(httpsPort)).status, 1);
 });
 
-test("locadot tunnel: a public host reaches its mapping, without the --cors pass-through", { timeout: 60_000 }, async (t) => {
+test("locadot tunnel: a public host reaches its mapping, with --cors working for public calls only", { timeout: 60_000 }, async (t) => {
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-tunnel-"));
   const fake = path.join(tmpHome, "fake-cloudflared.js");
   fs.writeFileSync(
@@ -374,6 +374,10 @@ test("locadot tunnel: a public host reaches its mapping, without the --cors pass
     if (req.url === "/go") {
       res.writeHead(302, { Location: `http://127.0.0.1:${upstreamPort}/done` });
       return res.end();
+    }
+    if (req.url === "/page") {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      return res.end(`<html><head></head><body>http://127.0.0.1:${upstreamPort}/api</body></html>`);
     }
     res.end(`upstream ${req.url}`);
   });
@@ -394,9 +398,20 @@ test("locadot tunnel: a public host reaches its mapping, without the --cors pass
   const publicHost = "fake-tunnel-name.trycloudflare.com";
   assert.equal((await httpGet(httpPort, publicHost, "/hi")).body, "upstream /hi");
   assert.equal((await httpGet(httpPort, publicHost, "/go")).headers.location, `https://${publicHost}/done`);
-  // Internet visitors must not get the pass-through: the path goes to the upstream as-is.
-  const via = await httpGet(httpPort, publicHost, `/__locadot/x/http/127.0.0.1:${httpPort}/healthz`, { headers: { "Sec-Fetch-Site": "same-origin" } });
-  assert.equal(via.body, `upstream /__locadot/x/http/127.0.0.1:${httpPort}/healthz`);
+  // --cors works for tunnel visitors: CORS headers, preflights, the shim, and the page's own origin rewritten to the public URL.
+  const origin = { Origin: "https://someone-else.example" };
+  assert.equal((await httpGet(httpPort, publicHost, "/hi", { headers: origin })).headers["access-control-allow-origin"], origin.Origin);
+  const preflight = await httpGet(httpPort, publicHost, "/hi", { method: "OPTIONS", headers: { ...origin, "Access-Control-Request-Method": "PUT" } });
+  assert.equal(preflight.status, 204);
+  const page = await httpGet(httpPort, publicHost, "/page");
+  assert.match(page.body, /<script src="\/__locadot\/shim\.js"><\/script>/);
+  assert.match(page.body, new RegExp(`https://${publicHost.replace(/\./g, "\\.")}/api`));
+  assert.equal((await httpGet(httpPort, publicHost, "/__locadot/shim.js")).status, 200);
+  // ...but the pass-through never reaches this machine or the LAN for them.
+  for (const target of [`http/127.0.0.1:${httpPort}/healthz`, `http/localhost:${upstreamPort}/hi`, "http/192.168.1.1/"]) {
+    const via = await httpGet(httpPort, publicHost, `/__locadot/x/${target}`, { headers: { "Sec-Fetch-Site": "same-origin" } });
+    assert.equal(via.status, 403, target);
+  }
 
   const hosts = JSON.parse((await httpGet(httpPort, "localhost", "/api/hosts")).body);
   assert.deepEqual(hosts[0].tunnel, { enabled: true, status: "up", url: `https://${publicHost}` });
