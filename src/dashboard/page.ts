@@ -6,50 +6,59 @@ import { escapeHtml } from "./escape";
 // is interpolated into this markup.
 const css = `
 :root {
-  --bg: #0b0d10;
-  --surface: #14181e;
-  --surface-2: #1a1f26;
-  --border: #282d36;
-  --border-strong: #353b46;
-  --fg: #e6e8eb;
-  --muted: #8b929c;
-  --muted-dim: #5f6672;
+  --bg: #0a0b0d;
+  --surface: #121417;
+  --surface-2: #181b1f;
+  --surface-3: #1f2329;
+  --border: #23272e;
+  --border-strong: #2f343c;
+  --fg: #ededef;
+  --fg-2: #c9cdd3;
+  --muted: #8a9099;
+  --muted-dim: #5c626c;
   --accent: #3b82f6;
   --accent-strong: #60a5fa;
-  --accent-bg: rgba(59, 130, 246, 0.12);
+  --accent-bg: rgba(59, 130, 246, 0.14);
   --accent-fg: #ffffff;
   --up: #22c55e;
-  --up-bg: rgba(34, 197, 94, 0.12);
+  --up-bg: rgba(34, 197, 94, 0.14);
   --down: #ef4444;
-  --down-bg: rgba(239, 68, 68, 0.12);
+  --down-bg: rgba(239, 68, 68, 0.14);
   --warn: #f59e0b;
-  --warn-bg: rgba(245, 158, 11, 0.12);
+  --warn-bg: rgba(245, 158, 11, 0.14);
   --focus: var(--accent-strong);
-  --radius: 10px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --radius: 12px;
   --radius-sm: 8px;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --radius-xs: 6px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
 }
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f7f8fa;
+    --bg: #f6f7f9;
     --surface: #ffffff;
-    --surface-2: #f2f3f5;
-    --border: #e3e5e8;
-    --border-strong: #d3d6db;
-    --fg: #1a1d21;
+    --surface-2: #f4f5f7;
+    --surface-3: #eceef1;
+    --border: #e5e7eb;
+    --border-strong: #d4d8de;
+    --fg: #111318;
+    --fg-2: #3a3f47;
     --muted: #6b7280;
-    --muted-dim: #9aa0a8;
+    --muted-dim: #9ca3af;
     --accent: #2563eb;
     --accent-strong: #1d4ed8;
-    --accent-bg: rgba(37, 99, 235, 0.08);
+    --accent-bg: rgba(37, 99, 235, 0.09);
     --accent-fg: #ffffff;
     --up: #16a34a;
     --up-bg: rgba(22, 163, 74, 0.1);
     --down: #dc2626;
-    --down-bg: rgba(220, 38, 38, 0.1);
+    --down-bg: rgba(220, 38, 38, 0.08);
     --warn: #d97706;
     --warn-bg: rgba(217, 119, 6, 0.1);
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --shadow-md: 0 12px 32px rgba(16, 24, 40, 0.14);
   }
 }
 * { box-sizing: border-box; }
@@ -57,15 +66,17 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: var(--sans);
+  font-size: 14px;
   color: var(--fg);
   line-height: 1.5;
   background: var(--bg);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 .mono { font-family: var(--mono); }
 a { color: var(--accent); text-decoration: none; }
 a:hover, a:focus-visible { text-decoration: underline; }
-button { font-family: inherit; }
+button, input { font-family: inherit; }
 *:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -81,110 +92,249 @@ button { font-family: inherit; }
   border: 0;
 }
 .clip-helper { position: absolute; left: -9999px; top: -9999px; }
-
+.muted { color: var(--muted); }
+.dim { color: var(--muted-dim); }
 .label {
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition: border-color 0.15s ease;
-}
-.card:hover { border-color: var(--border-strong); }
-
+/* ---------- top bar ---------- */
 header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--bg);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+.topbar {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 0 32px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.logo {
+  width: 24px; height: 24px;
+  border-radius: 7px;
+  background: var(--accent);
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.logo::after {
+  content: "";
+  position: absolute;
+  left: 8px; top: 8px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
 .wordmark {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   margin: 0;
   letter-spacing: -0.01em;
   color: var(--fg);
 }
-.muted { color: var(--muted); }
-.header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+#version { font-size: 12px; color: var(--muted); }
+.header-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+#updated { color: var(--muted-dim); font-size: 12px; }
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
-  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
 }
+.chip:empty { display: none; }
+.chip-live { color: var(--fg-2); font-weight: 500; }
 .live-dot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   background: var(--muted-dim);
 }
-.live-dot.up { background: var(--up); }
-.live-dot.down { background: var(--down); }
+.live-dot.up { background: var(--up); box-shadow: 0 0 0 3px var(--up-bg); }
+.live-dot.down { background: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
+body.offline .live-label { color: var(--down); }
 
-main { max-width: 1280px; margin: 0 auto; padding: 24px 24px 64px; display: flex; flex-direction: column; gap: 24px; }
+/* ---------- page layout ---------- */
+main {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 32px 32px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.page-head { display: flex; flex-direction: column; gap: 4px; }
+.page-title { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0; line-height: 1.25; }
+.page-sub { margin: 0; color: var(--muted); font-size: 14px; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.col-primary, .col-secondary { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+@media (min-width: 1100px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+@media (min-width: 1400px) {
+  .layout { grid-template-columns: minmax(0, 1fr) 372px; }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+  th, td { padding-left: 10px; padding-right: 10px; }
+  .tunnel-status .copy-btn { display: none; }
+  .tunnel-status a { max-width: 150px; }
+  .host-target { max-width: 200px; }
+}
 
-.banner {
+/* ---------- cards ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 16px;
-  font-size: 14px;
-  border: 1px solid var(--down);
-  background: var(--down-bg);
-  color: var(--fg);
+  box-shadow: var(--shadow-sm);
 }
-
-section h2 {
-  font-size: 15px;
-  color: var(--fg);
-  margin: 0 0 12px;
-  font-weight: 600;
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
 }
+.card-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.card-title { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.card-desc { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.card-tools { display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+.card-body-tight { padding: 8px 0; }
 
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
-.tile { padding: 16px; display: flex; flex-direction: column; gap: 6px; }
-.tile-wide { grid-column: span 2; }
-.tile-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; height: 100%; }
-.tile-main { display: flex; flex-direction: column; gap: 6px; }
-.tile-value { font-size: 17px; font-weight: 600; }
-.tile-value.ok { color: var(--up); }
-.tile-value.warn { color: var(--warn); }
-.tile-sub { font-size: 12px; color: var(--muted); }
-.tile-hint { font-size: 12px; color: var(--warn); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tile-actions { margin-top: auto; padding-top: 8px; }
+/* ---------- badges ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--fg-2);
+}
+.badge-warn { color: var(--warn); border-color: transparent; background: var(--warn-bg); }
+.badge-cors, .badge-accent { color: var(--accent); border-color: transparent; background: var(--accent-bg); }
+.badge-up { color: var(--up); border-color: transparent; background: var(--up-bg); }
+.badge-down { color: var(--down); border-color: transparent; background: var(--down-bg); }
+.badge-count { font-family: var(--mono); color: var(--muted); }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; }
+td.badges { display: table-cell; }
+td.badges .badge + .badge { margin-left: 4px; }
 
+/* ---------- buttons ---------- */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--muted-dim); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn-block { width: 100%; }
+.btn-primary { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-danger { border-color: var(--down); color: var(--down); background: transparent; }
+.btn-danger:hover:not(:disabled) { background: var(--down-bg); border-color: var(--down); }
+.btn-ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--muted); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; color: var(--fg); }
+.btn-ghost-danger { background: transparent; border-color: transparent; box-shadow: none; color: var(--muted); }
+.btn-ghost-danger:hover:not(:disabled) { color: var(--down); background: var(--down-bg); border-color: transparent; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.row-actions .btn-danger:not(:hover):not(:focus-visible) { border-color: var(--border-strong); color: var(--muted); }
+.btn.busy { opacity: 0.7; cursor: wait; }
+.btn.busy, #ca-toggle.busy, #startup-toggle.busy { color: transparent !important; pointer-events: none; }
+.btn.busy::after {
+  content: "";
+  position: absolute;
+  width: 13px; height: 13px;
+  top: 50%; left: 50%;
+  margin: -6.5px 0 0 -6.5px;
+  border-radius: 50%;
+  border: 2px solid rgba(127, 127, 127, 0.35);
+  border-top-color: var(--accent-strong);
+  animation: spin 0.7s linear infinite;
+}
+.btn-primary.busy::after { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.copy-btn:hover { color: var(--fg); border-color: var(--muted-dim); }
+
+/* ---------- switch ---------- */
 .switch {
   position: relative;
-  width: 38px;
-  height: 22px;
+  width: 36px;
+  height: 20px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: var(--border-strong);
   cursor: pointer;
   flex-shrink: 0;
+  padding: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .switch .switch-knob {
   position: absolute;
   top: 2px; left: 2px;
-  width: 16px; height: 16px;
+  width: 14px; height: 14px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -194,51 +344,53 @@ section h2 {
 .switch.on .switch-knob { transform: translateX(16px); }
 .switch.busy { opacity: 0.6; cursor: wait; }
 .switch:disabled { cursor: not-allowed; opacity: 0.5; }
-
-.btn {
-  font-size: 13px;
-  font-weight: 500;
-  padding: 7px 13px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--fg);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+.switch.busy .switch-knob { opacity: 0; }
+.switch.busy::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 10px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
 }
-.btn:hover:not(:disabled) { border-color: var(--muted); background: var(--border); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
-.btn-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-fg);
-}
-.btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
-.btn-danger { border-color: var(--down); color: var(--down); background: transparent; }
-.btn-danger:hover:not(:disabled) { background: var(--down-bg); }
-.row-actions .btn-danger:not(:hover):not(:focus-visible) { border-color: var(--border-strong); color: var(--muted); }
-.btn-primary.busy::after { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
-.btn-ghost { background: transparent; border-color: var(--border); }
-.btn.busy { opacity: 0.6; cursor: wait; }
+body.offline .switch, body.offline #add-submit { opacity: 0.5; pointer-events: none; }
 
-.form-card { padding: 16px 18px; }
-.form-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
-.field { display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1 1 200px; }
-.field label { font-size: 12px; color: var(--muted); font-weight: 500; }
-.field input[type="text"] {
+/* ---------- inputs ---------- */
+.input, .field input[type="text"], .edit-input {
+  height: 36px;
+  width: 100%;
+  padding: 0 12px;
   font-family: var(--mono);
-  font-size: 14px;
-  padding: 8px 11px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
+  font-size: 13px;
   color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.field input[type="text"]::placeholder { color: var(--muted-dim); }
-.field-checkbox { flex-direction: row; align-items: center; gap: 8px; flex: 0 0 auto; min-width: 0; height: 36px; }
-#add-submit { height: 36px; margin-left: auto; }
-.field-checkbox label { font-size: 13px; color: var(--fg); font-weight: 400; }
+.input::placeholder, .field input::placeholder { color: var(--muted-dim); }
+.input:focus-visible, .field input[type="text"]:focus-visible, .edit-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.input-sm { height: 30px; font-size: 12px; padding: 0 10px; font-family: var(--sans); }
+.input-search { width: 200px; max-width: 100%; }
+.field input.invalid, .edit-input.invalid { border-color: var(--down); }
+.field input.invalid:focus-visible, .edit-input.invalid:focus-visible { box-shadow: 0 0 0 3px var(--down-bg); }
+.edit-input { height: 30px; min-width: 0; padding: 0 10px; }
+input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+
+/* ---------- add host form ---------- */
+.form-grid { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: 12.5px; color: var(--fg-2); font-weight: 500; }
+.form-checks { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-top: 2px; }
+.field-checkbox { flex-direction: row; align-items: center; gap: 8px; }
+.field-checkbox label { font-size: 13px; color: var(--fg-2); font-weight: 400; cursor: pointer; }
 .field-error {
   font-size: 13px;
   color: var(--down);
@@ -246,81 +398,99 @@ section h2 {
   border: 1px solid var(--down);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
-  margin-top: 10px;
+  margin-top: 14px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
-.table-wrap { overflow-x: auto; border-radius: var(--radius); }
-table { width: 100%; border-collapse: collapse; min-width: 760px; }
-td.traffic { color: var(--muted); font-family: var(--mono); font-size: 12px; }
-th, td { text-align: left; padding: 10px 9px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
-th { color: var(--muted); font-weight: 500; font-size: 12px; }
+/* ---------- system list ---------- */
+.stat-list { display: flex; flex-direction: column; }
+.stat-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.stat-side { flex-shrink: 0; padding-top: 2px; }
+.tile-value { font-size: 14px; font-weight: 600; color: var(--fg); }
+.tile-value.ok { color: var(--up); }
+.tile-value.warn { color: var(--warn); }
+.tile-sub { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.tile-sub.mono { font-size: 11.5px; }
+.tile-hint { font-size: 12px; color: var(--warn); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.tile-hint code { overflow-wrap: anywhere; }
+.tile-actions { margin-top: 10px; }
+
+/* ---------- hosts table ---------- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 720px; }
+th, td {
+  text-align: left;
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+th:first-child, td:first-child { padding-left: 20px; }
+th:last-child, td:last-child { padding-right: 20px; }
+th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--surface-2);
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
 th.num, td.num { text-align: right; }
+th.actions { text-align: right; }
 tbody tr { transition: background 0.15s ease; }
 tbody tr:hover { background: var(--surface-2); }
-tr:last-child td { border-bottom: none; }
-.arrow { color: var(--muted-dim); text-align: center; }
-.host-cell { display: flex; align-items: center; gap: 6px; }
-.badge {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: 6px;
-  border: 1px solid var(--warn);
-  color: var(--warn);
-  background: var(--warn-bg);
-}
-.pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; }
-.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
-.dot.up { background: var(--up); }
-.dot.down { background: var(--down); }
-.copy-btn {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--muted);
-  cursor: pointer;
-}
-.copy-btn:hover { color: var(--fg); border-color: var(--muted); }
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
-th.actions { text-align: right; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius); }
+tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius); }
+#table th:nth-child(2), #table td.arrow { display: none; }
+#table tbody td { padding-top: 10px; padding-bottom: 10px; }
+.host-cell { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.host-cell a { color: var(--fg); }
+.host-cell a:hover { color: var(--accent); }
+.host-target, .traffic { font-size: 12px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
+.host-target { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.host-td .edit-input { margin-top: 6px; width: 100%; min-width: 150px; }
+.host-cell .copy-btn, .tunnel-status .copy-btn { opacity: 0; transition: opacity 0.12s ease; }
+tbody tr:hover .copy-btn, .copy-btn:focus-visible, #table tbody td:hover .copy-btn { opacity: 1; }
+tr.row-down td:first-child { box-shadow: inset 3px 0 0 var(--down); }
+.pill { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12px; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot.up { background: var(--up); box-shadow: 0 0 0 3px var(--up-bg); }
+.dot.down { background: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
 .edit-hint { font-size: 12px; }
 td.edit-error { color: var(--down); white-space: normal; }
-body.offline .switch, body.offline #add-submit { opacity: 0.5; pointer-events: none; }
-.field input.invalid:focus-visible, .edit-input.invalid:focus-visible { outline-color: var(--down); }
-.edit-input.invalid { border-color: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
-.chip:empty { display: none; }
-body.boot #updated { visibility: hidden; }
-body.boot #stop-proxy-btn, body.offline #stop-proxy-btn { display: none; }
-body.offline .live-label { color: var(--down); }
-.edit-input {
-  font-family: var(--mono);
-  font-size: 13px;
-  padding: 5px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--fg);
-  width: 100%;
-  min-width: 240px;
-}
-.badges { display: flex; flex-wrap: wrap; gap: 4px; }
-td.badges { display: table-cell; }
-td.badges .badge + .badge { margin-left: 4px; }
-.badge-cors { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 td .inline-check + .inline-check { margin-top: 4px; }
 .inline-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-.dim { color: var(--muted-dim); }
-
 .tunnel-cell { white-space: normal; }
-.tunnel-status { display: flex; align-items: center; gap: 6px; max-width: 220px; }
-.tunnel-status a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; display: inline-block; vertical-align: middle; }
+.tunnel-status { display: flex; align-items: center; gap: 6px; max-width: 240px; }
+.tunnel-status a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; display: inline-block; vertical-align: middle; font-size: 12px; }
 .tunnel-error { color: var(--down); cursor: help; }
+.tunnel-error-text {
+  color: var(--down);
+  cursor: help;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 170px;
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 12px;
+}
 .spinner {
   display: inline-block;
   width: 12px; height: 12px;
@@ -332,13 +502,28 @@ td .inline-check + .inline-check { margin-top: 4px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .empty {
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  padding: 28px;
+  padding: 40px 24px;
   color: var(--muted);
   text-align: center;
+  font-size: 13.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
-#hosts-error { border-color: var(--down); }
+.empty p { margin: 0; }
+.empty-icon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-dim);
+  font-size: 18px;
+}
+#hosts-error .empty-icon { color: var(--down); border-color: var(--down); background: var(--down-bg); }
 .empty pre { display: inline-block; text-align: left; }
 
 pre.code-block {
@@ -350,48 +535,70 @@ pre.code-block {
   white-space: pre-wrap;
   word-break: break-all;
   font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg-2);
   margin: 0;
 }
+.cli-list { display: flex; flex-direction: column; gap: 16px; }
+.cli-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cli-item-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
-.cli-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
-.cli-item pre { flex: 1; min-width: 0; }
-.cli-item:last-child { margin-bottom: 0; }
+/* ---------- banners ---------- */
+.banner {
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 13.5px;
+  border: 1px solid var(--down);
+  background: var(--down-bg);
+  color: var(--fg);
+}
+.banner-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.banner .btn { background: var(--surface); }
 
-details.card { padding: 0; }
+/* ---------- logs ---------- */
 details.card summary {
   cursor: pointer;
   list-style: none;
-  padding: 14px 18px;
-  font-size: 15px;
-  color: var(--fg);
-  font-weight: 600;
+  padding: 16px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  border-radius: var(--radius);
 }
 details.card summary::-webkit-details-marker { display: none; }
-details.card summary::after { content: "+"; font-size: 16px; color: var(--muted); font-weight: 400; }
-details.card[open] summary::after { content: "\\2212"; }
-.logs-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+details.card summary .card-title { display: flex; align-items: center; gap: 8px; }
+details.card summary .card-title::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-right: 2px;
+}
+details.card[open] summary .card-title::before { transform: rotate(45deg); }
+details.card[open] summary { border-bottom: 1px solid var(--border); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.logs-body { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 12px; }
 .logs-actions { display: flex; gap: 8px; }
 .logs-box {
-  height: 260px;
+  height: 280px;
   overflow-y: auto;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--fg);
+  line-height: 1.55;
+  color: var(--fg-2);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
 }
 
+/* ---------- toasts ---------- */
 .toast-container {
   position: fixed;
   bottom: 20px;
@@ -405,23 +612,23 @@ details.card[open] summary::after { content: "\\2212"; }
 .toast {
   background: var(--surface);
   border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
   font-size: 13px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-md);
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
-.toast-success { border-color: var(--up); }
-.toast-error { border-color: var(--down); }
-.toast-warn { border-color: var(--warn); }
+.toast-success { border-left-color: var(--up); }
+.toast-error { border-left-color: var(--down); }
+.toast-warn { border-left-color: var(--warn); }
 .toast-hint { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .toast-hint code { font-size: 11.5px; color: var(--fg); }
 
-.banner-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-
+/* ---------- skeleton / boot ---------- */
 @keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 body.boot .tile-value,
 body.boot .tile-sub,
@@ -436,6 +643,8 @@ body.boot #pid {
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
 }
+body.boot #updated { visibility: hidden; }
+body.boot #stop-proxy-btn, body.offline #stop-proxy-btn { display: none; }
 .skel-bar {
   display: block;
   width: 80%;
@@ -445,93 +654,74 @@ body.boot #pid {
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.4s ease infinite;
 }
-.skeleton-row td { border-bottom: 1px solid var(--border); padding: 14px 9px; }
+#hosts-skeleton table { min-width: 0; }
+.skeleton-row td { border-bottom: 1px solid var(--border); padding: 17px 20px; }
 .skeleton-row:nth-child(1) .skel-bar { width: 92%; }
 .skeleton-row:nth-child(2) .skel-bar { width: 70%; }
 .skeleton-row:nth-child(3) .skel-bar { width: 82%; }
 
-tr.row-down td:first-child { border-left: 3px solid var(--down); padding-left: 6px; }
-
-.tunnel-error-text {
-  color: var(--down);
-  cursor: help;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 170px;
-  display: inline-block;
-  vertical-align: middle;
-}
-
-.field input.invalid { border-color: var(--down); }
-
-.btn.busy, #ca-toggle.busy, #startup-toggle.busy { color: transparent !important; pointer-events: none; }
-.btn.busy::after {
-  content: "";
-  position: absolute;
-  width: 13px; height: 13px;
-  margin-left: -6px;
-  top: 50%; left: 50%;
-  margin-top: -6.5px;
-  border-radius: 50%;
-  border: 2px solid rgba(127, 127, 127, 0.35);
-  border-top-color: var(--accent-strong);
-  animation: spin 0.7s linear infinite;
-}
-.btn { position: relative; }
-.switch.busy .switch-knob { opacity: 0; }
-.switch.busy::after {
-  content: "";
-  position: absolute;
-  top: 3px; left: 11px;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
-  animation: spin 0.7s linear infinite;
-}
-
-footer { text-align: center; padding: 20px; color: var(--muted-dim); font-size: 12px; }
+footer { text-align: center; padding: 8px 20px 32px; color: var(--muted-dim); font-size: 12px; }
+footer a { color: var(--muted); }
 [hidden] { display: none !important; }
 
-@media (max-width: 900px) {
-  .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .tile { grid-column: span 2; }
-  .tile-wide, .tile-wide + .tile { grid-column: span 3; }
+/* ---------- responsive ---------- */
+@media (max-width: 1099px) {
+  .topbar, main { padding-left: 24px; padding-right: 24px; }
 }
-@media (max-width: 600px) {
-  .tiles { grid-template-columns: 1fr; }
-  .tile, .tile-wide, .tile-wide + .tile { grid-column: auto; }
-  #add-submit { margin-left: 0; }
+@media (max-width: 1099px) {
+  .col-primary, .col-secondary { display: contents; }
+  #hosts-card { order: 1; }
+  #add-card { order: 2; }
+  #system-card { order: 3; }
+  #sharing-card { order: 4; }
+  #logs-panel { order: 5; }
+  #cli-card { order: 6; }
 }
-
-@media (max-width: 1200px) {
-  #table th:nth-child(2), #table td.arrow { display: none; }
-  .tunnel-status a { max-width: 120px; }
-  th, td { padding-left: 6px; padding-right: 6px; }
+@media (min-width: 700px) and (max-width: 1099px) {
+  .layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #hosts-card, #logs-panel, #cli-card { grid-column: 1 / -1; }
 }
-@media (min-width: 641px) and (max-width: 1023px) {
+@media (min-width: 641px) and (max-width: 899px), (min-width: 1100px) and (max-width: 1279px) {
   #table tbody { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #table tbody tr:nth-child(odd) { border-right: 1px solid var(--border); }
   #table tbody tr:nth-last-child(2):nth-child(odd) { border-bottom: none; }
 }
-@media (max-width: 1023px) {
+@media (max-width: 899px), (min-width: 1100px) and (max-width: 1279px) {
   #table { min-width: 0; }
   #table thead { display: none; }
   #table, #table tbody, #table tr { display: block; width: 100%; }
-  #table tr { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  #table tr { padding: 14px 20px; border-bottom: 1px solid var(--border); }
   #table tr:last-child { border-bottom: none; }
   #table td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border: none; white-space: normal; text-align: right; min-width: 0; }
   #table td::before { content: attr(data-label); color: var(--muted); font-size: 12px; flex-shrink: 0; text-align: left; }
   #table td[data-label=""]::before { content: none; }
   #table td[data-label=""]:first-child { padding-bottom: 8px; justify-content: flex-start; font-weight: 600; }
+  #table td.host-td, #table td.status-td { flex-direction: column; align-items: flex-start; gap: 0; }
+  #table td.status-td { align-items: flex-end; }
+  #table td.status-td::before { align-self: flex-start; margin-bottom: 4px; }
+  #table td.host-td .edit-input { margin-top: 8px; }
+  .host-target { max-width: 100%; }
+  .host-cell .copy-btn, .tunnel-status .copy-btn { opacity: 1; }
   #table td[data-label=""] { justify-content: flex-end; padding-top: 10px; }
   #table .edit-input { min-width: 0; }
+  tr.row-down td:first-child { box-shadow: none; }
+  tr.row-down { box-shadow: inset 3px 0 0 var(--down); }
+  .tunnel-status, .tunnel-status a, .tunnel-error-text { max-width: 100%; min-width: 0; }
+  .tunnel-status { justify-content: flex-end; flex: 0 1 auto; }
+  .tunnel-status a { flex: 0 1 auto; }
 }
 @media (max-width: 640px) {
-  #pid, #updated { display: none; }
-  header { padding: 12px 16px; }
-  main { padding: 18px 16px 48px; }
+  #pid, #updated, #version { display: none; }
+  .topbar { height: 52px; padding: 0 16px; }
+  main { padding: 20px 16px 40px; gap: 20px; }
+  .col-primary, .col-secondary, .layout { gap: 16px; }
+  .page-title { font-size: 20px; }
+  .card-head, .card-body, .stat-row, .logs-body, details.card summary { padding-left: 16px; padding-right: 16px; }
+  #table tr { padding-left: 16px; padding-right: 16px; }
+  .skeleton-row td { padding-left: 16px; padding-right: 16px; }
+  .input-search { width: 100%; }
+  .card-tools { width: 100%; }
+  .row-actions { flex-wrap: wrap; }
   .toast-container { left: 12px; right: 12px; bottom: 12px; max-width: none; }
 }
 
@@ -594,6 +784,8 @@ const clientJs = `
   var tableWrap = document.getElementById("table-wrap");
   var tbody = document.getElementById("tbody");
   var hostsSkeletonEl = document.getElementById("hosts-skeleton");
+  var hostsCountEl = document.getElementById("hosts-count");
+  var hostsFilterInput = document.getElementById("hosts-filter");
   // As many skeleton rows as hosts last time, so the table doesn't jump when data lands.
   try {
     var skelBody = hostsSkeletonEl.querySelector("tbody");
@@ -1140,7 +1332,7 @@ const clientJs = `
     tr.classList.toggle("row-down", !row.probe.up);
 
     var hostTd = document.createElement("td");
-    hostTd.className = "mono";
+    hostTd.className = "host-td mono";
     var hostWrap = document.createElement("span");
     hostWrap.className = "host-cell";
     var href = (row.urls && (row.urls.https || row.urls.http)) || "";
@@ -1152,10 +1344,14 @@ const clientJs = `
     hostWrap.appendChild(a);
     hostWrap.appendChild(makeCopyButton(function () { return href || row.host; }));
     hostTd.appendChild(hostWrap);
+    var targetLine = document.createElement("div");
+    targetLine.className = "host-target mono";
+    targetLine.textContent = row.target;
+    targetLine.title = row.target;
+    hostTd.appendChild(targetLine);
     tr.appendChild(hostTd);
 
     tr.appendChild(makeCell("\\u2192", "arrow"));
-    tr.appendChild(makeCell(row.target, "mono"));
 
     var optionsTd = document.createElement("td");
     var flags = [];
@@ -1165,7 +1361,7 @@ const clientJs = `
       optionsTd.className = "badges";
       flags.forEach(function (flag) {
         var badge = document.createElement("span");
-        badge.className = "badge" + (flag[0] === "cors" ? " badge-cors" : "");
+        badge.className = "badge " + (flag[0] === "cors" ? "badge-cors" : "badge-warn");
         badge.textContent = flag[0];
         badge.title = flag[1];
         optionsTd.appendChild(badge);
@@ -1177,18 +1373,20 @@ const clientJs = `
     tr.appendChild(optionsTd);
 
     var statusTd = document.createElement("td");
+    statusTd.className = "status-td";
     statusTd.appendChild(statusPill(row));
-    tr.appendChild(statusTd);
-
-    tr.appendChild(tunnelCell(row));
-
     var st = row.stats || { hits: 0, errors: 0 };
     var traffic = st.hits + " hits";
     if (st.errors) traffic += " · " + st.errors + " err";
     if (typeof st.avgMs === "number") traffic += " · " + Math.round(st.avgMs) + "ms";
-    var trafficTd = makeCell(traffic, "traffic");
-    trafficTd.title = "Last access: " + (st.lastAccess ? fmtRelative(st.lastAccess) : "never");
-    tr.appendChild(trafficTd);
+    var trafficLine = document.createElement("div");
+    trafficLine.className = "traffic";
+    trafficLine.textContent = traffic;
+    trafficLine.title = "Last access: " + (st.lastAccess ? fmtRelative(st.lastAccess) : "never");
+    statusTd.appendChild(trafficLine);
+    tr.appendChild(statusTd);
+
+    tr.appendChild(tunnelCell(row));
 
     var actionsTd = document.createElement("td");
     var actionsWrap = document.createElement("div");
@@ -1220,7 +1418,7 @@ const clientJs = `
     actionsWrap.appendChild(editBtn);
     actionsWrap.appendChild(removeBtn);
     tr.appendChild(actionsTd);
-    labelCells(tr, ["", "", "Target", "Options", "Status", "Public URL", "Traffic", ""]);
+    labelCells(tr, ["", "", "Options", "Status", "Public URL", ""]);
   }
 
   function enterEditMode(row) {
@@ -1229,18 +1427,21 @@ const clientJs = `
     if (!tr) return;
     clear(tr);
 
-    tr.appendChild(makeCell(row.host, "mono"));
+    var hostTd = makeCell(null, "host-td mono");
+    var hostName = document.createElement("div");
+    hostName.className = "host-cell";
+    hostName.textContent = row.host;
+    hostTd.appendChild(hostName);
+    tr.appendChild(hostTd);
     tr.appendChild(makeCell("\\u2192", "arrow"));
 
-    var targetTd = document.createElement("td");
     var targetInput = document.createElement("input");
     targetInput.type = "text";
     targetInput.className = "edit-input mono";
     targetInput.value = row.target;
     targetInput.title = row.target;
     targetInput.setAttribute("aria-label", "Target for " + row.host);
-    targetTd.appendChild(targetInput);
-    tr.appendChild(targetTd);
+    hostTd.appendChild(targetInput);
 
     var insecureTd = document.createElement("td");
     var insecureLabel = document.createElement("label");
@@ -1262,7 +1463,7 @@ const clientJs = `
     tr.appendChild(insecureTd);
 
     var hintTd = makeCell("Enter to save \\u00b7 Esc to cancel", "dim edit-hint");
-    hintTd.colSpan = 3;
+    hintTd.colSpan = 2;
     tr.appendChild(hintTd);
 
     var actionsTd = document.createElement("td");
@@ -1321,7 +1522,7 @@ const clientJs = `
     actionsWrap.appendChild(saveBtn);
     actionsWrap.appendChild(cancelBtn);
     tr.appendChild(actionsTd);
-    labelCells(tr, ["", "", "Target", "Options", "", ""]);
+    labelCells(tr, ["", "", "Options", "", ""]);
   }
 
   function renderHosts(hosts) {
@@ -1351,7 +1552,21 @@ const clientJs = `
         if (editingHost === host) editingHost = null;
       }
     });
+    hostsCountEl.textContent = String(hosts.length);
+    hostsCountEl.hidden = false;
+    applyHostsFilter();
   }
+
+  function applyHostsFilter() {
+    var q = (hostsFilterInput.value || "").trim().toLowerCase();
+    Object.keys(rowElements).forEach(function (host) {
+      var tr = rowElements[host];
+      var target = "";
+      for (var i = 0; i < lastHosts.length; i++) if (lastHosts[i].host === host) { target = lastHosts[i].target || ""; break; }
+      tr.hidden = !!q && (host + " " + target).toLowerCase().indexOf(q) === -1;
+    });
+  }
+  hostsFilterInput.addEventListener("input", applyHostsFilter);
 
   function loadHosts() {
     return fetch("/api/hosts").then(parseJsonOrThrow).then(renderHosts);
@@ -1436,15 +1651,18 @@ export function renderPage(nonce: string, token: string): string {
 </head>
 <body class="boot">
 <header>
-  <div class="brand">
-    <h1 class="wordmark">locadot</h1>
-    <span id="version" class="muted mono"></span>
-  </div>
-  <div class="header-meta">
-    <span class="chip"><span id="live-dot" class="live-dot"></span> <span id="live-label" class="live-label">live</span></span>
-    <span id="uptime" class="chip"></span>
-    <span id="pid" class="chip"></span>
-    <span id="updated" class="muted"></span>
+  <div class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <h1 class="wordmark">locadot</h1>
+      <span id="version" class="muted mono"></span>
+    </div>
+    <div class="header-meta">
+      <span class="chip chip-live"><span id="live-dot" class="live-dot"></span> <span id="live-label" class="live-label">live</span></span>
+      <span id="uptime" class="chip"></span>
+      <span id="pid" class="chip"></span>
+      <span id="updated"></span>
+    </div>
   </div>
 </header>
 <main>
@@ -1456,155 +1674,193 @@ export function renderPage(nonce: string, token: string): string {
     </div>
   </div>
 
-  <section aria-label="System status">
-    <h2>System</h2>
-    <div class="tiles">
-      <div class="tile card">
-        <div class="label">Access</div>
-        <div id="tile-root-value" class="tile-value">—</div>
-        <div id="tile-ports-value" class="tile-sub"></div>
-        <div id="tile-ports-hint" class="tile-hint" hidden></div>
-      </div>
+  <div class="page-head">
+    <h2 class="page-title">Dashboard</h2>
+    <p class="page-sub">Local hostnames proxied to your dev servers, with optional public sharing.</p>
+  </div>
 
-      <div class="tile card">
-        <div class="tile-row">
-          <div>
-            <div class="label">CA trust</div>
-            <div id="tile-ca-value" class="tile-value">—</div>
+  <div class="layout">
+    <div class="col-primary">
+      <section id="hosts-card" class="card" aria-label="Registered hosts">
+        <div class="card-head">
+          <div class="card-title-wrap">
+            <h3 class="card-title">Hosts</h3>
+            <span id="hosts-count" class="badge badge-count" hidden></span>
           </div>
-          <button type="button" id="ca-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle local CA trust">
-            <span class="switch-knob"></span>
-          </button>
-        </div>
-      </div>
-
-      <div class="tile card">
-        <div class="tile-row">
-          <div>
-            <div class="label">Start at boot</div>
-            <div id="tile-startup-value" class="tile-value">—</div>
-            <div id="tile-startup-method" class="tile-sub"></div>
+          <div class="card-tools">
+            <input type="search" id="hosts-filter" class="input input-sm input-search" placeholder="Filter hosts" aria-label="Filter hosts" autocomplete="off">
           </div>
-          <button type="button" id="startup-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle start at boot">
-            <span class="switch-knob"></span>
-          </button>
         </div>
-      </div>
+        <div id="hosts-skeleton" class="table-wrap" aria-hidden="true">
+          <table>
+            <tbody>
+              <tr class="skeleton-row"><td colspan="6"><span class="skel-bar"></span></td></tr>
+              <tr class="skeleton-row"><td colspan="6"><span class="skel-bar"></span></td></tr>
+              <tr class="skeleton-row"><td colspan="6"><span class="skel-bar"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="hosts-error" class="empty" hidden>
+          <span class="empty-icon" aria-hidden="true">!</span>
+          <p>Hosts couldn't be loaded while the proxy is unreachable.</p>
+        </div>
+        <div id="empty" class="empty" hidden>
+          <span class="empty-icon" aria-hidden="true">+</span>
+          <p>No hosts registered yet. Add one from the panel, or from the CLI:</p>
+          <pre class="code-block">locadot add --host app.localhost --port 3000</pre>
+        </div>
+        <div id="table-wrap" class="table-wrap" hidden>
+          <table id="table">
+            <thead>
+              <tr>
+                <th scope="col">Host</th>
+                <th scope="col" aria-label="Flow"></th>
+                <th scope="col">Options</th>
+                <th scope="col">Status</th>
+                <th scope="col">Public URL</th>
+                <th scope="col" class="actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </section>
 
-      <div class="tile card tile-wide">
-        <div class="label">Proxy</div>
-        <div id="tile-proxy-ports" class="tile-value mono">—</div>
-        <div id="tile-proxy-bind" class="tile-sub mono"></div>
-        <div id="tile-proxy-statedir" class="tile-sub mono"></div>
-        <div id="tile-proxy-platform" class="tile-sub"></div>
-        <div class="tile-actions">
-          <button type="button" id="stop-proxy-btn" class="btn btn-sm btn-danger">Stop proxy</button>
+      <details id="logs-panel" class="card">
+        <summary><span class="card-title">Logs</span><span class="card-desc">last 200 lines</span></summary>
+        <div class="logs-body">
+          <div class="logs-actions">
+            <button type="button" id="logs-refresh" class="btn btn-sm">Refresh</button>
+            <button type="button" id="logs-clear" class="btn btn-sm btn-danger">Clear</button>
+          </div>
+          <pre id="logs-box" class="logs-box" aria-live="off"></pre>
         </div>
-      </div>
+      </details>
 
-      <div class="tile card">
-        <div class="tile-main">
-          <div class="label">Cloudflare Tunnel</div>
-          <div id="tile-cloudflared-value" class="tile-value">—</div>
-          <div id="tile-cloudflared-sub" class="tile-sub"></div>
-          <div class="tile-sub">Share a mapping on a public https://*.trycloudflare.com URL. No Cloudflare account needed.</div>
+      <section id="cli-card" class="card" aria-label="Use from CLI or scripts">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">CLI &amp; API</h3></div>
         </div>
-        <div class="tile-actions">
-          <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
+        <div class="card-body cli-list">
+          <div class="cli-item">
+            <div class="cli-item-head"><span class="label">Add a host</span><button type="button" id="cli-add-copy" class="copy-btn">Copy</button></div>
+            <pre id="cli-add-pre" class="code-block mono">locadot add --host app.localhost --port 3000</pre>
+          </div>
+          <div class="cli-item">
+            <div class="cli-item-head"><span class="label">HTTP API (scripts, AI agents)</span><button type="button" id="cli-curl-copy" class="copy-btn">Copy</button></div>
+            <pre id="cli-curl-pre" class="code-block mono">curl -X POST http://localhost/api/hosts -H "X-Locadot-Token: $(locadot token)" -H 'Content-Type: application/json' -d '{"host":"app.localhost","target":"3000"}'</pre>
+          </div>
+          <div class="cli-item">
+            <div class="cli-item-head"><span class="label">Share publicly</span><button type="button" id="cli-tunnel-copy" class="copy-btn">Copy</button></div>
+            <pre id="cli-tunnel-pre" class="code-block mono">locadot tunnel --host app.localhost</pre>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
-  </section>
 
-  <section aria-label="Add proxy host">
-    <h2>Add host</h2>
-    <form id="add-form" class="card form-card" novalidate>
-      <div class="form-grid">
-        <div class="field">
-          <label for="add-host">Host</label>
-          <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
+    <aside class="col-secondary">
+      <section id="add-card" class="card" aria-label="Add proxy host">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Add host</h3></div>
         </div>
-        <div class="field">
-          <label for="add-target">Target</label>
-          <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080 or https://example.com" autocomplete="off" aria-describedby="add-error" required>
-        </div>
-        <div class="field field-checkbox">
-          <input type="checkbox" id="add-insecure" name="insecure">
-          <label for="add-insecure">Insecure TLS</label>
-        </div>
-        <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
-          <input type="checkbox" id="add-cors" name="cors">
-          <label for="add-cors">Bypass CORS</label>
-        </div>
-        <button type="submit" id="add-submit" class="btn btn-primary">Add proxy</button>
-      </div>
-      <div id="add-error" class="field-error" role="alert" hidden></div>
-    </form>
-  </section>
+        <form id="add-form" class="card-body" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label for="add-host">Host</label>
+              <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
+            </div>
+            <div class="field">
+              <label for="add-target">Target</label>
+              <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080, https://&hellip;" autocomplete="off" aria-describedby="add-error" required>
+            </div>
+            <div class="form-checks">
+              <div class="field field-checkbox">
+                <input type="checkbox" id="add-insecure" name="insecure">
+                <label for="add-insecure">Insecure TLS</label>
+              </div>
+              <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
+                <input type="checkbox" id="add-cors" name="cors">
+                <label for="add-cors">Bypass CORS</label>
+              </div>
+            </div>
+            <button type="submit" id="add-submit" class="btn btn-primary btn-block">Add proxy</button>
+          </div>
+          <div id="add-error" class="field-error" role="alert" hidden></div>
+        </form>
+      </section>
 
-  <section aria-label="Registered hosts">
-    <h2>Hosts</h2>
-    <div id="hosts-skeleton" class="table-wrap card" aria-hidden="true">
-      <table>
-        <tbody>
-          <tr class="skeleton-row"><td colspan="8"><span class="skel-bar"></span></td></tr>
-          <tr class="skeleton-row"><td colspan="8"><span class="skel-bar"></span></td></tr>
-          <tr class="skeleton-row"><td colspan="8"><span class="skel-bar"></span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div id="hosts-error" class="empty" hidden>
-      <p>Hosts couldn't be loaded while the proxy is unreachable.</p>
-    </div>
-    <div id="empty" class="empty" hidden>
-      <p>No hosts registered yet. Add one above, or from the CLI:</p>
-      <pre class="code-block">locadot add --host app.localhost --port 3000</pre>
-    </div>
-    <div id="table-wrap" class="table-wrap card" hidden>
-      <table id="table">
-        <thead>
-          <tr>
-            <th scope="col">Host</th>
-            <th scope="col" aria-label="Flow"></th>
-            <th scope="col">Target</th>
-            <th scope="col">Options</th>
-            <th scope="col">Status</th>
-            <th scope="col">Public URL</th>
-            <th scope="col">Traffic</th>
-            <th scope="col" class="actions">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </section>
+      <section id="system-card" class="card" aria-label="System status">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">System</h3></div>
+          <div class="card-tools">
+            <button type="button" id="stop-proxy-btn" class="btn btn-sm btn-ghost-danger">Stop proxy</button>
+          </div>
+        </div>
+        <div class="stat-list">
+          <div class="stat-row">
+            <div class="stat-main">
+              <div class="label">Proxy</div>
+              <div id="tile-proxy-ports" class="tile-value mono">—</div>
+              <div id="tile-proxy-bind" class="tile-sub mono"></div>
+              <div id="tile-proxy-statedir" class="tile-sub mono"></div>
+              <div id="tile-proxy-platform" class="tile-sub"></div>
+            </div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-main">
+              <div class="label">Access</div>
+              <div id="tile-root-value" class="tile-value">—</div>
+              <div id="tile-ports-value" class="tile-sub"></div>
+              <div id="tile-ports-hint" class="tile-hint" hidden></div>
+            </div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-main">
+              <div class="label">CA trust</div>
+              <div id="tile-ca-value" class="tile-value">—</div>
+            </div>
+            <div class="stat-side">
+              <button type="button" id="ca-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle local CA trust">
+                <span class="switch-knob"></span>
+              </button>
+            </div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-main">
+              <div class="label">Start at boot</div>
+              <div id="tile-startup-value" class="tile-value">—</div>
+              <div id="tile-startup-method" class="tile-sub"></div>
+            </div>
+            <div class="stat-side">
+              <button type="button" id="startup-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle start at boot">
+                <span class="switch-knob"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-  <details id="logs-panel" class="card">
-    <summary>Logs</summary>
-    <div class="logs-body">
-      <div class="logs-actions">
-        <button type="button" id="logs-refresh" class="btn btn-sm">Refresh</button>
-        <button type="button" id="logs-clear" class="btn btn-sm btn-danger">Clear</button>
-      </div>
-      <pre id="logs-box" class="logs-box" aria-live="off"></pre>
-    </div>
-  </details>
+      <section id="sharing-card" class="card" aria-label="Public sharing">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Sharing</h3></div>
+        </div>
+        <div class="stat-list">
+          <div class="stat-row">
+            <div class="stat-main">
+              <div class="label">Cloudflare Tunnel</div>
+              <div id="tile-cloudflared-value" class="tile-value">—</div>
+              <div id="tile-cloudflared-sub" class="tile-sub mono"></div>
+              <div class="tile-sub">Share a host on a public https://*.trycloudflare.com URL with the Share button. No Cloudflare account needed.</div>
+              <div class="tile-actions">
+                <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-  <section aria-label="Use from CLI or scripts" class="card form-card">
-    <h2>Use from CLI / scripts / AI</h2>
-    <div class="cli-item">
-      <pre id="cli-add-pre" class="code-block mono">locadot add --host app.localhost --port 3000</pre>
-      <button type="button" id="cli-add-copy" class="copy-btn">Copy</button>
-    </div>
-    <div class="cli-item">
-      <pre id="cli-curl-pre" class="code-block mono">curl -X POST http://localhost/api/hosts -H "X-Locadot-Token: $(locadot token)" -H 'Content-Type: application/json' -d '{"host":"app.localhost","target":"3000"}'</pre>
-      <button type="button" id="cli-curl-copy" class="copy-btn">Copy</button>
-    </div>
-    <div class="cli-item">
-      <pre id="cli-tunnel-pre" class="code-block mono">locadot tunnel --host app.localhost</pre>
-      <button type="button" id="cli-tunnel-copy" class="copy-btn">Copy</button>
-    </div>
-  </section>
+    </aside>
+  </div>
 </main>
 <footer>
   <a href="https://github.com/avinashid/locadot" target="_blank" rel="noopener noreferrer">github.com/avinashid/locadot</a>
