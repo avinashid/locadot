@@ -1,7 +1,16 @@
 # locadot 🔐
 
+[![npm](https://img.shields.io/npm/v/locadot.svg)](https://www.npmjs.com/package/locadot)
+[![license](https://img.shields.io/npm/l/locadot.svg)](LICENSE)
+
 HTTPS custom domains for local development. Point `https://app.localhost` at your dev server on port 3000, or
-`https://google.localhost` at any upstream URL, and see every mapping on a dashboard at `https://localhost`.
+`https://google.localhost` at any upstream URL, share any of them on a public URL, and manage it all from a dashboard at
+`https://localhost`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/avinashid/locadot/main/docs/screenshots/dashboard-dark.png">
+  <img alt="The locadot dashboard: hosts with health, traffic and public URLs, plus add-host, system and sharing panels" src="https://raw.githubusercontent.com/avinashid/locadot/main/docs/screenshots/dashboard-light.png">
+</picture>
 
 ## ✨ Features
 
@@ -9,8 +18,13 @@ HTTPS custom domains for local development. Point `https://app.localhost` at you
   Run `locadot trust` once to add the CA to your system and browsers.
 - 🔁 **Any destination.** A local port (`--port 3000`), a host and port (`--target 192.168.1.5:8080`), or any URL
   (`--target https://google.com`). Redirects and cookies are rewritten so the browser stays on the `.localhost` name.
-- 📋 **Control panel at `https://localhost`.** Add, edit and remove mappings, see health and traffic, and toggle CA trust and
-  start-at-boot. Includes a token-protected JSON API, so scripts and AI agents can do everything the page does.
+- 🌍 **Share on a public URL.** `locadot tunnel --host app.localhost` (or **Share** in the dashboard) puts a mapping on
+  `https://<random>.trycloudflare.com` through a Cloudflare quick tunnel. No account needed.
+- 🧩 **`--cors` for sites that call other domains.** Preflights are answered locally and cross-origin calls are routed
+  through the page's own origin, so a production frontend works against its real APIs from `.localhost`.
+- 📋 **Control panel at `https://localhost`.** Add, edit, filter and remove mappings, see health and traffic, share them,
+  and toggle CA trust and start-at-boot. Light, dark or system theme. Includes a token-protected JSON API, so scripts and
+  AI agents can do everything the page does.
 - 🔌 **WebSockets** are proxied too, so HMR and dev-server live reload work.
 - 🩺 **`status` and `doctor`** show why a domain isn't working: port conflicts, permissions, CA trust, a target that isn't answering.
 - 🛡️ **Local by default.** The proxy binds to `127.0.0.1` / `::1` only. Domains must end in `.localhost`, which browsers
@@ -22,6 +36,7 @@ HTTPS custom domains for local development. Point `https://app.localhost` at you
 ## 🚀 Quick start
 
 ```bash
+npm i -g locadot                                    # or prefix each command with npx
 npx locadot trust                                   # once: trust the locadot CA (asks for your password)
 npx locadot add --host app.localhost --port 3000    # https://app.localhost → http://localhost:3000
 npx locadot add --host google.localhost --target https://google.com
@@ -108,15 +123,27 @@ use **Share** / **Unshare** on a row.
 ## 📋 Dashboard & control panel
 
 Open `https://localhost` or `http://localhost` (or run `locadot open`). Requests for bare `localhost` / `127.0.0.1` / `::1`
-are answered by locadot itself, not proxied. The page is a control panel that follows the system light/dark theme:
+are answered by locadot itself, not proxied. On wide screens the page is a two-column layout: your hosts on the left,
+controls on the right. The button at the top right switches between the system, light and dark themes (saved per browser).
 
-- **System:** whether the proxy runs as root/admin, whether ports below 1024 can be bound (with the Linux sysctl fix when they
-  can't), CA trust with an on/off toggle, start-at-boot with an on/off toggle, ports, bind addresses and state dir. It also has a **Stop proxy** button.
-- **Proxies:** add a mapping (host + port / host:port / URL, and optional "Insecure TLS" and "Bypass CORS" boxes), edit a target inline, or remove one. The table shows
-  each source → destination with up/down, status, latency, its public tunnel URL and traffic (hits, errors, average ms). It refreshes every 5 s.
-- **Cloudflare Tunnel:** whether `cloudflared` is installed (with an **Install** button), and a **Share** button per row that puts the mapping on a public URL.
-- **Logs:** a live tail with refresh and clear.
-- **CLI / API snippets** you can copy.
+<img alt="Hosts table with status, latency, traffic, a shared public URL and per-row actions" src="https://raw.githubusercontent.com/avinashid/locadot/main/docs/screenshots/hosts.png">
+
+- **Hosts:** every mapping with its target, options (`cors`, insecure TLS), up/down status, latency, traffic (hits, errors,
+  average ms) and public tunnel URL. Filter the list, edit a target inline (Enter saves, Esc cancels), **Share** / **Unshare**
+  or remove it. A host whose target doesn't answer is marked in red. It refreshes every 5 s.
+- **Add host:** host + port / host:port / URL, with optional "Insecure TLS" and "Bypass CORS" boxes.
+- **System:** ports, bind addresses and state dir, whether the proxy runs as root/admin, whether ports below 1024 can be bound
+  (with the Linux sysctl fix when they can't), CA trust and start-at-boot toggles, and a **Stop proxy** button.
+- **Sharing:** whether `cloudflared` is installed, with an **Install** button when it isn't.
+- **Logs:** a live tail with refresh and clear. **CLI & API:** snippets you can copy.
+
+If the proxy stops, the page says so, disables the controls and reconnects by itself when it's back. On phones and tablets
+hosts become cards:
+
+<p>
+  <img alt="Dashboard on a phone, light theme" src="https://raw.githubusercontent.com/avinashid/locadot/main/docs/screenshots/mobile.png" width="260">
+  <img alt="Dashboard on a phone, dark theme" src="https://raw.githubusercontent.com/avinashid/locadot/main/docs/screenshots/mobile-dark.png" width="260">
+</p>
 
 Trust and start-at-boot may need elevation. locadot asks the OS for it (polkit on Linux, the password dialog on macOS, UAC on Windows).
 If that isn't possible, for example on a headless Linux box, the panel shows the exact command to run instead: `sudo locadot trust`,
@@ -157,6 +184,19 @@ curl -X DELETE http://localhost/api/hosts/app.localhost -H "X-Locadot-Token: $TO
 - have a non-JSON body.
 
 The dashboard is served only for the bare `localhost` host names, which also blocks DNS rebinding.
+
+---
+
+## ⬆️ Upgrading from 1.x
+
+2.0 changes a few defaults. Your mappings are migrated automatically.
+
+- The proxy listens on `127.0.0.1` and `::1` only. Set `LOCADOT_BIND=0.0.0.0` if you relied on LAN access.
+- The registry is stored in a new format that 1.x can't read. Don't downgrade without backing up `locadot path:hosts`.
+- `-h` means `--host` on every command. Help is `--help`.
+- Bare `localhost` is the dashboard and can't be mapped.
+
+See [CHANGELOG.md](CHANGELOG.md) for everything new.
 
 ---
 

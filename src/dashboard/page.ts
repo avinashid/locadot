@@ -205,12 +205,6 @@ main {
 @media (min-width: 1400px) {
   .layout { grid-template-columns: minmax(0, 1fr) 372px; }
 }
-@media (min-width: 1200px) and (max-width: 1399px) {
-  th, td { padding-left: 10px; padding-right: 10px; }
-  .tunnel-status .copy-btn { display: none; }
-  .tunnel-status a { max-width: 150px; }
-  .host-target { max-width: 200px; }
-}
 
 /* ---------- cards ---------- */
 .card {
@@ -674,6 +668,16 @@ footer a { color: var(--muted); }
 [hidden] { display: none !important; }
 
 /* ---------- responsive ---------- */
+@media (min-width: 1200px) {
+  th, td { padding-left: 10px; padding-right: 10px; }
+  .tunnel-status .copy-btn { display: none; }
+  .tunnel-status a { max-width: 150px; }
+  .host-target { max-width: 200px; }
+}
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .tunnel-status a { max-width: 110px; }
+  .host-target { max-width: 170px; }
+}
 @media (max-width: 1099px) {
   .topbar, main { padding-left: 24px; padding-right: 24px; }
 }
