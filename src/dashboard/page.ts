@@ -6,26 +6,51 @@ import { escapeHtml } from "./escape";
 // is interpolated into this markup.
 const css = `
 :root {
-  --bg: #05070d;
-  --bg2: #0a0e1a;
-  --fg: #e6edf7;
-  --muted: #8b93a7;
-  --muted-dim: #5b6478;
-  --card-bg: rgba(18, 22, 36, 0.55);
-  --card-border: rgba(120, 170, 255, 0.18);
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --accent-cyan: #22d3ee;
-  --accent-violet: #a78bfa;
-  --up: #34d399;
-  --up-glow: rgba(52, 211, 153, 0.45);
-  --down: #f87171;
-  --down-glow: rgba(248, 113, 113, 0.45);
-  --warn: #fbbf24;
-  --warn-glow: rgba(251, 191, 36, 0.45);
-  --focus: #67e8f9;
-  --radius: 14px;
+  --bg: #0b0d10;
+  --surface: #12151a;
+  --surface-2: #171b21;
+  --border: #22262e;
+  --border-strong: #2c313a;
+  --fg: #e6e8eb;
+  --muted: #8b929c;
+  --muted-dim: #5f6672;
+  --accent: #3b82f6;
+  --accent-strong: #60a5fa;
+  --accent-bg: rgba(59, 130, 246, 0.12);
+  --accent-fg: #ffffff;
+  --up: #22c55e;
+  --up-bg: rgba(34, 197, 94, 0.12);
+  --down: #ef4444;
+  --down-bg: rgba(239, 68, 68, 0.12);
+  --warn: #f59e0b;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --focus: var(--accent-strong);
+  --radius: 10px;
+  --radius-sm: 8px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --surface-2: #f2f3f5;
+    --border: #e3e5e8;
+    --border-strong: #d3d6db;
+    --fg: #1a1d21;
+    --muted: #6b7280;
+    --muted-dim: #9aa0a8;
+    --accent: #2563eb;
+    --accent-strong: #1d4ed8;
+    --accent-bg: rgba(37, 99, 235, 0.08);
+    --accent-fg: #ffffff;
+    --up: #16a34a;
+    --up-bg: rgba(22, 163, 74, 0.1);
+    --down: #dc2626;
+    --down-bg: rgba(220, 38, 38, 0.1);
+    --warn: #d97706;
+    --warn-bg: rgba(217, 119, 6, 0.1);
+  }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -34,27 +59,11 @@ body {
   font-family: var(--sans);
   color: var(--fg);
   line-height: 1.5;
-  background-color: var(--bg2);
+  background: var(--bg);
   min-height: 100vh;
-  position: relative;
-}
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    radial-gradient(circle at 12% -10%, rgba(34, 211, 238, 0.16), transparent 42%),
-    radial-gradient(circle at 88% 0%, rgba(167, 139, 250, 0.14), transparent 45%),
-    radial-gradient(circle at 50% 110%, rgba(34, 211, 238, 0.08), transparent 50%),
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: auto, auto, auto, 42px 42px, 42px 42px;
-  background-color: var(--bg);
 }
 .mono { font-family: var(--mono); }
-a { color: var(--accent-cyan); text-decoration: none; }
+a { color: var(--accent); text-decoration: none; }
 a:hover, a:focus-visible { text-decoration: underline; }
 button { font-family: inherit; }
 *:focus-visible {
@@ -74,23 +83,18 @@ button { font-family: inherit; }
 .clip-helper { position: absolute; left: -9999px; top: -9999px; }
 
 .label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 12px;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 30px rgba(0, 0, 0, 0.35);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: border-color 0.15s ease;
 }
-.card:hover { border-color: rgba(120, 170, 255, 0.32); }
+.card:hover { border-color: var(--border-strong); }
 
 header {
   display: flex;
@@ -98,157 +102,146 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 28px;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 5;
-  background: rgba(5, 7, 13, 0.72);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: var(--bg);
 }
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .wordmark {
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 700;
   margin: 0;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  letter-spacing: -0.01em;
+  color: var(--fg);
 }
 .muted { color: var(--muted); }
-.header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; }
+.header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 4px 12px;
+  padding: 4px 10px;
   font-size: 12px;
   color: var(--muted);
-  font-family: var(--mono);
 }
 .live-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--muted-dim);
 }
-.live-dot.up { background: var(--up); box-shadow: 0 0 0 0 var(--up-glow); animation: pulseDot 2s ease-in-out infinite; }
-.live-dot.down { background: var(--down); box-shadow: 0 0 8px var(--down-glow); }
-@keyframes pulseDot {
-  0% { box-shadow: 0 0 0 0 var(--up-glow); }
-  70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
-}
+.live-dot.up { background: var(--up); }
+.live-dot.down { background: var(--down); }
 
-main { max-width: 1400px; margin: 0 auto; padding: 24px 28px 64px; display: flex; flex-direction: column; gap: 24px; }
+main { max-width: 1280px; margin: 0 auto; padding: 24px 24px 64px; display: flex; flex-direction: column; gap: 24px; }
 
 .banner {
   border-radius: var(--radius);
   padding: 12px 16px;
   font-size: 14px;
   border: 1px solid var(--down);
-  background: rgba(248, 113, 113, 0.08);
-  color: #fecaca;
+  background: var(--down-bg);
+  color: var(--fg);
 }
 
 section h2 {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
+  font-size: 15px;
+  color: var(--fg);
   margin: 0 0 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.tile { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.tile { padding: 16px; display: flex; flex-direction: column; gap: 6px; }
 .tile-wide { grid-column: span 2; }
-.tile-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.tile-value { font-size: 18px; font-weight: 700; }
+.tile-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; height: 100%; }
+.tile-main { display: flex; flex-direction: column; gap: 6px; }
+.tile-value { font-size: 17px; font-weight: 600; }
 .tile-value.ok { color: var(--up); }
 .tile-value.warn { color: var(--warn); }
 .tile-sub { font-size: 12px; color: var(--muted); }
 .tile-hint { font-size: 12px; color: var(--warn); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tile-actions { margin-top: 4px; }
+.tile-actions { margin-top: auto; padding-top: 8px; }
 
 .switch {
   position: relative;
-  width: 42px;
-  height: 24px;
+  width: 38px;
+  height: 22px;
   border-radius: 999px;
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .switch .switch-knob {
   position: absolute;
   top: 2px; left: 2px;
-  width: 18px; height: 18px;
+  width: 16px; height: 16px;
   border-radius: 50%;
   background: var(--muted);
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
-.switch.on { background: rgba(34, 211, 238, 0.18); border-color: var(--accent-cyan); }
-.switch.on .switch-knob { transform: translateX(18px); background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+.switch.on { background: var(--accent-bg); border-color: var(--accent); }
+.switch.on .switch-knob { transform: translateX(16px); background: var(--accent); }
 .switch.busy { opacity: 0.6; cursor: wait; }
-.switch:disabled { cursor: not-allowed; }
+.switch:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .btn {
   font-size: 13px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.05);
+  font-weight: 500;
+  padding: 7px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   color: var(--fg);
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
-.btn:hover:not(:disabled) { border-color: rgba(120, 170, 255, 0.4); box-shadow: 0 0 12px rgba(34, 211, 238, 0.15); }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn:hover:not(:disabled) { border-color: var(--muted); background: var(--border); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-primary {
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
-  color: #04121a;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
 }
-.btn-primary:hover:not(:disabled) { box-shadow: 0 0 16px rgba(34, 211, 238, 0.4); }
-.btn-danger { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
-.btn-danger:hover:not(:disabled) { box-shadow: 0 0 12px var(--down-glow); }
-.btn-ghost { background: transparent; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-danger { border-color: var(--down); color: var(--down); background: transparent; }
+.btn-danger:hover:not(:disabled) { background: var(--down-bg); }
+.btn-ghost { background: transparent; border-color: var(--border); }
 .btn.busy { opacity: 0.6; cursor: wait; }
 
-.form-card { padding: 18px 20px; }
+.form-card { padding: 16px 18px; }
 .form-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1 1 200px; }
-.field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.field label { font-size: 12px; color: var(--muted); font-weight: 500; }
 .field input[type="text"] {
   font-family: var(--mono);
   font-size: 14px;
-  padding: 9px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   color: var(--fg);
 }
 .field input[type="text"]::placeholder { color: var(--muted-dim); }
-.field-checkbox { flex-direction: row; align-items: center; gap: 8px; flex: 0 0 auto; }
-.field-checkbox label { text-transform: none; letter-spacing: normal; font-size: 13px; color: var(--fg); font-weight: 400; }
+.field-checkbox { flex-direction: row; align-items: center; gap: 8px; flex: 0 0 auto; min-width: 0; height: 36px; }
+#add-submit { height: 36px; margin-left: auto; }
+.field-checkbox label { font-size: 13px; color: var(--fg); font-weight: 400; }
 .field-error {
   font-size: 13px;
-  color: #fecaca;
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  border-radius: 8px;
+  color: var(--down);
+  background: var(--down-bg);
+  border: 1px solid var(--down);
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   margin-top: 10px;
   display: flex;
@@ -258,59 +251,74 @@ section h2 {
 }
 
 .table-wrap { overflow-x: auto; border-radius: var(--radius); }
-table { width: 100%; border-collapse: collapse; min-width: 780px; }
-th, td { text-align: left; padding: 10px 11px; border-bottom: 1px solid var(--border-soft); font-size: 13px; white-space: nowrap; }
-th { color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+table { width: 100%; border-collapse: collapse; min-width: 760px; }
+td.traffic { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+th, td { text-align: left; padding: 10px 9px; border-bottom: 1px solid var(--border); font-size: 13px; white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+th.num, td.num { text-align: right; }
 tbody tr { transition: background 0.15s ease; }
-tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+tbody tr:hover { background: var(--surface-2); }
 tr:last-child td { border-bottom: none; }
 .arrow { color: var(--muted-dim); text-align: center; }
 .host-cell { display: flex; align-items: center; gap: 6px; }
 .badge {
   display: inline-block;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 11px;
   padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid var(--warn);
   color: var(--warn);
-  background: rgba(251, 191, 36, 0.1);
+  background: var(--warn-bg);
 }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; }
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-.dot.up { background: var(--up); box-shadow: 0 0 6px var(--up-glow); }
-.dot.down { background: var(--down); box-shadow: 0 0 6px var(--down-glow); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.dot.up { background: var(--up); }
+.dot.down { background: var(--down); }
 .copy-btn {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 6px;
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   color: var(--muted);
   cursor: pointer;
 }
-.copy-btn:hover { color: var(--fg); border-color: rgba(120, 170, 255, 0.4); }
-.row-actions { display: flex; gap: 6px; }
+.copy-btn:hover { color: var(--fg); border-color: var(--muted); }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+th.actions { text-align: right; }
 .edit-input {
   font-family: var(--mono);
   font-size: 13px;
   padding: 5px 8px;
   border-radius: 6px;
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   color: var(--fg);
   width: 100%;
   min-width: 160px;
 }
 .badges { display: flex; flex-wrap: wrap; gap: 4px; }
-.badge-cors { color: var(--accent-cyan); border-color: var(--accent-cyan); background: rgba(34, 211, 238, 0.1); }
+.badge-cors { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 td .inline-check + .inline-check { margin-top: 4px; }
 .inline-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .dim { color: var(--muted-dim); }
 
+.tunnel-cell { white-space: normal; }
+.tunnel-status { display: flex; align-items: center; gap: 6px; max-width: 220px; }
+.tunnel-status a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; display: inline-block; vertical-align: middle; }
+.tunnel-error { color: var(--down); cursor: help; }
+.spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .empty {
-  border: 1px dashed var(--border-soft);
+  border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
   padding: 28px;
   color: var(--muted);
@@ -319,14 +327,14 @@ td .inline-check + .inline-check { margin-top: 4px; }
 .empty pre { display: inline-block; text-align: left; }
 
 pre.code-block {
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   overflow-x: auto;
   font-family: var(--mono);
   font-size: 12.5px;
-  color: #c7f9ff;
+  color: var(--fg);
   margin: 0;
 }
 
@@ -338,32 +346,30 @@ details.card { padding: 0; }
 details.card summary {
   cursor: pointer;
   list-style: none;
-  padding: 14px 20px;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  font-weight: 700;
+  padding: 14px 18px;
+  font-size: 15px;
+  color: var(--fg);
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 details.card summary::-webkit-details-marker { display: none; }
-details.card summary::after { content: "+"; font-size: 16px; color: var(--muted); }
+details.card summary::after { content: "+"; font-size: 16px; color: var(--muted); font-weight: 400; }
 details.card[open] summary::after { content: "\\2212"; }
-.logs-body { padding: 0 20px 18px; display: flex; flex-direction: column; gap: 10px; }
+.logs-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 10px; }
 .logs-actions { display: flex; gap: 8px; }
 .logs-box {
   height: 260px;
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   font-family: var(--mono);
   font-size: 12px;
-  color: #c7f9ff;
+  color: var(--fg);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
@@ -380,29 +386,37 @@ details.card[open] summary::after { content: "\\2212"; }
   max-width: 360px;
 }
 .toast {
-  background: rgba(15, 18, 30, 0.92);
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   padding: 10px 14px;
   font-size: 13px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
-.toast-success { border-color: rgba(52, 211, 153, 0.5); }
-.toast-error { border-color: rgba(248, 113, 113, 0.5); }
-.toast-warn { border-color: rgba(251, 191, 36, 0.5); }
+.toast-success { border-color: var(--up); }
+.toast-error { border-color: var(--down); }
+.toast-warn { border-color: var(--warn); }
 .toast-hint { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.toast-hint code { font-size: 11.5px; color: #c7f9ff; }
+.toast-hint code { font-size: 11.5px; color: var(--fg); }
 
 footer { text-align: center; padding: 20px; color: var(--muted-dim); font-size: 12px; }
 [hidden] { display: none !important; }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile-wide { grid-column: span 1; }
-  header { padding: 14px 16px; }
+}
+@media (max-width: 600px) {
+  .tiles { grid-template-columns: 1fr; }
+  #add-submit { margin-left: 0; }
+}
+
+@media (max-width: 640px) {
+  header { padding: 12px 16px; }
   main { padding: 18px 16px 48px; }
 }
 
@@ -447,6 +461,10 @@ const clientJs = `
   var stopProxyBtn = document.getElementById("stop-proxy-btn");
   var stoppedBanner = document.getElementById("stopped-banner");
 
+  var cfValueEl = document.getElementById("tile-cloudflared-value");
+  var cfSubEl = document.getElementById("tile-cloudflared-sub");
+  var cfInstallBtn = document.getElementById("cloudflared-install-btn");
+
   var addForm = document.getElementById("add-form");
   var addHostInput = document.getElementById("add-host");
   var addTargetInput = document.getElementById("add-target");
@@ -468,6 +486,8 @@ const clientJs = `
   var cliAddCopy = document.getElementById("cli-add-copy");
   var cliCurlPre = document.getElementById("cli-curl-pre");
   var cliCurlCopy = document.getElementById("cli-curl-copy");
+  var cliTunnelPre = document.getElementById("cli-tunnel-pre");
+  var cliTunnelCopy = document.getElementById("cli-tunnel-copy");
 
   var toastContainer = document.getElementById("toast-container");
 
@@ -477,6 +497,8 @@ const clientJs = `
   var editingHost = null;
   var caBusy = false;
   var startupBusy = false;
+  var cfInstallBusy = false;
+  var cloudflaredInstalled = false;
   var proxyStopped = false;
   var pollTimer = null;
 
@@ -650,6 +672,20 @@ const clientJs = `
     proxyBindEl.textContent = "bind " + proxy.bind.join(", ");
     proxyStateDirEl.textContent = proxy.stateDir;
     proxyPlatformEl.textContent = sys.platform;
+
+    var cf = sys.cloudflared || { installed: false };
+    cloudflaredInstalled = !!cf.installed;
+    if (cf.installed) {
+      cfValueEl.textContent = "Installed";
+      cfValueEl.className = "tile-value ok";
+      cfSubEl.textContent = [cf.version, cf.path].filter(Boolean).join(" \\u00b7 ");
+      if (!cfInstallBusy) cfInstallBtn.hidden = true;
+    } else {
+      cfValueEl.textContent = "Not installed";
+      cfValueEl.className = "tile-value warn";
+      cfSubEl.textContent = "";
+      if (!cfInstallBusy) cfInstallBtn.hidden = false;
+    }
   }
 
   function renderCli(status) {
@@ -724,6 +760,27 @@ const clientJs = `
         apiError(err);
         stopProxyBtn.disabled = false;
         stopProxyBtn.classList.remove("busy");
+      });
+  });
+
+  cfInstallBtn.addEventListener("click", function () {
+    if (cfInstallBusy) return;
+    cfInstallBusy = true;
+    cfInstallBtn.disabled = true;
+    cfInstallBtn.classList.add("busy");
+    var prevText = cfInstallBtn.textContent;
+    cfInstallBtn.textContent = "Installing\\u2026";
+    apiFetch("/api/cloudflared/install", { method: "POST", body: JSON.stringify({}) })
+      .then(function () {
+        showToast("cloudflared installed", "success");
+        return refreshAll();
+      })
+      .catch(function (err) { apiError(err); })
+      .then(function () {
+        cfInstallBusy = false;
+        cfInstallBtn.disabled = false;
+        cfInstallBtn.classList.remove("busy");
+        cfInstallBtn.textContent = prevText;
       });
   });
 
@@ -805,6 +862,78 @@ const clientJs = `
     return td;
   }
 
+  function tunnelInfo(row) {
+    return row.tunnel || { enabled: false, status: "off" };
+  }
+
+  function tunnelCell(row) {
+    var td = document.createElement("td");
+    td.className = "tunnel-cell";
+    var t = tunnelInfo(row);
+
+    var statusWrap = document.createElement("div");
+    statusWrap.className = "tunnel-status";
+    if (t.status === "up" && t.url) {
+      var link = document.createElement("a");
+      link.href = t.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "mono";
+      link.textContent = t.url.replace("https://", "");
+      link.title = t.url;
+      statusWrap.appendChild(link);
+      statusWrap.appendChild(makeCopyButton(function () { return t.url; }));
+    } else if (t.status === "starting") {
+      var spin = document.createElement("span");
+      spin.className = "spinner";
+      statusWrap.appendChild(spin);
+      statusWrap.appendChild(document.createTextNode("Starting\\u2026"));
+    } else if (t.status === "error") {
+      var errText = document.createElement("span");
+      errText.className = "tunnel-error";
+      errText.textContent = "Error";
+      errText.title = t.error || "Tunnel error";
+      statusWrap.appendChild(errText);
+    } else {
+      var dash = document.createElement("span");
+      dash.className = "dim";
+      dash.textContent = "\\u2014";
+      statusWrap.appendChild(dash);
+    }
+    td.appendChild(statusWrap);
+    return td;
+  }
+
+  function shareButton(row) {
+    var t = tunnelInfo(row);
+    var isOn = t.enabled || t.status === "up" || t.status === "starting";
+    var shareBtn = document.createElement("button");
+    shareBtn.type = "button";
+    shareBtn.className = "btn btn-sm" + (isOn ? " btn-danger" : "");
+    shareBtn.textContent = isOn ? "Unshare" : "Share";
+    shareBtn.title = isOn ? "Stop the public tunnel" : "Share on a public trycloudflare.com URL";
+    if (!cloudflaredInstalled && !isOn) {
+      shareBtn.disabled = true;
+      shareBtn.title = "Install cloudflared first";
+    }
+    shareBtn.addEventListener("click", function () {
+      if (!isOn && !window.confirm("This will make " + row.host + " reachable from the internet by anyone with the link. Continue?")) return;
+      shareBtn.disabled = true;
+      shareBtn.classList.add("busy");
+      apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ tunnel: !isOn }) })
+        .then(function () {
+          showToast(isOn ? "Stopping tunnel for " + row.host : "Starting tunnel for " + row.host, "success");
+          return loadHosts();
+        })
+        .catch(function (err) {
+          apiError(err);
+          shareBtn.disabled = false;
+          shareBtn.classList.remove("busy");
+        });
+    });
+    return shareBtn;
+  }
+
   function buildDisplayRow(tr, row) {
     clear(tr);
 
@@ -849,13 +978,20 @@ const clientJs = `
     statusTd.appendChild(statusPill(row));
     tr.appendChild(statusTd);
 
-    tr.appendChild(makeCell(row.stats ? String(row.stats.hits) : "0"));
-    tr.appendChild(makeCell(row.stats ? String(row.stats.errors) : "0"));
-    tr.appendChild(makeCell(row.stats && row.stats.lastAccess ? fmtRelative(row.stats.lastAccess) : "never"));
-    tr.appendChild(makeCell(row.stats && typeof row.stats.avgMs === "number" ? Math.round(row.stats.avgMs) + "ms" : "-"));
+    tr.appendChild(tunnelCell(row));
+
+    var st = row.stats || { hits: 0, errors: 0 };
+    var traffic = st.hits + " hits";
+    if (st.errors) traffic += " · " + st.errors + " err";
+    if (typeof st.avgMs === "number") traffic += " · " + Math.round(st.avgMs) + "ms";
+    var trafficTd = makeCell(traffic, "traffic");
+    trafficTd.title = "Last access: " + (st.lastAccess ? fmtRelative(st.lastAccess) : "never");
+    tr.appendChild(trafficTd);
 
     var actionsTd = document.createElement("td");
-    actionsTd.className = "row-actions";
+    var actionsWrap = document.createElement("div");
+    actionsWrap.className = "row-actions";
+    actionsTd.appendChild(actionsWrap);
     var editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn btn-sm";
@@ -878,8 +1014,9 @@ const clientJs = `
           removeBtn.disabled = false;
         });
     });
-    actionsTd.appendChild(editBtn);
-    actionsTd.appendChild(removeBtn);
+    actionsWrap.appendChild(shareButton(row));
+    actionsWrap.appendChild(editBtn);
+    actionsWrap.appendChild(removeBtn);
     tr.appendChild(actionsTd);
   }
 
@@ -924,9 +1061,13 @@ const clientJs = `
     tr.appendChild(makeCell("\\u2014", "dim"));
     tr.appendChild(makeCell("\\u2014", "dim"));
     tr.appendChild(makeCell("\\u2014", "dim"));
+    tr.appendChild(makeCell("\\u2014", "dim"));
+    tr.appendChild(makeCell("\\u2014", "dim"));
 
     var actionsTd = document.createElement("td");
-    actionsTd.className = "row-actions";
+    var actionsWrap = document.createElement("div");
+    actionsWrap.className = "row-actions";
+    actionsTd.appendChild(actionsWrap);
     var saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.className = "btn btn-sm btn-primary";
@@ -965,8 +1106,8 @@ const clientJs = `
       buildDisplayRow(tr, row);
     });
 
-    actionsTd.appendChild(saveBtn);
-    actionsTd.appendChild(cancelBtn);
+    actionsWrap.appendChild(saveBtn);
+    actionsWrap.appendChild(cancelBtn);
     tr.appendChild(actionsTd);
   }
 
@@ -1027,6 +1168,7 @@ const clientJs = `
 
   cliAddCopy.addEventListener("click", function () { copyText(cliAddPre.textContent, cliAddCopy); });
   cliCurlCopy.addEventListener("click", function () { copyText(cliCurlPre.textContent, cliCurlCopy); });
+  cliTunnelCopy.addEventListener("click", function () { copyText(cliTunnelPre.textContent, cliTunnelCopy); });
 
   // ---------- polling ----------
 
@@ -1069,7 +1211,7 @@ export function renderPage(nonce: string, token: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <meta name="locadot-token" content="${safeToken}">
 <title>locadot dashboard</title>
 <style nonce="${safeNonce}">${css}</style>
@@ -1103,7 +1245,7 @@ export function renderPage(nonce: string, token: string): string {
       <div class="tile card">
         <div class="tile-row">
           <div>
-            <div class="label">CA Trust</div>
+            <div class="label">CA trust</div>
             <div id="tile-ca-value" class="tile-value">—</div>
           </div>
           <button type="button" id="ca-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle local CA trust">
@@ -1115,7 +1257,7 @@ export function renderPage(nonce: string, token: string): string {
       <div class="tile card">
         <div class="tile-row">
           <div>
-            <div class="label">Start at Boot</div>
+            <div class="label">Start at boot</div>
             <div id="tile-startup-value" class="tile-value">—</div>
             <div id="tile-startup-method" class="tile-sub"></div>
           </div>
@@ -1135,11 +1277,23 @@ export function renderPage(nonce: string, token: string): string {
           <button type="button" id="stop-proxy-btn" class="btn btn-sm btn-danger">Stop proxy</button>
         </div>
       </div>
+
+      <div class="tile card">
+        <div class="tile-main">
+          <div class="label">Cloudflare Tunnel</div>
+          <div id="tile-cloudflared-value" class="tile-value">—</div>
+          <div id="tile-cloudflared-sub" class="tile-sub"></div>
+          <div class="tile-sub">Share a mapping on a public https://*.trycloudflare.com URL. No Cloudflare account needed.</div>
+        </div>
+        <div class="tile-actions">
+          <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
+        </div>
+      </div>
     </div>
   </section>
 
   <section aria-label="Add proxy host">
-    <h2>Add Host</h2>
+    <h2>Add host</h2>
     <form id="add-form" class="card form-card">
       <div class="form-grid">
         <div class="field">
@@ -1175,15 +1329,13 @@ export function renderPage(nonce: string, token: string): string {
         <thead>
           <tr>
             <th scope="col">Host</th>
-            <th scope="col" class="visually-hidden">Flow</th>
+            <th scope="col" aria-label="Flow"></th>
             <th scope="col">Target</th>
             <th scope="col">Options</th>
             <th scope="col">Status</th>
-            <th scope="col">Hits</th>
-            <th scope="col">Errors</th>
-            <th scope="col">Last access</th>
-            <th scope="col">Avg ms</th>
-            <th scope="col">Actions</th>
+            <th scope="col">Public URL</th>
+            <th scope="col">Traffic</th>
+            <th scope="col" class="actions">Actions</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -1211,6 +1363,10 @@ export function renderPage(nonce: string, token: string): string {
     <div class="cli-item">
       <pre id="cli-curl-pre" class="code-block mono"></pre>
       <button type="button" id="cli-curl-copy" class="copy-btn">Copy</button>
+    </div>
+    <div class="cli-item">
+      <pre id="cli-tunnel-pre" class="code-block mono">locadot tunnel --host app.localhost</pre>
+      <button type="button" id="cli-tunnel-copy" class="copy-btn">Copy</button>
     </div>
   </section>
 </main>

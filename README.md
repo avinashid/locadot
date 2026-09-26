@@ -69,6 +69,20 @@ Options for `add` / `update`:
 | `locadot status [--json]` | Is it running, its PID, ports, number of hosts, CA trust, start-at-boot, dashboard URL. |
 | `locadot doctor [--host h]` | Check the proxy, ports, permissions, CA trust, the registry and every target. Exits 1 if anything fails. |
 
+### Sharing (Cloudflare Tunnel)
+
+| Command | What it does |
+| --- | --- |
+| `locadot tunnel --host app.localhost` | Share a mapping on a public `https://<random>.trycloudflare.com` URL through a Cloudflare quick tunnel. No Cloudflare account is needed. `cloudflared` is downloaded on first use. |
+| `locadot tunnel --host app.localhost --off` | Stop sharing it. |
+| `locadot tunnel` | List the shared mappings and their public URLs. |
+| `locadot tunnel:install` | Download `cloudflared` into the state dir (`<state>/bin`). Set `LOCADOT_CLOUDFLARED` to use your own binary; one on `PATH` is also picked up. |
+
+The tunnel runs inside the proxy, so a shared mapping keeps working after `restart` and comes back at boot. Redirects to the
+target are rewritten to the public URL. **Anyone with the link can reach the mapping**, so only share what you'd put online.
+For safety, the `--cors` pass-through (`/__locadot/x/…`) is turned off for visitors coming through the tunnel, so the tunnel
+can't be used to reach other hosts from your machine. The dashboard can also do this: use **Share** / **Unshare** on a row.
+
 ### Certificates
 
 | Command | What it does |
@@ -91,12 +105,13 @@ Options for `add` / `update`:
 ## 📋 Dashboard & control panel
 
 Open `https://localhost` or `http://localhost` (or run `locadot open`). Requests for bare `localhost` / `127.0.0.1` / `::1`
-are answered by locadot itself, not proxied. The page is a dark control panel:
+are answered by locadot itself, not proxied. The page is a control panel that follows the system light/dark theme:
 
 - **System:** whether the proxy runs as root/admin, whether ports below 1024 can be bound (with the Linux sysctl fix when they
   can't), CA trust with an on/off toggle, start-at-boot with an on/off toggle, ports, bind addresses and state dir. It also has a **Stop proxy** button.
 - **Proxies:** add a mapping (host + port / host:port / URL, and optional "Insecure TLS" and "Bypass CORS" boxes), edit a target inline, or remove one. The table shows
-  each source → destination with up/down, status, latency, hits, errors, last access and average ms. It refreshes every 5 s.
+  each source → destination with up/down, status, latency, its public tunnel URL and traffic (hits, errors, average ms). It refreshes every 5 s.
+- **Cloudflare Tunnel:** whether `cloudflared` is installed (with an **Install** button), and a **Share** button per row that puts the mapping on a public URL.
 - **Logs:** a live tail with refresh and clear.
 - **CLI / API snippets** you can copy.
 
