@@ -1,9 +1,10 @@
 import crypto from "crypto";
 import http from "http";
-import { DashboardContext, HostEntry, HostStats, ProbeResult } from "../types";
+import { DashboardContext, HostEntry, HostStats, ProbeResult, TunnelState } from "../types";
 import { renderPage } from "./page";
 import { ApiError, route } from "./api";
 import { systemStatus } from "../lib/system";
+import { cloudflaredInfo as cloudflared } from "../lib/tunnel";
 
 interface HostRow {
   host: string;
@@ -15,6 +16,7 @@ interface HostRow {
   urls: { https: string; http: string };
   stats: HostStats | null;
   probe: ProbeResult;
+  tunnel: TunnelState;
 }
 
 function hostUrls(host: string, httpPort: number, httpsPort: number): { https: string; http: string } {
@@ -66,6 +68,7 @@ async function buildHosts(ctx: DashboardContext): Promise<HostRow[]> {
         urls: hostUrls(host, httpPort, httpsPort),
         stats: stats[host] ?? null,
         probe,
+        tunnel: ctx.tunnel(host),
       };
     })
   );
@@ -120,7 +123,7 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
       const uptimeSec = Math.max(0, Math.round((Date.now() - new Date(ctx.proxyInfo.startedAt).getTime()) / 1000));
       systemStatus(ctx.proxyInfo.caTrusted)
         .then((system) =>
-          sendJson(res, method, 200, { proxy: ctx.proxyInfo, uptimeSec, hosts: Object.keys(ctx.getRegistry().hosts).length, system })
+          sendJson(res, method, 200, { proxy: ctx.proxyInfo, uptimeSec, hosts: Object.keys(ctx.getRegistry().hosts).length, system: { ...system, cloudflared: cloudflared() } })
         )
         .catch(fail);
       return;

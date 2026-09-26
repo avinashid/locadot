@@ -80,6 +80,14 @@ program
   .description("Open a domain, or the dashboard when no host is given, in the browser")
   .action(run((host?: string) => Commands.open(host)));
 
+program
+  .command("tunnel")
+  .description("Share a domain on a public https://*.trycloudflare.com URL (Cloudflare quick tunnel, no account); lists shared domains without --host")
+  .option("-h, --host <host>", "Domain to share, e.g. app.localhost")
+  .option("--off", "Stop sharing it")
+  .action(run((options) => Commands.tunnel(options)));
+program.command("tunnel:install").description("Download cloudflared into the locadot state dir").action(run(() => Commands.installTunnel()));
+
 const portOptions = (command: Command) =>
   command
     .option("-p, --port <port>", "HTTP port (default 80, or the last one you chose)")

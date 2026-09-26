@@ -47,6 +47,8 @@ function makeCtx() {
     shutdown: (reason: string) => {
       state.shutdowns.push(reason);
     },
+    tunnel: () => ({ enabled: false, status: "off" as const }),
+    retryTunnels: () => {},
   };
   return { ctx, state };
 }

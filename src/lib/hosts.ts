@@ -52,6 +52,17 @@ export default class HostOps {
     return { host, entry };
   }
 
+  static async setTunnel(input: { host: unknown; tunnel: boolean }) {
+    const host = requireHost(input.host);
+    const entry = await RegistryStore.mutate((registry) => {
+      const existing = registry.hosts[host];
+      if (!existing) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+      registry.hosts[host] = { ...existing, tunnel: input.tunnel || undefined, updatedAt: new Date().toISOString() };
+      return registry.hosts[host];
+    });
+    return { host, entry };
+  }
+
   static async remove(input: { host: unknown }) {
     const host = requireHost(input.host);
     await RegistryStore.mutate((registry) => {

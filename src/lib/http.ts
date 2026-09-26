@@ -13,6 +13,8 @@ export interface RouterContext {
   lookup(host: string): HostEntry | undefined;
   stats: Map<string, HostStats>;
   dashboard(req: http.IncomingMessage, res: http.ServerResponse): void;
+  /** The mapping behind a public tunnel host (xyz.trycloudflare.com), if any. */
+  tunnelFor?(host: string): string | undefined;
 }
 
 /** Host header without port, lowercased; handles [::1]:443. */
@@ -22,7 +24,21 @@ export const hostOf = (req: http.IncomingMessage) => {
   return raw.split(":")[0].replace(/\.$/, "");
 };
 
-const isTls = (req: http.IncomingMessage) => Boolean((req.socket as any).encrypted);
+/** Tunnel visitors are on https even though cloudflared talks plain http to us. */
+const isTls = (req: http.IncomingMessage) => Boolean((req.socket as any).encrypted) || fromTunnel(req);
+
+/** The mapping a request is for: its Host, or the mapping behind a tunnel's public host. */
+export const mappedHost = (req: http.IncomingMessage) => (req as any).locadotHost ?? hostOf(req);
+
+export const fromTunnel = (req: http.IncomingMessage) => Boolean((req as any).locadotTunnel);
+
+/** Resolves a tunnel's public host to its mapping and tags the request, before any routing. */
+const resolveHost = (req: http.IncomingMessage, ctx: RouterContext) => {
+  const host = hostOf(req);
+  const local = ctx.tunnelFor?.(host);
+  if (local) Object.assign(req as any, { locadotHost: local, locadotTunnel: true });
+  return local ?? host;
+};
 
 const dashboardUrl = (req: http.IncomingMessage) => {
   const tls = isTls(req);
@@ -212,7 +228,9 @@ const record = (stats: Map<string, HostStats>, host: string, status: number, ms:
 
 export default class HttpModule {
   static requestHandler(req: http.IncomingMessage, res: http.ServerResponse, ctx: RouterContext) {
-    const host = hostOf(req);
+    const host = resolveHost(req, ctx);
+    // The pass-through fetches arbitrary URLs from this machine; never offer it to the internet.
+    const passThrough = (entry: HostEntry) => entry.cors && !fromTunnel(req);
     try {
       if (Constants.dashboardHosts.includes(host)) {
         ctx.dashboard(req, res);
@@ -241,12 +259,12 @@ export default class HttpModule {
         return;
       }
 
-      if (entry.cors && req.url?.split("?")[0] === SHIM_PATH) {
+      if (passThrough(entry) && req.url?.split("?")[0] === SHIM_PATH) {
         res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" });
         res.end(shimScript);
         return;
       }
-      const via = entry.cors ? parseVia(req.url) : undefined;
+      const via = passThrough(entry) ? parseVia(req.url) : undefined;
       if (via && !isSameOrigin(req)) {
         res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("locadot: the pass-through only serves the page's own requests.\n");
@@ -283,7 +301,7 @@ export default class HttpModule {
   }
 
   static requestUpgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer, ctx: RouterContext) {
-    const host = hostOf(req);
+    const host = resolveHost(req, ctx);
     socket.on("error", () => socket.destroy());
     try {
       const entry = ctx.lookup(host);
@@ -291,7 +309,7 @@ export default class HttpModule {
         socket.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
         return;
       }
-      const via = entry.cors ? parseVia(req.url) : undefined;
+      const via = entry.cors && !fromTunnel(req) ? parseVia(req.url) : undefined;
       if (via && !isSameOrigin(req)) {
         socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
         return;

@@ -9,6 +9,7 @@ import { trustCA, untrustCA } from "../utils/trust";
 import FileModule from "../utils/file";
 import logger from "../utils/logger";
 import { invalidateSystemStatus } from "../lib/system";
+import { installCloudflared } from "../lib/tunnel";
 import type { DashboardContext } from "../types";
 
 const MAX_BODY = 64 * 1024;
@@ -125,7 +126,7 @@ export async function route(
   const known =
     (path === "/api/hosts" && method === "POST") ||
     (hostMatch && (method === "PUT" || method === "DELETE")) ||
-    (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop"].includes(path) && method === "POST");
+    (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/cloudflared/install"].includes(path) && method === "POST");
   if (!known) return undefined;
 
   assertTrusted(req, ctx);
@@ -146,10 +147,20 @@ export async function route(
         logger.info(`🗑️ dashboard: removed ${host}`);
         return { status: 200, body: { ok: true, host } };
       }
-      const updated = await HostOps.update({ host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
+      const tunnel = optionalBool(body.tunnel, "tunnel");
+      let updated;
+      if (body.target !== undefined || tunnel === undefined) {
+        updated = await HostOps.update({ host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
+        logger.info(`✏️ dashboard: ${updated.host} → ${updated.entry.target}`);
+      }
+      if (tunnel !== undefined) {
+        updated = await HostOps.setTunnel({ host, tunnel });
+        logger.info(`🌍 dashboard: ${tunnel ? "sharing" : "stopped sharing"} ${updated.host}`);
+      }
       ctx.reload();
-      logger.info(`✏️ dashboard: ${updated.host} → ${updated.entry.target}`);
-      return { status: 200, body: { ok: true, host: updated.host, ...updated.entry, url: hostUrl(updated.host, ctx) } };
+      if (tunnel) ctx.retryTunnels();
+      const { host: name, entry } = updated!;
+      return { status: 200, body: { ok: true, host: name, ...entry, url: hostUrl(name, ctx), tunnel: ctx.tunnel(name) } };
     }
   } catch (error) {
     if (error instanceof NotFoundError) throw new ApiError(404, clean(error.message));
@@ -179,6 +190,15 @@ export async function route(
     case "/api/logs/clear":
       if (FileModule.exists("LOGS")) FileModule.write("LOGS", "");
       return { status: 200, body: { ok: true } };
+    case "/api/cloudflared/install":
+      try {
+        const info = await installCloudflared();
+        ctx.retryTunnels();
+        logger.info(`🌍 cloudflared ${info.version ?? ""} installed at ${info.path}`);
+        return { status: 200, body: { ok: true, ...info } };
+      } catch (error: any) {
+        throw new ApiError(500, clean(String(error?.message || error)), "locadot tunnel:install");
+      }
     case "/api/proxy/stop":
       setTimeout(() => ctx.shutdown("dashboard stop"), 100);
       return { status: 200, body: { ok: true, hint: "locadot start" } };

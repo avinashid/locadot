@@ -5,6 +5,8 @@ export interface HostEntry {
   insecure?: boolean;
   /** Make the upstream think requests come from itself, and let any origin call it. */
   cors?: boolean;
+  /** Share on a public Cloudflare quick tunnel (https://<random>.trycloudflare.com). */
+  tunnel?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -21,6 +23,13 @@ export interface HostStats {
   lastAccess?: string;
   /** Rolling average upstream response time in ms. */
   avgMs?: number;
+}
+
+export interface TunnelState {
+  enabled: boolean;
+  status: "off" | "starting" | "up" | "error";
+  url?: string;
+  error?: string;
 }
 
 export interface ProbeResult {
@@ -62,4 +71,7 @@ export interface DashboardContext {
   reload(): void;
   refreshTrust(): Promise<unknown>;
   shutdown(reason: string): void;
+  tunnel(host: string): TunnelState;
+  /** Re-sync tunnels with the registry, restarting failed ones (after enabling or installing). */
+  retryTunnels(): void;
 }

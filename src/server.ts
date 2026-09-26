@@ -8,8 +8,9 @@ import type { FSWatcher } from "chokidar";
 import Constants from "./constants";
 import RegistryStore from "./lib/registry";
 import locadotFile from "./lib/locadot-file";
-import HttpModule, { applyCors, hostOf, originMap, rewriteBody, rewriteOrigins, type RouterContext } from "./lib/http";
+import HttpModule, { applyCors, fromTunnel, mappedHost, originMap, rewriteBody, rewriteOrigins, type RouterContext } from "./lib/http";
 import Localhost from "./lib/localhost";
+import { TunnelManager } from "./lib/tunnel";
 import { rewriteViaResponse, type Via } from "./lib/passthrough";
 import FileModule from "./utils/file";
 import logger from "./utils/logger";
@@ -57,11 +58,16 @@ export async function startCentralProxy() {
       );
     }
   };
+  const tunnels = new TunnelManager(() => {
+    const host = Constants.server.bind.find((address) => !address.includes(":")) ? "127.0.0.1" : "[::1]";
+    return `http://${host}:${Constants.server.httpPort}`;
+  });
   const reload = () => {
     try {
       registry = RegistryStore.read();
       logger.info(`🔄 Loaded ${Object.keys(registry.hosts).length} host mapping(s)`);
       warmCerts(Object.keys(registry.hosts));
+      tunnels.sync(registry.hosts);
     } catch (error) {
       // Keep serving the last good mapping rather than dropping everything.
       logger.error(error);
@@ -84,9 +90,11 @@ export async function startCentralProxy() {
     for (const name of [...listed, "connection", "keep-alive", "upgrade", "proxy-connection"]) {
       delete proxyRes.headers[name];
     }
-    const entry = registry.hosts[hostOf(req)];
+    const entry = registry.hosts[mappedHost(req)];
     if (!entry?.cors) return;
     applyCors(req, proxyRes.headers);
+    // Rewriting to .localhost names only helps a browser on this machine.
+    if (fromTunnel(req)) return;
     const via: Via | undefined = (req as any).locadotVia;
     const pairs = originMap(req, registry.hosts);
     if (via) rewriteViaResponse(proxyRes.headers, via, entry.target);
@@ -123,6 +131,7 @@ export async function startCentralProxy() {
     proxy,
     stats,
     lookup: (host) => registry.hosts[host],
+    tunnelFor: (host) => tunnels.hostFor(host),
     dashboard: (req, res) =>
       handleDashboardRequest(req, res, {
         getRegistry: () => registry,
@@ -136,6 +145,8 @@ export async function startCentralProxy() {
         reload,
         refreshTrust,
         shutdown: (reason) => shutdown(reason),
+        tunnel: (host) => tunnels.state(host),
+        retryTunnels: () => tunnels.sync(registry.hosts, true),
       }),
   };
 
@@ -191,6 +202,7 @@ export async function startCentralProxy() {
     logger.info(`🛑 ${signal} received, shutting down`);
     locadotFile.deleteLockFile(process.pid);
     FileModule.remove("API_TOKEN");
+    tunnels.stopAll();
     setTimeout(() => process.exit(0), 3000).unref();
     Promise.allSettled([
       watcher.close(),

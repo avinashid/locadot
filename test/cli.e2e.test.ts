@@ -359,3 +359,55 @@ test("locadot start --port/--https-port picks the ports and remembers them", { t
   assert.equal(cli("start", "--port", "abc").status, 1);
   assert.equal(cli("start", "--port", String(httpsPort)).status, 1);
 });
+
+test("locadot tunnel: a public host reaches its mapping, without the --cors pass-through", { timeout: 60_000 }, async (t) => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-tunnel-"));
+  const fake = path.join(tmpHome, "fake-cloudflared.js");
+  fs.writeFileSync(
+    fake,
+    `#!${process.execPath}\nif (process.argv.includes("--version")) { console.log("cloudflared version 2099.1.0"); process.exit(0); }\n` +
+      `console.error("INF |  https://fake-tunnel-name.trycloudflare.com  |"); setInterval(() => {}, 1000);\n`,
+    { mode: 0o755 }
+  );
+  const [httpPort, httpsPort, upstreamPort] = [await freePort(), await freePort(), await freePort()];
+  const upstream = http.createServer((req, res) => {
+    if (req.url === "/go") {
+      res.writeHead(302, { Location: `http://127.0.0.1:${upstreamPort}/done` });
+      return res.end();
+    }
+    res.end(`upstream ${req.url}`);
+  });
+  await new Promise<void>((resolve) => upstream.listen(upstreamPort, "127.0.0.1", resolve));
+  const env = { ...process.env, LOCADOT_HOME: tmpHome, LOCADOT_HTTP_PORT: String(httpPort), LOCADOT_HTTPS_PORT: String(httpsPort), LOCADOT_CLOUDFLARED: fake };
+  const cli = (...args: string[]) => spawnSync(process.execPath, [CLI, ...args], { env, encoding: "utf8", timeout: 30_000 });
+  t.after(() => {
+    cli("stop");
+    upstream.close();
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  assert.equal(cli("add", "--host", "share.localhost", "--target", `127.0.0.1:${upstreamPort}`, "--cors").status, 0);
+  const shared = cli("tunnel", "--host", "share.localhost");
+  assert.equal(shared.status, 0, shared.stdout + shared.stderr);
+  assert.match(shared.stdout + shared.stderr, /https:\/\/fake-tunnel-name\.trycloudflare\.com/);
+
+  const publicHost = "fake-tunnel-name.trycloudflare.com";
+  assert.equal((await httpGet(httpPort, publicHost, "/hi")).body, "upstream /hi");
+  assert.equal((await httpGet(httpPort, publicHost, "/go")).headers.location, `https://${publicHost}/done`);
+  // Internet visitors must not get the pass-through: the path goes to the upstream as-is.
+  const via = await httpGet(httpPort, publicHost, `/__locadot/x/http/127.0.0.1:${httpPort}/healthz`, { headers: { "Sec-Fetch-Site": "same-origin" } });
+  assert.equal(via.body, `upstream /__locadot/x/http/127.0.0.1:${httpPort}/healthz`);
+
+  const hosts = JSON.parse((await httpGet(httpPort, "localhost", "/api/hosts")).body);
+  assert.deepEqual(hosts[0].tunnel, { enabled: true, status: "up", url: `https://${publicHost}` });
+  const status = JSON.parse((await httpGet(httpPort, "localhost", "/api/status")).body);
+  assert.equal(status.system.cloudflared.version, "2099.1.0");
+
+  assert.equal(cli("tunnel", "--host", "share.localhost", "--off").status, 0);
+  let after = 0;
+  for (let i = 0; i < 30 && after !== 502; i++) {
+    after = (await httpGet(httpPort, publicHost, "/hi")).status;
+    if (after !== 502) await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal(after, 502);
+});

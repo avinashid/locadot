@@ -30,6 +30,8 @@ function makeCtx() {
     reload: () => {},
     refreshTrust: async () => {},
     shutdown: (_reason: string) => {},
+    tunnel: () => ({ enabled: false, status: "off" as const }),
+    retryTunnels: () => {},
   };
 }
 
