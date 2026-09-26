@@ -7,10 +7,10 @@ import { escapeHtml } from "./escape";
 const css = `
 :root {
   --bg: #0b0d10;
-  --surface: #12151a;
-  --surface-2: #171b21;
-  --border: #22262e;
-  --border-strong: #2c313a;
+  --surface: #14181e;
+  --surface-2: #1a1f26;
+  --border: #282d36;
+  --border-strong: #353b46;
   --fg: #e6e8eb;
   --muted: #8b929c;
   --muted-dim: #5f6672;
@@ -175,8 +175,8 @@ section h2 {
   width: 38px;
   height: 22px;
   border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
+  border: 1px solid transparent;
+  background: var(--border-strong);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -186,11 +186,12 @@ section h2 {
   top: 2px; left: 2px;
   width: 16px; height: 16px;
   border-radius: 50%;
-  background: var(--muted);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease, background 0.15s ease;
 }
-.switch.on { background: var(--accent-bg); border-color: var(--accent); }
-.switch.on .switch-knob { transform: translateX(16px); background: var(--accent); }
+.switch.on { background: var(--accent); }
+.switch.on .switch-knob { transform: translateX(16px); }
 .switch.busy { opacity: 0.6; cursor: wait; }
 .switch:disabled { cursor: not-allowed; opacity: 0.5; }
 
@@ -216,6 +217,8 @@ section h2 {
 .btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
 .btn-danger { border-color: var(--down); color: var(--down); background: transparent; }
 .btn-danger:hover:not(:disabled) { background: var(--down-bg); }
+.row-actions .btn-danger:not(:hover):not(:focus-visible) { border-color: var(--border-strong); color: var(--muted); }
+.btn-primary.busy::after { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
 .btn-ghost { background: transparent; border-color: var(--border); }
 .btn.busy { opacity: 0.6; cursor: wait; }
 
@@ -265,7 +268,7 @@ tr:last-child td { border-bottom: none; }
   display: inline-block;
   font-size: 11px;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--warn);
   color: var(--warn);
   background: var(--warn-bg);
@@ -286,6 +289,15 @@ tr:last-child td { border-bottom: none; }
 .copy-btn:hover { color: var(--fg); border-color: var(--muted); }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 th.actions { text-align: right; }
+.edit-hint { font-size: 12px; }
+td.edit-error { color: var(--down); white-space: normal; }
+body.offline .switch, body.offline #add-submit { opacity: 0.5; pointer-events: none; }
+.field input.invalid:focus-visible, .edit-input.invalid:focus-visible { outline-color: var(--down); }
+.edit-input.invalid { border-color: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
+.chip:empty { display: none; }
+body.boot #updated { visibility: hidden; }
+body.boot #stop-proxy-btn, body.offline #stop-proxy-btn { display: none; }
+body.offline .live-label { color: var(--down); }
 .edit-input {
   font-family: var(--mono);
   font-size: 13px;
@@ -295,9 +307,11 @@ th.actions { text-align: right; }
   background: var(--surface-2);
   color: var(--fg);
   width: 100%;
-  min-width: 160px;
+  min-width: 240px;
 }
 .badges { display: flex; flex-wrap: wrap; gap: 4px; }
+td.badges { display: table-cell; }
+td.badges .badge + .badge { margin-left: 4px; }
 .badge-cors { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 td .inline-check + .inline-check { margin-top: 4px; }
 .inline-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
@@ -324,6 +338,7 @@ td .inline-check + .inline-check { margin-top: 4px; }
   color: var(--muted);
   text-align: center;
 }
+#hosts-error { border-color: var(--down); }
 .empty pre { display: inline-block; text-align: left; }
 
 pre.code-block {
@@ -332,6 +347,8 @@ pre.code-block {
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
   font-family: var(--mono);
   font-size: 12.5px;
   color: var(--fg);
@@ -339,7 +356,7 @@ pre.code-block {
 }
 
 .cli-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
-.cli-item pre { flex: 1; }
+.cli-item pre { flex: 1; min-width: 0; }
 .cli-item:last-child { margin-bottom: 0; }
 
 details.card { padding: 0; }
@@ -403,21 +420,119 @@ details.card[open] summary::after { content: "\\2212"; }
 .toast-hint { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .toast-hint code { font-size: 11.5px; color: var(--fg); }
 
+.banner-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+body.boot .tile-value,
+body.boot .tile-sub,
+body.boot #version,
+body.boot #uptime,
+body.boot #pid {
+  color: transparent !important;
+  display: inline-block;
+  min-width: 70px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border-strong) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+.skel-bar {
+  display: block;
+  width: 80%;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border-strong) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+.skeleton-row td { border-bottom: 1px solid var(--border); padding: 14px 9px; }
+.skeleton-row:nth-child(1) .skel-bar { width: 92%; }
+.skeleton-row:nth-child(2) .skel-bar { width: 70%; }
+.skeleton-row:nth-child(3) .skel-bar { width: 82%; }
+
+tr.row-down td:first-child { border-left: 3px solid var(--down); padding-left: 6px; }
+
+.tunnel-error-text {
+  color: var(--down);
+  cursor: help;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 170px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.field input.invalid { border-color: var(--down); }
+
+.btn.busy, #ca-toggle.busy, #startup-toggle.busy { color: transparent !important; pointer-events: none; }
+.btn.busy::after {
+  content: "";
+  position: absolute;
+  width: 13px; height: 13px;
+  margin-left: -6px;
+  top: 50%; left: 50%;
+  margin-top: -6.5px;
+  border-radius: 50%;
+  border: 2px solid rgba(127, 127, 127, 0.35);
+  border-top-color: var(--accent-strong);
+  animation: spin 0.7s linear infinite;
+}
+.btn { position: relative; }
+.switch.busy .switch-knob { opacity: 0; }
+.switch.busy::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 11px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
 footer { text-align: center; padding: 20px; color: var(--muted-dim); font-size: 12px; }
 [hidden] { display: none !important; }
 
 @media (max-width: 900px) {
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tile-wide { grid-column: span 1; }
+  .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tile { grid-column: span 2; }
+  .tile-wide, .tile-wide + .tile { grid-column: span 3; }
 }
 @media (max-width: 600px) {
   .tiles { grid-template-columns: 1fr; }
+  .tile, .tile-wide, .tile-wide + .tile { grid-column: auto; }
   #add-submit { margin-left: 0; }
 }
 
+@media (max-width: 1200px) {
+  #table th:nth-child(2), #table td.arrow { display: none; }
+  .tunnel-status a { max-width: 120px; }
+  th, td { padding-left: 6px; padding-right: 6px; }
+}
+@media (min-width: 641px) and (max-width: 1023px) {
+  #table tbody { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #table tbody tr:nth-child(odd) { border-right: 1px solid var(--border); }
+  #table tbody tr:nth-last-child(2):nth-child(odd) { border-bottom: none; }
+}
+@media (max-width: 1023px) {
+  #table { min-width: 0; }
+  #table thead { display: none; }
+  #table, #table tbody, #table tr { display: block; width: 100%; }
+  #table tr { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  #table tr:last-child { border-bottom: none; }
+  #table td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border: none; white-space: normal; text-align: right; min-width: 0; }
+  #table td::before { content: attr(data-label); color: var(--muted); font-size: 12px; flex-shrink: 0; text-align: left; }
+  #table td[data-label=""]::before { content: none; }
+  #table td[data-label=""]:first-child { padding-bottom: 8px; justify-content: flex-start; font-weight: 600; }
+  #table td[data-label=""] { justify-content: flex-end; padding-top: 10px; }
+  #table .edit-input { min-width: 0; }
+}
 @media (max-width: 640px) {
+  #pid, #updated { display: none; }
   header { padding: 12px 16px; }
   main { padding: 18px 16px 48px; }
+  .toast-container { left: 12px; right: 12px; bottom: 12px; max-width: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -441,6 +556,8 @@ const clientJs = `
   var uptimeEl = document.getElementById("uptime");
   var pidEl = document.getElementById("pid");
   var liveDot = document.getElementById("live-dot");
+  var liveLabel = document.getElementById("live-label");
+  var hostsErrorEl = document.getElementById("hosts-error");
   var updatedEl = document.getElementById("updated");
 
   var rootValueEl = document.getElementById("tile-root-value");
@@ -476,6 +593,20 @@ const clientJs = `
   var emptyEl = document.getElementById("empty");
   var tableWrap = document.getElementById("table-wrap");
   var tbody = document.getElementById("tbody");
+  var hostsSkeletonEl = document.getElementById("hosts-skeleton");
+  // As many skeleton rows as hosts last time, so the table doesn't jump when data lands.
+  try {
+    var skelBody = hostsSkeletonEl.querySelector("tbody");
+    var lastCount = Math.max(1, Math.min(8, parseInt(localStorage.getItem("locadot.hostCount") || "3", 10) || 3));
+    while (skelBody.children.length > lastCount) skelBody.removeChild(skelBody.lastElementChild);
+    while (skelBody.children.length < lastCount) skelBody.appendChild(skelBody.firstElementChild.cloneNode(true));
+  } catch (e) {}
+  var hostsBooted = false;
+
+  var loadErrorBanner = document.getElementById("load-error-banner");
+  var loadErrorText = document.getElementById("load-error-text");
+  var loadErrorRetry = document.getElementById("load-error-retry");
+  var isDown = false;
 
   var logsPanel = document.getElementById("logs-panel");
   var logsBox = document.getElementById("logs-box");
@@ -588,8 +719,9 @@ const clientJs = `
     }, timeout);
   }
 
-  function apiError(err) {
+  function apiError(err, context) {
     var message = err && err.message ? err.message : String(err);
+    if (context) message = context + ": " + message;
     showToast(message, "error", err && err.hint ? err.hint : undefined);
   }
 
@@ -618,7 +750,40 @@ const clientJs = `
 
   // ---------- header + system tiles ----------
 
+  function hideHostsSkeleton() {
+    if (!hostsBooted) {
+      hostsBooted = true;
+      hostsSkeletonEl.hidden = true;
+    }
+  }
+
+  function showLoadError(err) {
+    isDown = true;
+    var reason = (err && err.message) ? err.message : "connection failed";
+    loadErrorText.textContent = "Can't reach the locadot proxy (" + reason + "). Start it with locadot start; this page retries every 5 s.";
+    loadErrorBanner.hidden = false;
+    if (!lastStatus) hostsErrorEl.hidden = false;
+  }
+
+  function hideLoadError() {
+    isDown = false;
+    loadErrorBanner.hidden = true;
+    hostsErrorEl.hidden = true;
+    liveLabel.textContent = "live";
+    document.body.classList.remove("offline");
+  }
+
+  loadErrorRetry.addEventListener("click", function () {
+    loadErrorRetry.disabled = true;
+    loadErrorRetry.classList.add("busy");
+    refreshAll().then(function () {
+      loadErrorRetry.disabled = false;
+      loadErrorRetry.classList.remove("busy");
+    });
+  });
+
   function renderHeader(status) {
+    document.body.classList.remove("boot");
     versionEl.textContent = "v" + status.proxy.version;
     uptimeEl.textContent = "uptime " + fmtUptime(status.uptimeSec);
     pidEl.textContent = "pid " + status.proxy.pid;
@@ -630,6 +795,8 @@ const clientJs = `
   function markDown() {
     liveDot.classList.remove("up");
     liveDot.classList.add("down");
+    liveLabel.textContent = "offline";
+    document.body.classList.add("offline");
   }
 
   function renderSystemTiles(status) {
@@ -710,7 +877,7 @@ const clientJs = `
         showToast("CA trust setting updated", "success");
         return refreshAll();
       })
-      .catch(function (err) { apiError(err); })
+      .catch(function (err) { apiError(err, "Couldn't update CA trust"); })
       .then(function () {
         caBusy = false;
         caToggle.disabled = false;
@@ -729,7 +896,7 @@ const clientJs = `
         showToast("Startup setting updated", "success");
         return refreshAll();
       })
-      .catch(function (err) { apiError(err); })
+      .catch(function (err) { apiError(err, "Couldn't update start at boot"); })
       .then(function () {
         startupBusy = false;
         startupToggle.disabled = false;
@@ -757,7 +924,7 @@ const clientJs = `
         showToast("Proxy stopped", "warn");
       })
       .catch(function (err) {
-        apiError(err);
+        apiError(err, "Couldn't stop the proxy");
         stopProxyBtn.disabled = false;
         stopProxyBtn.classList.remove("busy");
       });
@@ -775,7 +942,7 @@ const clientJs = `
         showToast("cloudflared installed", "success");
         return refreshAll();
       })
-      .catch(function (err) { apiError(err); })
+      .catch(function (err) { apiError(err, "Couldn't install cloudflared"); })
       .then(function () {
         cfInstallBusy = false;
         cfInstallBtn.disabled = false;
@@ -806,15 +973,41 @@ const clientJs = `
     clear(addErrorEl);
   }
 
+  function markFieldInvalid(el, invalid) {
+    el.classList.toggle("invalid", !!invalid);
+    el.setAttribute("aria-invalid", invalid ? "true" : "false");
+  }
+
+  addHostInput.addEventListener("input", function () {
+    if (addHostInput.value.trim()) markFieldInvalid(addHostInput, false);
+    hideAddError();
+  });
+  addTargetInput.addEventListener("input", function () {
+    if (addTargetInput.value.trim()) markFieldInvalid(addTargetInput, false);
+    hideAddError();
+  });
+
+  addForm.addEventListener("focusout", function (e) {
+    if (e.relatedTarget && addForm.contains(e.relatedTarget)) return;
+    hideAddError();
+    markFieldInvalid(addHostInput, false);
+    markFieldInvalid(addTargetInput, false);
+  });
+
   addForm.addEventListener("submit", function (e) {
     e.preventDefault();
     hideAddError();
     var hostVal = addHostInput.value.trim();
     var targetVal = addTargetInput.value.trim();
     if (!hostVal || !targetVal) {
+      markFieldInvalid(addHostInput, !hostVal);
+      markFieldInvalid(addTargetInput, !targetVal);
       showAddError("Host and target are required.");
+      (!hostVal ? addHostInput : addTargetInput).focus();
       return;
     }
+    markFieldInvalid(addHostInput, false);
+    markFieldInvalid(addTargetInput, false);
     if (hostVal.indexOf(".") === -1) hostVal = hostVal + ".localhost";
     var insecureVal = !!addInsecureInput.checked;
     var corsVal = !!addCorsInput.checked;
@@ -889,9 +1082,12 @@ const clientJs = `
       statusWrap.appendChild(spin);
       statusWrap.appendChild(document.createTextNode("Starting\\u2026"));
     } else if (t.status === "error") {
+      var errDot = document.createElement("span");
+      errDot.className = "dot down";
+      statusWrap.appendChild(errDot);
       var errText = document.createElement("span");
-      errText.className = "tunnel-error";
-      errText.textContent = "Error";
+      errText.className = "tunnel-error-text";
+      errText.textContent = "Error: " + (t.error || "tunnel failed to start");
       errText.title = t.error || "Tunnel error";
       statusWrap.appendChild(errText);
     } else {
@@ -907,11 +1103,12 @@ const clientJs = `
   function shareButton(row) {
     var t = tunnelInfo(row);
     var isOn = t.enabled || t.status === "up" || t.status === "starting";
+    var isRetry = !isOn && t.status === "error";
     var shareBtn = document.createElement("button");
     shareBtn.type = "button";
     shareBtn.className = "btn btn-sm" + (isOn ? " btn-danger" : "");
-    shareBtn.textContent = isOn ? "Unshare" : "Share";
-    shareBtn.title = isOn ? "Stop the public tunnel" : "Share on a public trycloudflare.com URL";
+    shareBtn.textContent = isOn ? "Unshare" : (isRetry ? "Retry" : "Share");
+    shareBtn.title = isOn ? "Stop the public tunnel" : (isRetry ? "Retry starting the tunnel" : "Share on a public trycloudflare.com URL");
     if (!cloudflaredInstalled && !isOn) {
       shareBtn.disabled = true;
       shareBtn.title = "Install cloudflared first";
@@ -926,7 +1123,7 @@ const clientJs = `
           return loadHosts();
         })
         .catch(function (err) {
-          apiError(err);
+          apiError(err, "Couldn't change sharing for " + row.host);
           shareBtn.disabled = false;
           shareBtn.classList.remove("busy");
         });
@@ -934,8 +1131,13 @@ const clientJs = `
     return shareBtn;
   }
 
+  function labelCells(tr, labels) {
+    for (var i = 0; i < tr.children.length; i++) tr.children[i].setAttribute("data-label", labels[i] || "");
+  }
+
   function buildDisplayRow(tr, row) {
     clear(tr);
+    tr.classList.toggle("row-down", !row.probe.up);
 
     var hostTd = document.createElement("td");
     hostTd.className = "mono";
@@ -1010,7 +1212,7 @@ const clientJs = `
           return loadHosts();
         })
         .catch(function (err) {
-          apiError(err);
+          apiError(err, "Couldn't remove " + row.host);
           removeBtn.disabled = false;
         });
     });
@@ -1018,6 +1220,7 @@ const clientJs = `
     actionsWrap.appendChild(editBtn);
     actionsWrap.appendChild(removeBtn);
     tr.appendChild(actionsTd);
+    labelCells(tr, ["", "", "Target", "Options", "Status", "Public URL", "Traffic", ""]);
   }
 
   function enterEditMode(row) {
@@ -1034,6 +1237,7 @@ const clientJs = `
     targetInput.type = "text";
     targetInput.className = "edit-input mono";
     targetInput.value = row.target;
+    targetInput.title = row.target;
     targetInput.setAttribute("aria-label", "Target for " + row.host);
     targetTd.appendChild(targetInput);
     tr.appendChild(targetTd);
@@ -1057,12 +1261,9 @@ const clientJs = `
     insecureTd.appendChild(corsLabel);
     tr.appendChild(insecureTd);
 
-    tr.appendChild(makeCell("\\u2014", "dim"));
-    tr.appendChild(makeCell("\\u2014", "dim"));
-    tr.appendChild(makeCell("\\u2014", "dim"));
-    tr.appendChild(makeCell("\\u2014", "dim"));
-    tr.appendChild(makeCell("\\u2014", "dim"));
-    tr.appendChild(makeCell("\\u2014", "dim"));
+    var hintTd = makeCell("Enter to save \\u00b7 Esc to cancel", "dim edit-hint");
+    hintTd.colSpan = 3;
+    tr.appendChild(hintTd);
 
     var actionsTd = document.createElement("td");
     var actionsWrap = document.createElement("div");
@@ -1080,10 +1281,13 @@ const clientJs = `
     saveBtn.addEventListener("click", function () {
       var newTarget = targetInput.value.trim();
       if (!newTarget) {
-        showToast("Target is required", "error");
+        targetInput.classList.add("invalid");
+        targetInput.setAttribute("aria-invalid", "true");
+        targetInput.focus();
         return;
       }
       saveBtn.disabled = true;
+      saveBtn.classList.add("busy");
       cancelBtn.disabled = true;
       apiFetch("/api/hosts/" + encodeURIComponent(row.host), {
         method: "PUT",
@@ -1095,8 +1299,10 @@ const clientJs = `
           return loadHosts();
         })
         .catch(function (err) {
-          apiError(err);
+          hintTd.textContent = "Couldn't save: " + (err && err.message ? err.message : err) + ". Fix it and press Enter to retry.";
+          hintTd.className = "edit-hint edit-error";
           saveBtn.disabled = false;
+          saveBtn.classList.remove("busy");
           cancelBtn.disabled = false;
         });
     });
@@ -1106,12 +1312,21 @@ const clientJs = `
       buildDisplayRow(tr, row);
     });
 
+    targetInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); saveBtn.click(); }
+      if (e.key === "Escape") { e.preventDefault(); cancelBtn.click(); }
+    });
+    setTimeout(function () { targetInput.focus(); targetInput.select(); }, 0);
+
     actionsWrap.appendChild(saveBtn);
     actionsWrap.appendChild(cancelBtn);
     tr.appendChild(actionsTd);
+    labelCells(tr, ["", "", "Target", "Options", "", ""]);
   }
 
   function renderHosts(hosts) {
+    try { localStorage.setItem("locadot.hostCount", String(hosts.length || 1)); } catch (e) {}
+    hideHostsSkeleton();
     lastHosts = hosts;
     emptyEl.hidden = hosts.length !== 0;
     tableWrap.hidden = hosts.length === 0;
@@ -1147,9 +1362,9 @@ const clientJs = `
   function loadLogs() {
     return fetch("/api/logs?lines=200").then(parseJsonOrThrow).then(function (data) {
       var lines = (data && data.lines) || [];
-      logsBox.textContent = lines.join("\\n");
+      logsBox.textContent = lines.length ? lines.join("\\n") : "No log lines yet.";
       logsBox.scrollTop = logsBox.scrollHeight;
-    }).catch(function (err) { apiError(err); });
+    }).catch(function (err) { apiError(err, "Couldn't load logs"); });
   }
 
   logsPanel.addEventListener("toggle", function () {
@@ -1163,7 +1378,7 @@ const clientJs = `
         showToast("Logs cleared", "success");
         return loadLogs();
       })
-      .catch(function (err) { apiError(err); });
+      .catch(function (err) { apiError(err, "Couldn't clear logs"); });
   });
 
   cliAddCopy.addEventListener("click", function () { copyText(cliAddPre.textContent, cliAddCopy); });
@@ -1183,9 +1398,12 @@ const clientJs = `
       renderSystemTiles(lastStatus);
       renderCli(lastStatus);
       renderHosts(results[1]);
+      hideLoadError();
     }).catch(function (err) {
+      document.body.classList.remove("boot");
+      hideHostsSkeleton();
       markDown();
-      showToast("Refresh failed: " + (err && err.message ? err.message : err), "error");
+      showLoadError(err);
     });
   }
 
@@ -1216,14 +1434,14 @@ export function renderPage(nonce: string, token: string): string {
 <title>locadot dashboard</title>
 <style nonce="${safeNonce}">${css}</style>
 </head>
-<body>
+<body class="boot">
 <header>
   <div class="brand">
     <h1 class="wordmark">locadot</h1>
     <span id="version" class="muted mono"></span>
   </div>
   <div class="header-meta">
-    <span class="chip"><span id="live-dot" class="live-dot"></span> live</span>
+    <span class="chip"><span id="live-dot" class="live-dot"></span> <span id="live-label" class="live-label">live</span></span>
     <span id="uptime" class="chip"></span>
     <span id="pid" class="chip"></span>
     <span id="updated" class="muted"></span>
@@ -1231,6 +1449,12 @@ export function renderPage(nonce: string, token: string): string {
 </header>
 <main>
   <div id="stopped-banner" class="banner" role="status" hidden></div>
+  <div id="load-error-banner" class="banner" role="alert" hidden>
+    <div class="banner-row">
+      <span id="load-error-text"></span>
+      <button type="button" id="load-error-retry" class="btn btn-sm">Retry</button>
+    </div>
+  </div>
 
   <section aria-label="System status">
     <h2>System</h2>
@@ -1294,15 +1518,15 @@ export function renderPage(nonce: string, token: string): string {
 
   <section aria-label="Add proxy host">
     <h2>Add host</h2>
-    <form id="add-form" class="card form-card">
+    <form id="add-form" class="card form-card" novalidate>
       <div class="form-grid">
         <div class="field">
           <label for="add-host">Host</label>
-          <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" required>
+          <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
         </div>
         <div class="field">
           <label for="add-target">Target</label>
-          <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080 or https://google.com" autocomplete="off" required>
+          <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080 or https://example.com" autocomplete="off" aria-describedby="add-error" required>
         </div>
         <div class="field field-checkbox">
           <input type="checkbox" id="add-insecure" name="insecure">
@@ -1320,6 +1544,18 @@ export function renderPage(nonce: string, token: string): string {
 
   <section aria-label="Registered hosts">
     <h2>Hosts</h2>
+    <div id="hosts-skeleton" class="table-wrap card" aria-hidden="true">
+      <table>
+        <tbody>
+          <tr class="skeleton-row"><td colspan="8"><span class="skel-bar"></span></td></tr>
+          <tr class="skeleton-row"><td colspan="8"><span class="skel-bar"></span></td></tr>
+          <tr class="skeleton-row"><td colspan="8"><span class="skel-bar"></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="hosts-error" class="empty" hidden>
+      <p>Hosts couldn't be loaded while the proxy is unreachable.</p>
+    </div>
     <div id="empty" class="empty" hidden>
       <p>No hosts registered yet. Add one above, or from the CLI:</p>
       <pre class="code-block">locadot add --host app.localhost --port 3000</pre>
@@ -1361,7 +1597,7 @@ export function renderPage(nonce: string, token: string): string {
       <button type="button" id="cli-add-copy" class="copy-btn">Copy</button>
     </div>
     <div class="cli-item">
-      <pre id="cli-curl-pre" class="code-block mono"></pre>
+      <pre id="cli-curl-pre" class="code-block mono">curl -X POST http://localhost/api/hosts -H "X-Locadot-Token: $(locadot token)" -H 'Content-Type: application/json' -d '{"host":"app.localhost","target":"3000"}'</pre>
       <button type="button" id="cli-curl-copy" class="copy-btn">Copy</button>
     </div>
     <div class="cli-item">
