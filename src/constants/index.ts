@@ -37,6 +37,10 @@ export default class Constants {
     // Secret for the dashboard's mutating API; rotated on every proxy start.
     API_TOKEN: path.join(PACKAGE_PATH, ".locadot-token"),
     CONFIG_FILE,
+    // Remote access. Sender: public hostname config, invites + peers (0600). Receiver: remotes (0600).
+    HUB_FILE: path.join(PACKAGE_PATH, ".locadot-hub.json"),
+    LINKS_FILE: path.join(PACKAGE_PATH, ".locadot-links.json"),
+    REMOTES_FILE: path.join(PACKAGE_PATH, ".locadot-remotes.json"),
   } as const;
 
   static validPort = validPort;
