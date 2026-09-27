@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 (2026-09-27)
 
 ### Added
 - Dashboard pages: every sidebar item now opens its own page (`#/overview`, `#/hosts`, `#/sharing`, `#/remote`, `#/machines`,
