@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Dashboard pages: every sidebar item now opens its own page (`#/overview`, `#/hosts`, `#/sharing`, `#/remote`, `#/machines`,
+  `#/logs`, `#/settings`); they are bookmarkable and work with back/forward.
+  - **Overview**: tiles for hosts, down targets, requests, public shares, remote access and connected machines, plus host health, proxy checks and recent activity.
+  - **Public sharing**: a per-host share list.
+  - **Logs**: filter, level, line count, live mode and download.
+- Settings page:
+  - HTTP/HTTPS ports with a **Restart proxy** button, which follows the dashboard to the new port.
+  - Bind address, state directory, log level and the API token (reveal/copy).
+  - Dashboard preferences: theme, refresh interval, start page, collapsed sidebar, confirm-before-remove.
+  - New-host defaults (insecure TLS, CORS) and a danger zone.
+- API: `GET/PUT /api/settings` and `POST /api/proxy/restart`.
+
+### Fixed
+- The proxy can now tell a user's `LOCADOT_HTTP_PORT`/`LOCADOT_HTTPS_PORT` from the copies the CLI pins on every spawn
+  (`LOCADOT_USER_PORTS`), so saved ports aren't reported as env-overridden.
+
 ## 2.1.0-beta.0 (2026-09-27)
 
 ### Added

@@ -26,6 +26,22 @@ const savedPorts = (): { httpPort?: unknown; httpsPort?: unknown } => {
 
 const envPort = (name: string, saved: unknown, fallback: number) => validPort(process.env[name]) ?? validPort(saved) ?? fallback;
 
+const PORT_ENV = ["LOCADOT_HTTP_PORT", "LOCADOT_HTTPS_PORT"] as const;
+
+// The CLI pins both port vars on every proxy it spawns, so the proxy can't tell them from a
+// user's override. LOCADOT_USER_PORTS carries which ones the user actually set ("none" if neither).
+const userPortEnv = (): string => {
+  if (process.env.LOCADOT_USER_PORTS) return process.env.LOCADOT_USER_PORTS;
+  return PORT_ENV.filter((name) => validPort(process.env[name]) !== undefined).join(",") || "none";
+};
+
+/** The port var's value only if the user set it (not the CLI's pinned copy). */
+const userEnvPort = (name: (typeof PORT_ENV)[number]): number | undefined => {
+  const marker = process.env.LOCADOT_USER_PORTS;
+  if (marker && !marker.split(",").includes(name)) return undefined;
+  return validPort(process.env[name]);
+};
+
 export default class Constants {
   static paths = {
     HOME: PACKAGE_PATH,
@@ -44,6 +60,8 @@ export default class Constants {
   } as const;
 
   static validPort = validPort;
+  static userPortEnv = userPortEnv;
+  static userEnvPort = userEnvPort;
 
   static server = {
     httpPort: envPort("LOCADOT_HTTP_PORT", savedPorts().httpPort, 80),

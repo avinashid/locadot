@@ -217,7 +217,7 @@ body.offline .live-label { color: var(--down); }
   width: 100%;
 }
 .sb-link:hover { background: var(--surface-2); color: var(--fg); text-decoration: none; }
-.sb-link[aria-current="true"] { background: var(--accent-bg); color: var(--accent-strong); }
+.sb-link[aria-current] { background: var(--accent-bg); color: var(--accent-strong); }
 .sb-link svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sb-count { margin-left: auto; font-size: 11px; font-weight: 600; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); color: var(--fg-2); display: inline-flex; align-items: center; justify-content: center; }
 .sb-collapse { margin: 8px 10px 12px; width: auto; flex-shrink: 0; }
@@ -561,7 +561,7 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius); }
 tbody tr:hover .copy-btn, .copy-btn:focus-visible, #table tbody td:hover .copy-btn { opacity: 1; }
 tr.row-down td:first-child { box-shadow: inset 3px 0 0 var(--down); }
 .pill { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12px; }
-.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--muted-dim); }
 .dot.up { background: var(--up); box-shadow: 0 0 0 3px var(--up-bg); }
 .dot.down { background: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
 .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg); }
@@ -792,6 +792,63 @@ footer { text-align: center; padding: 8px 20px 32px; color: var(--muted-dim); fo
 footer a { color: var(--muted); }
 [hidden] { display: none !important; }
 
+
+/* ---------- pages ---------- */
+.view { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (min-width: 1100px) { .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.tile { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); color: var(--fg); min-width: 0; transition: border-color 0.15s ease; }
+.tile:hover { border-color: var(--border-strong); text-decoration: none; }
+.tile-big { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.tile-big.tile-word { font-size: 18px; line-height: 1.8; }
+.tile-big.ok { color: var(--up); }
+.tile-big.bad { color: var(--down); }
+.tile-big.warn { color: var(--warn); }
+.tile .tile-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (min-width: 1000px) { .grid-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.ov-list { display: flex; flex-direction: column; }
+.ov-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); min-width: 0; }
+.ov-row:last-child { border-bottom: none; }
+.ov-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ov-title { font-family: var(--mono); font-size: 13px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ov-checks .ov-title { font-family: var(--sans); }
+.ov-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-side { display: flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 12px; color: var(--muted); }
+.ov-side a.ov-link { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+.ov-more { padding: 10px 20px; font-size: 12.5px; }
+.logs-full { height: calc(100vh - 290px); min-height: 320px; max-height: none; margin: 0; border-radius: 0; border: 0; border-top: 1px solid var(--border); }
+.logs-short { height: auto; max-height: 220px; margin: 0; border-radius: 0 0 var(--radius) var(--radius); border: 0; }
+.logs-head { flex-wrap: wrap; gap: 10px; }
+.logs-tools { flex-wrap: wrap; gap: 8px; flex: 1; min-width: 0; }
+.logs-tools .input { width: auto; }
+.logs-tools select.input { padding-right: 28px; }
+.logs-tools .input-search { width: 220px; }
+.logs-meta { padding: 8px 20px; font-size: 12px; border-top: 1px solid var(--border); }
+.check-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--fg-2); cursor: pointer; }
+select.input { padding-right: 8px; cursor: pointer; }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.segmented button { border: 0; background: var(--surface); color: var(--muted); font-size: 12.5px; padding: 6px 12px; cursor: pointer; }
+.segmented button + button { border-left: 1px solid var(--border); }
+.segmented button[aria-checked="true"] { background: var(--accent-bg); color: var(--accent-strong); font-weight: 600; }
+.form-row-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 10px; }
+.form-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+#ports-form .hub-warn { margin-top: 12px; }
+.token-body { display: flex; flex-direction: column; gap: 12px; }
+.token-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.token-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-xs); }
+.help-list { display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--fg-2); }
+.help-list p { margin: 0; }
+.role-table { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.role-table div { display: flex; gap: 10px; padding: 8px 12px; font-size: 12.5px; }
+.role-table div + div { border-top: 1px solid var(--border); }
+.role-table strong { width: 56px; flex-shrink: 0; }
+.role-table span { color: var(--muted); }
+.danger-card { border-color: var(--down-bg); }
+.danger-card .card-title { color: var(--down); }
+.sb-dot { margin-left: auto; }
+input.input[type="number"] { font-family: var(--mono); }
+
 /* ---------- responsive ---------- */
 @media (min-width: 1200px) {
   th, td { padding-left: 10px; padding-right: 10px; }
@@ -806,20 +863,8 @@ footer a { color: var(--muted); }
 @media (max-width: 1099px) {
   .topbar, main { padding-left: 24px; padding-right: 24px; }
 }
-@media (max-width: 1099px) {
-  .col-primary, .col-secondary { display: contents; }
-  #hosts-card { order: 1; }
-  #add-card { order: 2; }
-  #system-card { order: 3; }
-  #sharing-card { order: 4; }
-  #hub-card { order: 5; }
-  #remotes-card { order: 6; }
-  #logs-panel { order: 7; }
-  #cli-card { order: 8; }
-}
 @media (min-width: 700px) and (max-width: 1099px) {
-  .layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #hosts-card, #logs-panel, #cli-card { grid-column: 1 / -1; }
+  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width: 641px) and (max-width: 899px), (min-width: 1100px) and (max-width: 1279px) {
   #table tbody { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -878,7 +923,7 @@ footer a { color: var(--muted); }
 const clientJs = `
 (function () {
   "use strict";
-  (function () {
+  var setTheme = (function () {
     var btn = document.getElementById("theme-toggle");
     var order = ["system", "light", "dark"];
     var mode = document.documentElement.getAttribute("data-theme") || "system";
@@ -894,86 +939,9 @@ const clientJs = `
     }
     apply(mode);
     btn.addEventListener("click", function () { apply(order[(order.indexOf(mode) + 1) % order.length]); });
+    return function (next) { apply(next); if (typeof syncThemeSeg === "function") syncThemeSeg(next); };
   })();
 
-  (function () {
-    var root = document.documentElement;
-    var sidebar = document.getElementById("sidebar");
-    var collapseBtn = document.getElementById("sb-collapse");
-    var menuBtn = document.getElementById("sb-menu");
-    var backdrop = document.getElementById("sb-backdrop");
-    var links = Array.prototype.slice.call(sidebar.querySelectorAll("a.sb-link"));
-    var drawer = window.matchMedia("(max-width: 899px)");
-
-    function syncCollapse() {
-      var collapsed = root.getAttribute("data-sidebar") === "collapsed";
-      collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-      collapseBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
-      collapseBtn.querySelector(".sb-label").textContent = collapsed ? "Expand" : "Collapse";
-    }
-    syncCollapse();
-    collapseBtn.addEventListener("click", function () {
-      var collapse = root.getAttribute("data-sidebar") !== "collapsed";
-      if (collapse) root.setAttribute("data-sidebar", "collapsed");
-      else root.removeAttribute("data-sidebar");
-      try { localStorage.setItem("locadot.sidebar", collapse ? "collapsed" : "expanded"); } catch (e) {}
-      syncCollapse();
-    });
-
-    function setDrawer(open) {
-      document.body.classList.toggle("sb-open", open);
-      backdrop.hidden = !open;
-      menuBtn.setAttribute("aria-expanded", String(open));
-      menuBtn.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
-      if (open && links[0]) links[0].focus();
-    }
-    menuBtn.addEventListener("click", function () { setDrawer(!document.body.classList.contains("sb-open")); });
-    backdrop.addEventListener("click", function () { setDrawer(false); });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && document.body.classList.contains("sb-open")) { setDrawer(false); menuBtn.focus(); }
-    });
-    var onDrawerChange = function () { if (!drawer.matches) setDrawer(false); };
-    if (drawer.addEventListener) drawer.addEventListener("change", onDrawerChange);
-
-    function setActive(id) {
-      links.forEach(function (a) {
-        if (a.getAttribute("href") === "#" + id) a.setAttribute("aria-current", "true");
-        else a.removeAttribute("aria-current");
-      });
-    }
-    links.forEach(function (a) {
-      a.addEventListener("click", function (e) {
-        var target = document.getElementById(a.getAttribute("href").slice(1));
-        if (!target) return;
-        e.preventDefault();
-        if (target.tagName === "DETAILS") target.open = true;
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-        setActive(target.id);
-        if (drawer.matches) setDrawer(false);
-      });
-    });
-
-    // The section nearest the top of the viewport wins; a click sets it immediately.
-    var visible = {};
-    if ("IntersectionObserver" in window) {
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (en) { visible[en.target.id] = en.isIntersecting ? en.boundingClientRect.top : undefined; });
-        var best = null;
-        links.forEach(function (a) {
-          var id = a.getAttribute("href").slice(1);
-          var el = document.getElementById(id);
-          if (visible[id] === undefined || !el) return;
-          var top = el.getBoundingClientRect().top;
-          if (best === null || Math.abs(top - 76) < Math.abs(best.top - 76)) best = { id: id, top: top };
-        });
-        if (best) setActive(best.id);
-      }, { rootMargin: "-64px 0px -40% 0px" });
-      links.forEach(function (a) {
-        var el = document.getElementById(a.getAttribute("href").slice(1));
-        if (el) io.observe(el);
-      });
-    }
-  })();
 
   var tokenMeta = document.querySelector('meta[name="locadot-token"]');
   var TOKEN = tokenMeta ? tokenMeta.getAttribute("content") : "";
@@ -1806,7 +1774,7 @@ const clientJs = `
 
   function refreshHubAndRemotes() {
     if (proxyStopped) return Promise.resolve();
-    return Promise.all([loadHub(), loadRemotes()]);
+    return Promise.all([loadHub(), loadRemotes()]).then(function () { renderOverview(); });
   }
 
   caToggle.addEventListener("click", function () {
@@ -1960,6 +1928,7 @@ const clientJs = `
     apiFetch("/api/hosts", { method: "POST", body: JSON.stringify({ host: hostVal, target: targetVal, insecure: insecureVal, cors: corsVal }) })
       .then(function () {
         addForm.reset();
+        applyHostDefaults();
         showToast("Added " + hostVal, "success");
         return loadHosts();
       })
@@ -2162,7 +2131,7 @@ const clientJs = `
     removeBtn.className = "btn btn-sm btn-danger";
     removeBtn.textContent = "Remove";
     removeBtn.addEventListener("click", function () {
-      if (!window.confirm("Remove host " + row.host + "?")) return;
+      if (prefs.confirm && !window.confirm("Remove host " + row.host + "?")) return;
       removeBtn.disabled = true;
       apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "DELETE" })
         .then(function () {
@@ -2339,17 +2308,6 @@ const clientJs = `
 
   // ---------- logs ----------
 
-  function loadLogs() {
-    return fetch("/api/logs?lines=200").then(parseJsonOrThrow).then(function (data) {
-      var lines = (data && data.lines) || [];
-      logsBox.textContent = lines.length ? lines.join("\\n") : "No log lines yet.";
-      logsBox.scrollTop = logsBox.scrollHeight;
-    }).catch(function (err) { apiError(err, "Couldn't load logs"); });
-  }
-
-  logsPanel.addEventListener("toggle", function () {
-    if (logsPanel.open) loadLogs();
-  });
   logsRefreshBtn.addEventListener("click", loadLogs);
   logsClearBtn.addEventListener("click", function () {
     if (!window.confirm("Clear logs?")) return;
@@ -2389,20 +2347,509 @@ const clientJs = `
 
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden && !proxyStopped) {
-      refreshAll();
+      refreshAll().then(tickViews);
       refreshHubAndRemotes();
     }
   });
 
-  pollTimer = setInterval(function () {
-    if (!document.hidden && !proxyStopped) refreshAll();
-  }, 5000);
 
   remotesPollTimer = setInterval(function () {
     if (!document.hidden && !proxyStopped) refreshHubAndRemotes();
   }, 15000);
 
-  refreshAll();
+  // ---------- preferences (per browser) ----------
+
+  var PREF_DEFAULTS = { refresh: 5000, start: "overview", confirm: true, insecure: false, cors: false };
+  var prefs = (function () {
+    var out = {};
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem("locadot.prefs") || "{}") || {}; } catch (e) {}
+    Object.keys(PREF_DEFAULTS).forEach(function (k) { out[k] = saved[k] !== undefined ? saved[k] : PREF_DEFAULTS[k]; });
+    return out;
+  })();
+  function savePrefs() {
+    try { localStorage.setItem("locadot.prefs", JSON.stringify(prefs)); } catch (e) {}
+  }
+
+  function applyHostDefaults() {
+    addInsecureInput.checked = !!prefs.insecure;
+    addCorsInput.checked = !!prefs.cors;
+  }
+  applyHostDefaults();
+
+  function setSwitch(el, on) {
+    el.setAttribute("aria-checked", String(on));
+    el.classList.toggle("on", on);
+  }
+
+  // ---------- sidebar + routing ----------
+
+  var VIEWS = ["overview", "hosts", "sharing", "remote", "machines", "logs", "settings"];
+  var TITLES = { overview: "Overview", hosts: "Hosts", sharing: "Public sharing", remote: "Remote access", machines: "Connected machines", logs: "Logs", settings: "Settings" };
+  var rootEl = document.documentElement;
+  var sidebarEl = document.getElementById("sidebar");
+  var collapseBtn = document.getElementById("sb-collapse");
+  var menuBtn = document.getElementById("sb-menu");
+  var backdropEl = document.getElementById("sb-backdrop");
+  var navLinks = Array.prototype.slice.call(sidebarEl.querySelectorAll("a.sb-link"));
+  var viewEls = {};
+  Array.prototype.forEach.call(document.querySelectorAll("section.view"), function (el) { viewEls[el.getAttribute("data-view")] = el; });
+  var drawerMq = window.matchMedia("(max-width: 899px)");
+  var currentView = null;
+
+  function isCollapsed() { return rootEl.getAttribute("data-sidebar") === "collapsed"; }
+  function setCollapsed(collapsed, persist) {
+    if (collapsed) rootEl.setAttribute("data-sidebar", "collapsed");
+    else rootEl.removeAttribute("data-sidebar");
+    if (persist) { try { localStorage.setItem("locadot.sidebar", collapsed ? "collapsed" : "expanded"); } catch (e) {} }
+    collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+    collapseBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+    collapseBtn.querySelector(".sb-label").textContent = collapsed ? "Expand" : "Collapse";
+    setSwitch(prefSidebar, collapsed);
+  }
+  collapseBtn.addEventListener("click", function () { setCollapsed(!isCollapsed(), true); });
+
+  function setDrawer(open) {
+    document.body.classList.toggle("sb-open", open);
+    backdropEl.hidden = !open;
+    menuBtn.setAttribute("aria-expanded", String(open));
+    menuBtn.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+    if (open && navLinks[0]) navLinks[0].focus();
+  }
+  menuBtn.addEventListener("click", function () { setDrawer(!document.body.classList.contains("sb-open")); });
+  backdropEl.addEventListener("click", function () { setDrawer(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && document.body.classList.contains("sb-open")) { setDrawer(false); menuBtn.focus(); }
+  });
+  if (drawerMq.addEventListener) drawerMq.addEventListener("change", function () { if (!drawerMq.matches) setDrawer(false); });
+
+  function viewFromHash() {
+    var name = (location.hash || "").replace(/^#\\/?/, "");
+    return VIEWS.indexOf(name) !== -1 ? name : null;
+  }
+
+  function showView(name) {
+    if (VIEWS.indexOf(name) === -1) name = "overview";
+    var changed = currentView !== name;
+    currentView = name;
+    VIEWS.forEach(function (v) { if (viewEls[v]) viewEls[v].hidden = v !== name; });
+    navLinks.forEach(function (a) {
+      if (a.getAttribute("data-view") === name) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    document.title = TITLES[name] + " · locadot";
+    try { localStorage.setItem("locadot.lastView", name); } catch (e) {}
+    if (drawerMq.matches) setDrawer(false);
+    if (changed) {
+      window.scrollTo(0, 0);
+      onViewEnter(name);
+    }
+  }
+
+  function onViewEnter(name) {
+    if (name === "logs") loadLogs();
+    if (name === "overview") { renderOverview(); loadOverviewLogs(); }
+    if (name === "sharing") renderShareList();
+    if (name === "settings") loadSettings();
+    if (name === "remote" || name === "machines") refreshHubAndRemotes();
+  }
+
+  window.addEventListener("hashchange", function () { showView(viewFromHash() || "overview"); });
+
+  // ---------- overview ----------
+
+  var ovHostsEl = document.getElementById("ov-hosts");
+  var ovHostsSubEl = document.getElementById("ov-hosts-sub");
+  var ovDownEl = document.getElementById("ov-down");
+  var ovHitsEl = document.getElementById("ov-hits");
+  var ovHitsSubEl = document.getElementById("ov-hits-sub");
+  var ovSharesEl = document.getElementById("ov-shares");
+  var ovSharesSubEl = document.getElementById("ov-shares-sub");
+  var ovHubEl = document.getElementById("ov-hub");
+  var ovHubSubEl = document.getElementById("ov-hub-sub");
+  var ovRemotesEl = document.getElementById("ov-remotes");
+  var ovRemotesSubEl = document.getElementById("ov-remotes-sub");
+  var ovHostList = document.getElementById("ov-host-list");
+  var ovHostEmpty = document.getElementById("ov-host-empty");
+  var ovChecks = document.getElementById("ov-checks");
+  var ovLogs = document.getElementById("ov-logs");
+  var sbSharesCountEl = document.getElementById("sb-shares-count");
+  var sbHubDot = document.getElementById("sb-hub-dot");
+
+  function isShared(row) {
+    var t = tunnelInfo(row);
+    return t.enabled || t.status === "up" || t.status === "starting";
+  }
+
+  function ovRow(title, sub, side, dotClass, href) {
+    var row = document.createElement(href ? "a" : "div");
+    row.className = "ov-row";
+    if (href) { row.href = href; row.style.color = "inherit"; row.style.textDecoration = "none"; }
+    var dot = document.createElement("span");
+    dot.className = "dot" + (dotClass ? " " + dotClass : "");
+    row.appendChild(dot);
+    var main = document.createElement("div");
+    main.className = "ov-main";
+    var t = document.createElement("span");
+    t.className = "ov-title";
+    t.textContent = title;
+    main.appendChild(t);
+    if (sub) {
+      var s = document.createElement("span");
+      s.className = "ov-sub";
+      s.textContent = sub;
+      main.appendChild(s);
+    }
+    row.appendChild(main);
+    var sideEl = document.createElement("div");
+    sideEl.className = "ov-side";
+    if (typeof side === "string") sideEl.textContent = side;
+    else if (side) sideEl.appendChild(side);
+    row.appendChild(sideEl);
+    return row;
+  }
+
+  function fmtNum(n) { return n >= 10000 ? Math.round(n / 1000) + "k" : String(n); }
+
+  function renderOverview() {
+    var hosts = lastHosts || [];
+    var up = 0, hits = 0, errors = 0, shared = 0, remoteCount = 0;
+    hosts.forEach(function (h) {
+      if (h.probe && h.probe.up) up++;
+      if (h.stats) { hits += h.stats.hits || 0; errors += h.stats.errors || 0; }
+      if (isShared(h)) shared++;
+      if (h.remote) remoteCount++;
+    });
+    var down = hosts.length - up;
+    if (lastStatus) {
+      ovHostsEl.textContent = String(hosts.length);
+      ovHostsSubEl.textContent = up + " up" + (remoteCount ? " · " + remoteCount + " from other machines" : "");
+      ovDownEl.textContent = String(down);
+      ovDownEl.className = "tile-big" + (down ? " bad" : " ok");
+      ovHitsEl.textContent = fmtNum(hits);
+      ovHitsSubEl.textContent = errors ? errors + " errors since start" : "since the proxy started";
+      ovSharesEl.textContent = String(shared);
+      ovSharesSubEl.textContent = cloudflaredInstalled ? (shared ? "public right now" : "nothing public") : "cloudflared not installed";
+    }
+    sbSharesCountEl.textContent = String(shared);
+    sbSharesCountEl.hidden = shared === 0;
+
+    var hub = lastHub;
+    var hubLabels = { off: "Off", starting: "Starting", login: "Login needed", up: "On", error: "Error" };
+    if (hub) {
+      ovHubEl.textContent = hubLabels[hub.status] || hub.status;
+      ovHubEl.className = "tile-big tile-word" + (hub.status === "up" ? " ok" : hub.status === "error" ? " bad" : hub.status === "off" ? "" : " warn");
+      ovHubSubEl.textContent = hub.url ? hub.url.replace(/^https?:\\/\\//, "") : (hub.status === "off" ? "not shared" : "");
+      sbHubDot.hidden = hub.status === "off";
+      sbHubDot.className = "dot sb-dot " + (hub.status === "up" ? "up" : hub.status === "error" ? "down" : "warn");
+    }
+    var remotes = lastRemotes || [];
+    ovRemotesEl.textContent = String(remotes.length);
+    ovRemotesSubEl.textContent = remotes.length ? remotes.map(function (r) { return r.name; }).join(", ") : "none";
+
+    clear(ovHostList);
+    ovHostEmpty.hidden = hosts.length !== 0 || !lastStatus;
+    var sorted = hosts.slice().sort(function (a, b) {
+      var au = a.probe && a.probe.up ? 1 : 0, bu = b.probe && b.probe.up ? 1 : 0;
+      return au - bu || a.host.localeCompare(b.host);
+    });
+    sorted.slice(0, 8).forEach(function (h) {
+      var p = h.probe || {};
+      var side = p.up ? ((p.status || "") + (p.ms !== undefined ? " · " + p.ms + "ms" : "")) : (p.error || "down");
+      var sub = h.remote ? "via " + h.remote.name : h.target;
+      ovHostList.appendChild(ovRow(h.host, sub, side, p.up ? "up" : "down", "#/hosts"));
+    });
+    if (sorted.length > 8) {
+      var more = document.createElement("a");
+      more.className = "ov-more";
+      more.href = "#/hosts";
+      more.textContent = "View all " + sorted.length + " hosts";
+      ovHostList.appendChild(more);
+    }
+
+    clear(ovChecks);
+    if (lastStatus) {
+      var sys = lastStatus.system, proxy = lastStatus.proxy;
+      ovChecks.appendChild(ovRow("Running", "pid " + proxy.pid + " · uptime " + fmtUptime(lastStatus.uptimeSec), "http :" + proxy.httpPort + " · https :" + proxy.httpsPort, "up"));
+      ovChecks.appendChild(ovRow("HTTPS certificates", sys.caTrusted === true ? "local CA is trusted" : "browsers will warn until the CA is trusted", sys.caTrusted === true ? "Trusted" : "Not trusted", sys.caTrusted === true ? "up" : "warn", "#/settings"));
+      ovChecks.appendChild(ovRow("Start at boot", sys.startup.method ? "via " + sys.startup.method : "", sys.startup.enabled ? "Enabled" : "Disabled", sys.startup.enabled ? "up" : "", "#/settings"));
+      var cf = sys.cloudflared || {};
+      ovChecks.appendChild(ovRow("cloudflared", cf.installed ? (cf.version || cf.path || "") : "needed for public sharing and remote access", cf.installed ? "Installed" : "Missing", cf.installed ? "up" : "warn", "#/sharing"));
+    }
+  }
+
+  function loadOverviewLogs() {
+    return fetch("/api/logs?lines=12").then(parseJsonOrThrow).then(function (data) {
+      var lines = (data && data.lines) || [];
+      ovLogs.textContent = lines.length ? lines.join("\\n") : "No log lines yet.";
+      ovLogs.scrollTop = ovLogs.scrollHeight;
+    }).catch(function () {});
+  }
+
+  // ---------- public sharing page ----------
+
+  var shareListEl = document.getElementById("share-list");
+  var shareEmptyEl = document.getElementById("share-empty");
+  var shareCountEl = document.getElementById("share-count");
+
+  function renderShareList() {
+    var hosts = (lastHosts || []).filter(function (h) { return !h.remote; });
+    clear(shareListEl);
+    shareEmptyEl.hidden = hosts.length !== 0;
+    var shared = hosts.filter(isShared).length;
+    shareCountEl.textContent = shared + " public";
+    shareCountEl.hidden = hosts.length === 0;
+    hosts.slice().sort(function (a, b) { return (isShared(b) ? 1 : 0) - (isShared(a) ? 1 : 0) || a.host.localeCompare(b.host); }).forEach(function (h) {
+      var t = tunnelInfo(h);
+      var side = document.createElement("div");
+      side.className = "ov-side";
+      if (t.status === "up" && t.url) {
+        var a = document.createElement("a");
+        a.className = "ov-link";
+        a.href = t.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = t.url.replace(/^https:\\/\\//, "");
+        side.appendChild(a);
+        side.appendChild(makeCopyButton(function () { return t.url; }));
+      }
+      side.appendChild(shareButton(h));
+      var sub = t.status === "up" ? "public" : t.status === "starting" ? "starting tunnel…" : t.status === "error" ? ("error: " + (t.error || "tunnel failed")) : h.target;
+      var dot = t.status === "up" ? "up" : t.status === "starting" ? "warn" : t.status === "error" ? "down" : "";
+      shareListEl.appendChild(ovRow(h.host, sub, side, dot));
+    });
+  }
+
+  // ---------- logs page ----------
+
+  var logsFilter = document.getElementById("logs-filter");
+  var logsLevel = document.getElementById("logs-level");
+  var logsLines = document.getElementById("logs-lines");
+  var logsAuto = document.getElementById("logs-auto");
+  var logsDownload = document.getElementById("logs-download");
+  var logsMeta = document.getElementById("logs-meta");
+  var lastLogLines = [];
+  var LEVELS = { error: 0, warn: 1, info: 2 };
+
+  function lineLevel(line) {
+    var m = /\\[(error|warn|info|debug|verbose|silly)\\]/i.exec(line);
+    return m ? m[1].toLowerCase() : "info";
+  }
+
+  function renderLogs() {
+    var q = (logsFilter.value || "").trim().toLowerCase();
+    var lvl = logsLevel.value;
+    var shown = lastLogLines.filter(function (line) {
+      if (q && line.toLowerCase().indexOf(q) === -1) return false;
+      if (lvl) {
+        var l = LEVELS[lineLevel(line)];
+        if (l === undefined || l > LEVELS[lvl]) return false;
+      }
+      return true;
+    });
+    var atBottom = logsBox.scrollHeight - logsBox.scrollTop - logsBox.clientHeight < 40;
+    logsBox.textContent = shown.length ? shown.join("\\n") : (lastLogLines.length ? "No lines match." : "No log lines yet.");
+    if (atBottom) logsBox.scrollTop = logsBox.scrollHeight;
+    logsMeta.textContent = (shown.length === lastLogLines.length ? lastLogLines.length + " lines" : shown.length + " of " + lastLogLines.length + " lines") + " · updated " + new Date().toLocaleTimeString();
+  }
+
+  function loadLogs() {
+    return fetch("/api/logs?lines=" + encodeURIComponent(logsLines.value)).then(parseJsonOrThrow).then(function (data) {
+      lastLogLines = (data && data.lines) || [];
+      renderLogs();
+    }).catch(function (err) { apiError(err, "Couldn't load logs"); });
+  }
+
+  logsFilter.addEventListener("input", renderLogs);
+  logsLevel.addEventListener("change", renderLogs);
+  logsLines.addEventListener("change", loadLogs);
+  logsDownload.addEventListener("click", function () {
+    var blob = new Blob([lastLogLines.join("\\n") + "\\n"], { type: "text/plain" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "locadot-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".log";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
+
+  // ---------- settings page ----------
+
+  var portsForm = document.getElementById("ports-form");
+  var httpPortInput = document.getElementById("set-http-port");
+  var httpsPortInput = document.getElementById("set-https-port");
+  var portsNote = document.getElementById("ports-note");
+  var portsError = document.getElementById("ports-error");
+  var portsSave = document.getElementById("ports-save");
+  var restartBtn = document.getElementById("restart-proxy-btn");
+  var restartNote = document.getElementById("restart-note");
+  var setBind = document.getElementById("set-bind");
+  var setBindNote = document.getElementById("set-bind-note");
+  var setHome = document.getElementById("set-home");
+  var setLogLevel = document.getElementById("set-loglevel");
+  var prefTheme = document.getElementById("pref-theme");
+  var prefRefresh = document.getElementById("pref-refresh");
+  var prefStart = document.getElementById("pref-start");
+  var prefSidebar = document.getElementById("pref-sidebar");
+  var prefConfirm = document.getElementById("pref-confirm");
+  var prefInsecure = document.getElementById("pref-insecure");
+  var prefCors = document.getElementById("pref-cors");
+  var tokenValue = document.getElementById("token-value");
+  var tokenReveal = document.getElementById("token-reveal");
+  var tokenCopy = document.getElementById("token-copy");
+  var dangerClearLogs = document.getElementById("danger-clear-logs");
+  var settingsLoaded = null;
+
+  function renderSettings(s) {
+    settingsLoaded = s;
+    if (document.activeElement !== httpPortInput) httpPortInput.value = String((s.saved && s.saved.httpPort) || s.httpPort);
+    if (document.activeElement !== httpsPortInput) httpsPortInput.value = String((s.saved && s.saved.httpsPort) || s.httpsPort);
+    var notes = ["Running on http :" + s.httpPort + " and https :" + s.httpsPort + "."];
+    if (s.env && s.env.httpPort) notes.push("LOCADOT_HTTP_PORT is set and overrides the saved HTTP port.");
+    if (s.env && s.env.httpsPort) notes.push("LOCADOT_HTTPS_PORT is set and overrides the saved HTTPS port.");
+    portsNote.textContent = notes.join(" ");
+    restartNote.hidden = !s.restartRequired;
+    setBind.textContent = (s.bind || []).join(", ");
+    setBindNote.textContent = s.env && s.env.bind ? "Set by LOCADOT_BIND." : "Loopback only. Set LOCADOT_BIND to change it.";
+    setHome.textContent = s.stateDir || "";
+    setLogLevel.textContent = s.logLevel || "info";
+  }
+
+  function loadSettings() {
+    return fetch("/api/settings").then(parseJsonOrThrow).then(renderSettings).catch(function (err) { apiError(err, "Couldn't load settings"); });
+  }
+
+  portsForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    portsError.hidden = true;
+    var h = parseInt(httpPortInput.value, 10), hs = parseInt(httpsPortInput.value, 10);
+    var bad = function (p) { return !(p >= 1 && p <= 65535); };
+    if (bad(h) || bad(hs) || h === hs) {
+      portsError.textContent = h === hs ? "HTTP and HTTPS need different ports." : "Ports must be between 1 and 65535.";
+      portsError.hidden = false;
+      return;
+    }
+    portsSave.disabled = true;
+    portsSave.classList.add("busy");
+    apiFetch("/api/settings", { method: "PUT", body: JSON.stringify({ httpPort: h, httpsPort: hs }) })
+      .then(function (s) {
+        renderSettings(s);
+        showToast(s.restartRequired ? "Ports saved. Restart to apply." : "Ports saved", s.warning ? "warn" : "success", s.warning);
+      })
+      .catch(function (err) { portsError.textContent = err.message; portsError.hidden = false; })
+      .then(function () { portsSave.disabled = false; portsSave.classList.remove("busy"); });
+  });
+
+  restartBtn.addEventListener("click", function () {
+    if (!window.confirm("Restart the proxy? Hosts are unavailable for a few seconds.")) return;
+    var s = settingsLoaded;
+    var nextPort = s ? ((s.env && s.env.httpPort) ? s.httpPort : ((s.saved && s.saved.httpPort) || s.httpPort)) : null;
+    restartBtn.disabled = true;
+    restartBtn.classList.add("busy");
+    apiFetch("/api/proxy/restart", { method: "POST" })
+      .then(function () {
+        showToast("Restarting proxy…", "success");
+        var base = location.protocol + "//" + location.hostname;
+        var samePort = !nextPort || String(nextPort) === (location.port || "80");
+        var tries = 0;
+        var wait = setInterval(function () {
+          tries++;
+          if (!samePort) {
+            var go = function () { clearInterval(wait); setTimeout(function () { location.href = base + ":" + nextPort + "/#/settings"; }, 1500); };
+            if (tries > 20) return go();
+            fetch("/healthz", { cache: "no-store" }).catch(go);
+            return;
+          }
+          if (tries < 3) return;
+          fetch("/healthz", { cache: "no-store" }).then(function (r) {
+            if (!r.ok) return;
+            clearInterval(wait);
+            location.reload();
+          }).catch(function () {});
+          if (tries > 40) { clearInterval(wait); restartBtn.disabled = false; restartBtn.classList.remove("busy"); }
+        }, 500);
+      })
+      .catch(function (err) {
+        apiError(err, "Couldn't restart the proxy");
+        restartBtn.disabled = false;
+        restartBtn.classList.remove("busy");
+      });
+  });
+
+  document.getElementById("set-home-copy").addEventListener("click", function (e) { copyText(setHome.textContent, e.currentTarget); });
+
+  function syncThemeSeg(mode) {
+    Array.prototype.forEach.call(prefTheme.querySelectorAll("button"), function (b) {
+      b.setAttribute("aria-checked", String(b.getAttribute("data-value") === mode));
+    });
+  }
+  prefTheme.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-value]");
+    if (b) setTheme(b.getAttribute("data-value"));
+  });
+  syncThemeSeg(document.documentElement.getAttribute("data-theme") || "system");
+  document.getElementById("theme-toggle").addEventListener("click", function () {
+    syncThemeSeg(document.documentElement.getAttribute("data-theme") || "system");
+  });
+
+  prefRefresh.value = String(prefs.refresh);
+  if (prefRefresh.value !== String(prefs.refresh)) prefRefresh.value = "5000";
+  prefRefresh.addEventListener("change", function () {
+    prefs.refresh = parseInt(prefRefresh.value, 10) || 0;
+    savePrefs();
+    schedulePoll();
+    showToast(prefs.refresh ? "Refreshing every " + prefs.refresh / 1000 + "s" : "Auto-refresh paused", "success");
+  });
+  prefStart.value = prefs.start;
+  prefStart.addEventListener("change", function () { prefs.start = prefStart.value; savePrefs(); });
+  prefSidebar.addEventListener("click", function () { setCollapsed(!isCollapsed(), true); });
+
+  function bindPrefSwitch(el, key, after) {
+    setSwitch(el, !!prefs[key]);
+    el.addEventListener("click", function () {
+      prefs[key] = !prefs[key];
+      savePrefs();
+      setSwitch(el, prefs[key]);
+      if (after) after();
+    });
+  }
+  bindPrefSwitch(prefConfirm, "confirm");
+  bindPrefSwitch(prefInsecure, "insecure", applyHostDefaults);
+  bindPrefSwitch(prefCors, "cors", applyHostDefaults);
+
+  var tokenShown = false;
+  tokenReveal.addEventListener("click", function () {
+    tokenShown = !tokenShown;
+    tokenValue.textContent = tokenShown ? TOKEN : "••••••••••••••••";
+    tokenReveal.textContent = tokenShown ? "Hide" : "Show";
+  });
+  tokenCopy.addEventListener("click", function () { copyText(TOKEN, tokenCopy); });
+  dangerClearLogs.addEventListener("click", function () { logsClearBtn.click(); });
+
+  // ---------- polling ----------
+
+  function tickViews() {
+    if (currentView === "overview") { renderOverview(); loadOverviewLogs(); }
+    else renderOverview();
+    if (currentView === "sharing") renderShareList();
+    if (currentView === "logs" && logsAuto.checked) loadLogs();
+  }
+
+  function schedulePoll() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (!prefs.refresh || proxyStopped) return;
+    pollTimer = setInterval(function () {
+      if (!document.hidden && !proxyStopped) refreshAll().then(tickViews);
+    }, prefs.refresh);
+  }
+
+  setCollapsed(isCollapsed(), false);
+  var lastViewSaved = null;
+  try { lastViewSaved = localStorage.getItem("locadot.lastView"); } catch (e) {}
+  showView(viewFromHash() || (prefs.start === "last" ? lastViewSaved : prefs.start) || "overview");
+  schedulePoll();
+
+  refreshAll().then(tickViews);
   refreshHubAndRemotes();
 })();
 `;
@@ -2431,16 +2878,15 @@ export function renderPage(nonce: string, token: string): string {
     <span id="version" class="muted mono sb-label"></span>
   </div>
   <div class="sb-links">
-    <a class="sb-link" href="#hosts-card" title="Hosts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg><span class="sb-label">Hosts</span><span id="sb-hosts-count" class="sb-count sb-label" hidden></span></a>
-    <a class="sb-link" href="#add-card" title="Add host"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span class="sb-label">Add host</span></a>
-    <a class="sb-link" href="#system-card" title="System"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="sb-label">System</span></a>
-    <a class="sb-link" href="#sharing-card" title="Public sharing"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="sb-label">Public sharing</span></a>
+    <a class="sb-link" href="#/overview" data-view="overview" title="Overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span class="sb-label">Overview</span></a>
+    <a class="sb-link" href="#/hosts" data-view="hosts" title="Hosts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg><span class="sb-label">Hosts</span><span id="sb-hosts-count" class="sb-count sb-label" hidden></span></a>
+    <a class="sb-link" href="#/sharing" data-view="sharing" title="Public sharing"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="sb-label">Public sharing</span><span id="sb-shares-count" class="sb-count sb-label" hidden></span></a>
     <div class="sb-section sb-label">Remote</div>
-    <a class="sb-link" href="#hub-card" title="Remote access"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/></svg><span class="sb-label">Remote access</span></a>
-    <a class="sb-link" href="#remotes-card" title="Connected machines"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="9" height="7" rx="1.5"/><rect x="13" y="13" width="9" height="7" rx="1.5"/><path d="M6.5 11v4.5h6.5M17.5 13V8.5H11"/></svg><span class="sb-label">Connected machines</span><span id="sb-remotes-count" class="sb-count sb-label" hidden></span></a>
-    <div class="sb-section sb-label">Tools</div>
-    <a class="sb-link" href="#logs-panel" title="Logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sb-label">Logs</span></a>
-    <a class="sb-link" href="#cli-card" title="CLI &amp; API"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-5-6-5M12 19h8"/></svg><span class="sb-label">CLI &amp; API</span></a>
+    <a class="sb-link" href="#/remote" data-view="remote" title="Remote access"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/></svg><span class="sb-label">Remote access</span><span id="sb-hub-dot" class="dot sb-dot" hidden></span></a>
+    <a class="sb-link" href="#/machines" data-view="machines" title="Connected machines"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="9" height="7" rx="1.5"/><rect x="13" y="13" width="9" height="7" rx="1.5"/><path d="M6.5 11v4.5h6.5M17.5 13V8.5H11"/></svg><span class="sb-label">Connected machines</span><span id="sb-remotes-count" class="sb-count sb-label" hidden></span></a>
+    <div class="sb-section sb-label">System</div>
+    <a class="sb-link" href="#/logs" data-view="logs" title="Logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sb-label">Logs</span></a>
+    <a class="sb-link" href="#/settings" data-view="settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="sb-label">Settings</span></a>
   </div>
   <button type="button" id="sb-collapse" class="sb-link sb-collapse" aria-controls="sidebar" aria-expanded="true" title="Collapse sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg><span class="sb-label">Collapse</span></button>
 </nav>
@@ -2475,13 +2921,56 @@ export function renderPage(nonce: string, token: string): string {
     </div>
   </div>
 
-  <div class="page-head">
-    <h2 class="page-title">Dashboard</h2>
-    <p class="page-sub">Local hostnames proxied to your dev servers, with optional public sharing.</p>
-  </div>
+  <section class="view" data-view="overview" aria-label="Overview">
+    <div class="page-head">
+      <h2 class="page-title">Overview</h2>
+      <p class="page-sub">Everything locadot is doing on this machine at a glance.</p>
+    </div>
+    <div class="tiles">
+      <a class="tile" href="#/hosts"><span class="label">Hosts</span><span id="ov-hosts" class="tile-big">—</span><span id="ov-hosts-sub" class="tile-sub"></span></a>
+      <a class="tile" href="#/hosts"><span class="label">Down</span><span id="ov-down" class="tile-big">—</span><span class="tile-sub">targets not answering</span></a>
+      <a class="tile" href="#/hosts"><span class="label">Requests</span><span id="ov-hits" class="tile-big">—</span><span id="ov-hits-sub" class="tile-sub">since the proxy started</span></a>
+      <a class="tile" href="#/sharing"><span class="label">Public shares</span><span id="ov-shares" class="tile-big">—</span><span id="ov-shares-sub" class="tile-sub"></span></a>
+      <a class="tile" href="#/remote"><span class="label">Remote access</span><span id="ov-hub" class="tile-big tile-word">—</span><span id="ov-hub-sub" class="tile-sub"></span></a>
+      <a class="tile" href="#/machines"><span class="label">Connected machines</span><span id="ov-remotes" class="tile-big">—</span><span id="ov-remotes-sub" class="tile-sub"></span></a>
+    </div>
+    <div class="grid-2">
+      <section class="card" aria-label="Host health">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Host health</h3></div>
+          <div class="card-tools"><a class="btn btn-sm" href="#/hosts">Manage hosts</a></div>
+        </div>
+        <div id="ov-host-list" class="ov-list"></div>
+        <div id="ov-host-empty" class="empty" hidden>
+          <span class="empty-icon" aria-hidden="true">+</span>
+          <p>No hosts yet.</p>
+          <a class="btn btn-sm btn-primary" href="#/hosts">Add your first host</a>
+        </div>
+      </section>
+      <section class="card" aria-label="Proxy status">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Proxy</h3></div>
+          <div class="card-tools"><a class="btn btn-sm" href="#/settings">Settings</a></div>
+        </div>
+        <div id="ov-checks" class="ov-list"></div>
+      </section>
+    </div>
+    <section class="card" aria-label="Recent activity">
+      <div class="card-head">
+        <div class="card-title-wrap"><h3 class="card-title">Recent activity</h3></div>
+        <div class="card-tools"><a class="btn btn-sm" href="#/logs">All logs</a></div>
+      </div>
+      <pre id="ov-logs" class="logs-box logs-short" aria-live="off"></pre>
+    </section>
+  </section>
 
-  <div class="layout">
-    <div class="col-primary">
+  <section class="view" data-view="hosts" aria-label="Hosts" hidden>
+    <div class="page-head">
+      <h2 class="page-title">Hosts</h2>
+      <p class="page-sub">Local hostnames and the dev servers they proxy to.</p>
+    </div>
+    <div class="layout">
+      <div class="col-primary">
       <section id="hosts-card" class="card" aria-label="Registered hosts">
         <div class="card-head">
           <div class="card-title-wrap">
@@ -2526,7 +3015,89 @@ export function renderPage(nonce: string, token: string): string {
           </table>
         </div>
       </section>
+      </div>
+      <aside class="col-secondary">
+      <section id="add-card" class="card" aria-label="Add proxy host">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Add host</h3></div>
+        </div>
+        <form id="add-form" class="card-body" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label for="add-host">Host</label>
+              <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
+            </div>
+            <div class="field">
+              <label for="add-target">Target</label>
+              <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080, https://&hellip;" autocomplete="off" aria-describedby="add-error" required>
+            </div>
+            <div class="form-checks">
+              <div class="field field-checkbox">
+                <input type="checkbox" id="add-insecure" name="insecure">
+                <label for="add-insecure">Insecure TLS</label>
+              </div>
+              <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
+                <input type="checkbox" id="add-cors" name="cors">
+                <label for="add-cors">Bypass CORS</label>
+              </div>
+            </div>
+            <button type="submit" id="add-submit" class="btn btn-primary btn-block">Add proxy</button>
+          </div>
+          <div id="add-error" class="field-error" role="alert" hidden></div>
+        </form>
+      </section>
+      </aside>
+    </div>
+  </section>
 
+  <section class="view" data-view="sharing" aria-label="Public sharing" hidden>
+    <div class="page-head">
+      <h2 class="page-title">Public sharing</h2>
+      <p class="page-sub">Put a single host on a public https://*.trycloudflare.com URL. Anyone with the link can reach it.</p>
+    </div>
+    <div class="layout">
+      <div class="col-primary">
+        <section id="share-card" class="card" aria-label="Hosts you can share">
+          <div class="card-head">
+            <div class="card-title-wrap"><h3 class="card-title">Hosts</h3><span id="share-count" class="badge badge-count" hidden></span></div>
+          </div>
+          <div id="share-list" class="ov-list"></div>
+          <div id="share-empty" class="empty" hidden>
+            <span class="empty-icon" aria-hidden="true">+</span>
+            <p>Add a host first, then share it from here.</p>
+          </div>
+        </section>
+      </div>
+      <aside class="col-secondary">
+      <section id="sharing-card" class="card" aria-label="Public sharing">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Cloudflare Tunnel</h3></div>
+        </div>
+        <div class="stat-list">
+          <div class="stat-row">
+            <div class="stat-main">
+              <div class="label">Cloudflare Tunnel</div>
+              <div id="tile-cloudflared-value" class="tile-value">—</div>
+              <div id="tile-cloudflared-sub" class="tile-sub mono"></div>
+              <div class="tile-sub">Share a host on a public https://*.trycloudflare.com URL with the Share button. No Cloudflare account needed.</div>
+              <div class="tile-actions">
+                <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      </aside>
+    </div>
+  </section>
+
+  <section class="view" data-view="remote" aria-label="Remote access" hidden>
+    <div class="page-head">
+      <h2 class="page-title">Remote access</h2>
+      <p class="page-sub">Let other locadots use this machine's hosts through a Cloudflare hostname.</p>
+    </div>
+    <div class="layout">
+      <div class="col-primary">
       <section id="hub-card" class="card" aria-label="Remote access">
         <div class="card-head">
           <div class="card-title-wrap"><h3 class="card-title">Remote access</h3></div>
@@ -2596,6 +3167,31 @@ export function renderPage(nonce: string, token: string): string {
           <div id="invites-list" class="invite-list"></div>
         </div>
       </section>
+      </div>
+      <aside class="col-secondary">
+        <section class="card" aria-label="Roles">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">How it works</h3></div></div>
+          <div class="card-body help-list">
+            <p>1. Turn on a tunnel: your own domain keeps the same address; a quick tunnel is free but its URL changes on restart.</p>
+            <p>2. Create a pairing link. It works once and expires after 5 minutes.</p>
+            <p>3. The other machine pastes it under <a href="#/machines">Connected machines</a>.</p>
+            <div class="role-table">
+              <div><strong>Viewer</strong><span>browse the hosts you pick</span></div>
+              <div><strong>Editor</strong><span>also add and change hosts here</span></div>
+              <div><strong>Admin</strong><span>also delete hosts and change sharing</span></div>
+            </div>
+            <p class="dim">Editors can reach anything this machine can. Change or revoke a role any time under Peers.</p>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <section class="view" data-view="machines" aria-label="Connected machines" hidden>
+    <div class="page-head">
+      <h2 class="page-title">Connected machines</h2>
+      <p class="page-sub">Other locadots you've connected to. Their hosts show up in your Hosts list.</p>
+    </div>
 
       <section id="remotes-card" class="card" aria-label="Connected machines">
         <div class="card-head">
@@ -2621,17 +3217,101 @@ export function renderPage(nonce: string, token: string): string {
         </div>
         <div id="remotes-list" class="remote-list"></div>
       </section>
+  </section>
 
-      <details id="logs-panel" class="card">
-        <summary><span class="card-title">Logs</span><span class="card-desc">last 200 lines</span></summary>
-        <div class="logs-body">
-          <div class="logs-actions">
-            <button type="button" id="logs-refresh" class="btn btn-sm">Refresh</button>
-            <button type="button" id="logs-clear" class="btn btn-sm btn-danger">Clear</button>
-          </div>
-          <pre id="logs-box" class="logs-box" aria-live="off"></pre>
+  <section class="view" data-view="logs" aria-label="Logs" hidden>
+    <div class="page-head">
+      <h2 class="page-title">Logs</h2>
+      <p class="page-sub">The proxy's log file.</p>
+    </div>
+    <section id="logs-panel" class="card" aria-label="Logs">
+      <div class="card-head logs-head">
+        <div class="card-tools logs-tools">
+          <input type="search" id="logs-filter" class="input input-sm input-search" placeholder="Filter lines" aria-label="Filter log lines" autocomplete="off">
+          <select id="logs-level" class="input input-sm" aria-label="Level">
+            <option value="">All levels</option>
+            <option value="error">Errors</option>
+            <option value="warn">Warnings+</option>
+            <option value="info">Info+</option>
+          </select>
+          <select id="logs-lines" class="input input-sm" aria-label="Lines">
+            <option value="200">Last 200</option>
+            <option value="500">Last 500</option>
+            <option value="1000">Last 1000</option>
+          </select>
+          <label class="check-inline"><input type="checkbox" id="logs-auto" checked> Live</label>
         </div>
-      </details>
+        <div class="card-tools">
+          <button type="button" id="logs-refresh" class="btn btn-sm">Refresh</button>
+          <button type="button" id="logs-download" class="btn btn-sm">Download</button>
+          <button type="button" id="logs-clear" class="btn btn-sm btn-danger">Clear</button>
+        </div>
+      </div>
+      <pre id="logs-box" class="logs-box logs-full" aria-live="off"></pre>
+      <div id="logs-meta" class="logs-meta dim"></div>
+    </section>
+  </section>
+
+  <section class="view" data-view="settings" aria-label="Settings" hidden>
+    <div class="page-head">
+      <h2 class="page-title">Settings</h2>
+      <p class="page-sub">Proxy, security and dashboard preferences.</p>
+    </div>
+    <div class="layout">
+      <div class="col-primary">
+        <section id="proxy-settings-card" class="card" aria-label="Proxy settings">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Proxy</h3></div></div>
+          <form id="ports-form" class="card-body" novalidate>
+            <div class="form-row-2">
+              <div class="field"><label for="set-http-port">HTTP port</label><input type="number" id="set-http-port" class="input" min="1" max="65535" required></div>
+              <div class="field"><label for="set-https-port">HTTPS port</label><input type="number" id="set-https-port" class="input" min="1" max="65535" required></div>
+            </div>
+            <div id="ports-note" class="tile-sub"></div>
+            <div id="ports-error" class="field-error" role="alert" hidden></div>
+            <div class="form-actions">
+              <button type="submit" id="ports-save" class="btn btn-sm btn-primary">Save ports</button>
+              <button type="button" id="restart-proxy-btn" class="btn btn-sm">Restart proxy</button>
+            </div>
+            <div id="restart-note" class="hub-warn" hidden>Saved. Restart the proxy to use the new ports.</div>
+          </form>
+          <div class="stat-list">
+            <div class="stat-row"><div class="stat-main"><div class="label">Listening on</div><div id="set-bind" class="tile-value mono">—</div><div id="set-bind-note" class="tile-sub"></div></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">State directory</div><div id="set-home" class="tile-value mono">—</div></div><div class="stat-side"><button type="button" id="set-home-copy" class="copy-btn">Copy</button></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Log level</div><div id="set-loglevel" class="tile-value mono">—</div><div class="tile-sub">Set LOCADOT_LOG_LEVEL before starting to change it.</div></div></div>
+          </div>
+        </section>
+
+        <section class="card" aria-label="Dashboard preferences">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Dashboard</h3></div></div>
+          <div class="stat-list">
+            <div class="stat-row"><div class="stat-main"><div class="label">Theme</div><div class="tile-sub">Follow the system, or pick one.</div></div>
+              <div class="stat-side"><div id="pref-theme" class="segmented" role="radiogroup" aria-label="Theme">
+                <button type="button" role="radio" data-value="system">System</button><button type="button" role="radio" data-value="light">Light</button><button type="button" role="radio" data-value="dark">Dark</button>
+              </div></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Refresh every</div><div class="tile-sub">How often hosts and status are polled.</div></div>
+              <div class="stat-side"><select id="pref-refresh" class="input input-sm" aria-label="Refresh interval">
+                <option value="2000">2 seconds</option><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="30000">30 seconds</option><option value="0">Paused</option>
+              </select></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Open on</div><div class="tile-sub">The page shown when the dashboard opens.</div></div>
+              <div class="stat-side"><select id="pref-start" class="input input-sm" aria-label="Start page">
+                <option value="overview">Overview</option><option value="hosts">Hosts</option><option value="last">Last visited</option>
+              </select></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Collapsed sidebar</div><div class="tile-sub">Show only icons in the sidebar.</div></div>
+              <div class="stat-side"><button type="button" id="pref-sidebar" class="switch" role="switch" aria-checked="false" aria-label="Collapsed sidebar"><span class="switch-knob"></span></button></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Ask before removing</div><div class="tile-sub">Confirm before a host is removed.</div></div>
+              <div class="stat-side"><button type="button" id="pref-confirm" class="switch" role="switch" aria-checked="true" aria-label="Ask before removing"><span class="switch-knob"></span></button></div></div>
+          </div>
+        </section>
+
+        <section class="card" aria-label="New host defaults">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">New host defaults</h3></div></div>
+          <div class="stat-list">
+            <div class="stat-row"><div class="stat-main"><div class="label">Insecure TLS</div><div class="tile-sub">Accept self-signed certificates on https targets.</div></div>
+              <div class="stat-side"><button type="button" id="pref-insecure" class="switch" role="switch" aria-checked="false" aria-label="Insecure TLS by default"><span class="switch-knob"></span></button></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Bypass CORS</div><div class="tile-sub">Send the target's own Origin and allow any origin.</div></div>
+              <div class="stat-side"><button type="button" id="pref-cors" class="switch" role="switch" aria-checked="false" aria-label="Bypass CORS by default"><span class="switch-knob"></span></button></div></div>
+          </div>
+        </section>
 
       <section id="cli-card" class="card" aria-label="Use from CLI or scripts">
         <div class="card-head">
@@ -2652,48 +3332,14 @@ export function renderPage(nonce: string, token: string): string {
           </div>
         </div>
       </section>
-    </div>
-
-    <aside class="col-secondary">
-      <section id="add-card" class="card" aria-label="Add proxy host">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">Add host</h3></div>
-        </div>
-        <form id="add-form" class="card-body" novalidate>
-          <div class="form-grid">
-            <div class="field">
-              <label for="add-host">Host</label>
-              <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
-            </div>
-            <div class="field">
-              <label for="add-target">Target</label>
-              <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080, https://&hellip;" autocomplete="off" aria-describedby="add-error" required>
-            </div>
-            <div class="form-checks">
-              <div class="field field-checkbox">
-                <input type="checkbox" id="add-insecure" name="insecure">
-                <label for="add-insecure">Insecure TLS</label>
-              </div>
-              <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
-                <input type="checkbox" id="add-cors" name="cors">
-                <label for="add-cors">Bypass CORS</label>
-              </div>
-            </div>
-            <button type="submit" id="add-submit" class="btn btn-primary btn-block">Add proxy</button>
-          </div>
-          <div id="add-error" class="field-error" role="alert" hidden></div>
-        </form>
-      </section>
-
+      </div>
+      <aside class="col-secondary">
       <section id="system-card" class="card" aria-label="System status">
         <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">System</h3></div>
-          <div class="card-tools">
-            <button type="button" id="stop-proxy-btn" class="btn btn-sm btn-ghost-danger">Stop proxy</button>
-          </div>
+          <div class="card-title-wrap"><h3 class="card-title">System &amp; security</h3></div>
         </div>
         <div class="stat-list">
-          <div class="stat-row">
+          <div class="stat-row" hidden>
             <div class="stat-main">
               <div class="label">Proxy</div>
               <div id="tile-proxy-ports" class="tile-value mono">—</div>
@@ -2736,27 +3382,26 @@ export function renderPage(nonce: string, token: string): string {
         </div>
       </section>
 
-      <section id="sharing-card" class="card" aria-label="Public sharing">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">Sharing</h3></div>
-        </div>
-        <div class="stat-list">
-          <div class="stat-row">
-            <div class="stat-main">
-              <div class="label">Cloudflare Tunnel</div>
-              <div id="tile-cloudflared-value" class="tile-value">—</div>
-              <div id="tile-cloudflared-sub" class="tile-sub mono"></div>
-              <div class="tile-sub">Share a host on a public https://*.trycloudflare.com URL with the Share button. No Cloudflare account needed.</div>
-              <div class="tile-actions">
-                <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
-              </div>
-            </div>
+        <section class="card" aria-label="API token">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">API token</h3></div></div>
+          <div class="card-body token-body">
+            <div class="tile-sub">Scripts send it as <code class="mono">X-Locadot-Token</code>. It changes every time the proxy starts.</div>
+            <div class="token-row"><code id="token-value" class="mono token-value">••••••••••••••••</code>
+              <button type="button" id="token-reveal" class="copy-btn">Show</button>
+              <button type="button" id="token-copy" class="copy-btn">Copy</button></div>
           </div>
-        </div>
-      </section>
+        </section>
 
-    </aside>
-  </div>
+        <section class="card danger-card" aria-label="Danger zone">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Danger zone</h3></div></div>
+          <div class="stat-list">
+            <div class="stat-row"><div class="stat-main"><div class="label">Clear logs</div><div class="tile-sub">Empty the log file.</div></div><div class="stat-side"><button type="button" id="danger-clear-logs" class="btn btn-sm btn-danger">Clear</button></div></div>
+            <div class="stat-row"><div class="stat-main"><div class="label">Stop proxy</div><div class="tile-sub">All hosts stop working until <code class="mono">locadot start</code>.</div></div><div class="stat-side"><button type="button" id="stop-proxy-btn" class="btn btn-sm btn-danger">Stop</button></div></div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </section>
 </main>
 <footer>
   <a href="https://github.com/avinashid/locadot" target="_blank" rel="noopener noreferrer">github.com/avinashid/locadot</a>

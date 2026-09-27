@@ -36,7 +36,7 @@ const launchArgs = () => {
  * and node hidden too. cmd also appends the output to the log, like the cron line does.
  */
 export const windowsLauncherScript = (command: string, args: string[]) => {
-  const env = `set LOCADOT_HTTP_PORT=${Constants.server.httpPort}&& set LOCADOT_HTTPS_PORT=${Constants.server.httpsPort}&&`;
+  const env = `set LOCADOT_HTTP_PORT=${Constants.server.httpPort}&& set LOCADOT_HTTPS_PORT=${Constants.server.httpsPort}&& set LOCADOT_USER_PORTS=${Constants.userPortEnv()}&&`;
   const line = `cmd /d /c ${env} ${[command, ...args].map((a) => `"${a}"`).join(" ")} >> "${Constants.paths.LOGS}" 2>&1`;
   return `CreateObject("WScript.Shell").Run "${line.replace(/"/g, '""')}", 0, False\r\n`;
 };
@@ -91,7 +91,7 @@ export default class Startup {
         break;
       }
       case "linux": {
-        const env = `LOCADOT_HOME=${quote(Constants.paths.HOME)} LOCADOT_HTTP_PORT=${Constants.server.httpPort} LOCADOT_HTTPS_PORT=${Constants.server.httpsPort}`;
+        const env = `LOCADOT_HOME=${quote(Constants.paths.HOME)} LOCADOT_HTTP_PORT=${Constants.server.httpPort} LOCADOT_HTTPS_PORT=${Constants.server.httpsPort} LOCADOT_USER_PORTS=${Constants.userPortEnv()}`;
         const line = `@reboot ${env} ${[command, ...args].map(quote).join(" ")} >> ${quote(Constants.paths.LOGS)} 2>&1 ${CRON_MARK}`;
         const edit = cronEdit(line);
         if (linuxNeedsRoot()) {

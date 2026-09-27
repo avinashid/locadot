@@ -191,6 +191,9 @@ each time the proxy starts.
 | `POST /api/trust` | `{ "trusted": true }` | Trust or untrust the CA. |
 | `POST /api/logs/clear` | | Clear the log. |
 | `POST /api/proxy/stop` | | Stop the proxy. Use `locadot start` to bring it back. |
+| `GET /api/settings` | | Running ports/bind, `logLevel`, `stateDir`, `saved`/`env` overrides, and `restartRequired`. |
+| `PUT /api/settings` | `{ "httpPort": 8080, "httpsPort": 8443 }` | Save new ports to the config file (400 if invalid or equal). Takes effect after a restart. |
+| `POST /api/proxy/restart` | | Restart the proxy (e.g. to pick up saved ports). |
 
 Errors are `{ "error": "...", "hint": "<CLI command>" }` with a 4xx/5xx status.
 

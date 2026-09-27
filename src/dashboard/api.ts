@@ -1,5 +1,8 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import http from "http";
+import { spawn } from "child_process";
 import Constants from "../constants";
 import HostOps, { ConflictError, NotFoundError } from "../lib/hosts";
 import { InputError } from "../lib/localhost";
@@ -160,6 +163,63 @@ const sanitizeRemote = (remote: Remote) => {
   return rest;
 };
 
+/** Reads CONFIG_FILE as-is (whatever `locadot start --port/--https-port` last wrote), tolerating a missing/corrupt file. */
+function readConfig(): Record<string, unknown> {
+  try {
+    const raw = JSON.parse(fs.readFileSync(Constants.paths.CONFIG_FILE, "utf8"));
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+const savedPorts = (): { httpPort?: number; httpsPort?: number } => {
+  const config = readConfig();
+  return {
+    httpPort: Constants.validPort(config.httpPort),
+    httpsPort: Constants.validPort(config.httpsPort),
+  };
+};
+
+/** Settings response: what the running proxy uses, what's saved/env-overridden, and whether they've drifted apart. */
+function buildSettingsBody(ctx: DashboardContext, warning?: string) {
+  const saved = savedPorts();
+  const env = {
+    httpPort: Constants.userEnvPort("LOCADOT_HTTP_PORT") !== undefined,
+    httpsPort: Constants.userEnvPort("LOCADOT_HTTPS_PORT") !== undefined,
+    bind: Boolean(process.env.LOCADOT_BIND),
+  };
+  const nextHttpPort = Constants.userEnvPort("LOCADOT_HTTP_PORT") ?? saved.httpPort ?? 80;
+  const nextHttpsPort = Constants.userEnvPort("LOCADOT_HTTPS_PORT") ?? saved.httpsPort ?? 443;
+  const restartRequired = nextHttpPort !== ctx.proxyInfo.httpPort || nextHttpsPort !== ctx.proxyInfo.httpsPort;
+  return {
+    httpPort: ctx.proxyInfo.httpPort,
+    httpsPort: ctx.proxyInfo.httpsPort,
+    bind: ctx.proxyInfo.bind,
+    logLevel: logger.level,
+    stateDir: ctx.proxyInfo.stateDir,
+    saved,
+    env,
+    restartRequired,
+    ...(warning ? { warning } : {}),
+  };
+}
+
+const validPortInput = (value: unknown, name: string): number | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new ApiError(400, `\`${name}\` must be an integer between 1 and 65535.`);
+  }
+  return value;
+};
+
+/** Compiled layout: dist/dashboard/api.js -> dist/index.js. Under tsx (src/dashboard) the compiled dist/index.js is still what gets spawned. */
+function resolveCliPath(): string {
+  const compiled = path.join(__dirname, "..", "index.js");
+  const fromSource = path.join(__dirname, "..", "..", "dist", "index.js");
+  return __filename.endsWith(".ts") ? fromSource : compiled;
+}
+
 const REMOTE_SYNC_TIMEOUT_MS = 5000;
 
 async function buildRemoteRows(ctx: DashboardContext) {
@@ -237,6 +297,10 @@ export async function route(
     return { status: 200, body: { remotes: await buildRemoteRows(ctx) } };
   }
 
+  if (path === "/api/settings" && (method === "GET" || method === "HEAD")) {
+    return { status: 200, body: buildSettingsBody(ctx) };
+  }
+
   const hostMatch = /^\/api\/hosts\/([^/]+)$/.exec(path);
   const inviteMatch = /^\/api\/invites\/([^/]+)$/.exec(path);
   const peerMatch = /^\/api\/peers\/([^/]+)$/.exec(path);
@@ -249,8 +313,9 @@ export async function route(
   const known =
     (path === "/api/hosts" && method === "POST") ||
     (hostMatch && (method === "PUT" || method === "DELETE")) ||
-    (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/cloudflared/install", "/api/hub", "/api/invites", "/api/remotes"].includes(path) &&
+    (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/proxy/restart", "/api/cloudflared/install", "/api/hub", "/api/invites", "/api/remotes"].includes(path) &&
       method === "POST") ||
+    (path === "/api/settings" && method === "PUT") ||
     (inviteMatch && method === "DELETE") ||
     (peerMatch && (method === "PUT" || method === "DELETE")) ||
     (remoteMatch && (method === "PUT" || method === "DELETE")) ||
@@ -264,6 +329,30 @@ export async function route(
   const body = await readJson(req);
 
   try {
+    if (path === "/api/settings" && method === "PUT") {
+      const newHttp = validPortInput(body.httpPort, "httpPort");
+      const newHttps = validPortInput(body.httpsPort, "httpsPort");
+      if (newHttp === undefined && newHttps === undefined) throw new ApiError(400, "Provide `httpPort` and/or `httpsPort`.");
+
+      const config = readConfig();
+      const saved = savedPorts();
+      const finalHttp = newHttp ?? saved.httpPort ?? ctx.proxyInfo.httpPort;
+      const finalHttps = newHttps ?? saved.httpsPort ?? ctx.proxyInfo.httpsPort;
+      if (finalHttp === finalHttps) throw new ApiError(400, "`httpPort` and `httpsPort` can't be the same.");
+
+      FileModule.ensureDir();
+      fs.writeFileSync(Constants.paths.CONFIG_FILE, JSON.stringify({ ...config, httpPort: finalHttp, httpsPort: finalHttps }, null, 2) + "\n");
+      logger.info(`⚙️ dashboard: settings saved → http ${finalHttp}, https ${finalHttps}`);
+
+      const warnings: string[] = [];
+      if (newHttp !== undefined && Constants.userEnvPort("LOCADOT_HTTP_PORT") !== undefined) {
+        warnings.push("LOCADOT_HTTP_PORT is set and overrides this");
+      }
+      if (newHttps !== undefined && Constants.userEnvPort("LOCADOT_HTTPS_PORT") !== undefined) {
+        warnings.push("LOCADOT_HTTPS_PORT is set and overrides this");
+      }
+      return { status: 200, body: buildSettingsBody(ctx, warnings.length ? warnings.join("; ") : undefined) };
+    }
     if (path === "/api/hosts") {
       const { host, entry } = await HostOps.add({ host: body.host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
       ctx.reload();
@@ -461,6 +550,21 @@ export async function route(
     case "/api/proxy/stop":
       setTimeout(() => ctx.shutdown("dashboard stop"), 100);
       return { status: 200, body: { ok: true, hint: "locadot start" } };
+    case "/api/proxy/restart": {
+      const cli = resolveCliPath();
+      if (!fs.existsSync(cli)) {
+        throw new ApiError(500, `❌ ${cli} not found. Run \`pnpm build\` first.`, "locadot restart");
+      }
+      // Drop the CLI's pinned port copies so the child re-reads CONFIG_FILE; keep genuine user overrides.
+      const restartEnv: NodeJS.ProcessEnv = { ...process.env };
+      delete restartEnv.LOCADOT_USER_PORTS;
+      for (const name of ["LOCADOT_HTTP_PORT", "LOCADOT_HTTPS_PORT"] as const) {
+        if (Constants.userEnvPort(name) === undefined) delete restartEnv[name];
+      }
+      spawn(process.execPath, [cli, "restart"], { detached: true, stdio: "ignore", env: restartEnv, windowsHide: true }).unref();
+      logger.info("🔁 dashboard: restarting proxy");
+      return { status: 200, body: { ok: true, hint: "locadot restart" } };
+    }
   }
   return undefined;
 }
