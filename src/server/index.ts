@@ -9,7 +9,7 @@ import { handleProxyResponse } from "../proxy/response";
 import { TunnelManager } from "../proxy/tunnel";
 import { HubTunnel } from "../proxy/hub-tunnel";
 import { classify, handleHubApi } from "../proxy/hub";
-import { remoteFor } from "../proxy/remote";
+import { localFor, remoteFor } from "../proxy/remote";
 import HubConfigStore from "../lib/hub-config";
 import FileModule from "../utils/file";
 import logger from "../utils/logger";
@@ -70,8 +70,18 @@ export async function startCentralProxy() {
     lookup: (host) => registry.get().hosts[tunnels.hostFor(host) ?? host],
     tunnelFor: (host) => tunnels.hostFor(host),
     remoteFor,
+    localFor,
+    remoteHosts: (name) =>
+      Object.entries(registry.get().hosts)
+        .filter(([, entry]) => entry.remote?.name === name)
+        .map(([host]) => host)
+        .sort(),
     hub: {
-      classify: (req) => classify(req, hub.publicHost(), registry.get().hosts),
+      classify: (req) =>
+        classify(req, hub.publicHost(), registry.get().hosts, {
+          localhost: HubConfigStore.readCached()?.localhost !== false,
+          blockedPorts: [info.httpPort, info.httpsPort],
+        }),
       api: (req, res) => {
         handleHubApi(req, res, { getRegistry: registry.get, reload: registry.reload, retryTunnels: () => tunnels.sync(registry.get().hosts, true) }).catch((error) => {
           logger.error(error);

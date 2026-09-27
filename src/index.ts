@@ -156,6 +156,10 @@ program
   .requiredOption("-u, --url <url>", "Public base URL that forwards to this proxy's HTTP port")
   .action(run((options) => Commands.hubManual(options)));
 program.command("hub:off").description("Turn off remote access").action(run(() => Commands.hubOff()));
+program
+  .command("hub:localhost <onOrOff>")
+  .description("Sender: let admin peers reach any port on this machine's localhost (on/off)")
+  .action(run((value) => Commands.hubLocalhost(value)));
 
 program
   .command("share")
@@ -180,6 +184,7 @@ program
   .command("connect <string>")
   .description("Connect to a remote locadot using its pairing string")
   .option("--name <name>", "Local name for this remote (defaults to the sender's hostname)")
+  .option("--domain <domain>", "Local domain for the sender's localhost, e.g. dev (admin only; random if omitted)")
   .action(run((value, options) => Commands.connect(value, options)));
 program
   .command("remotes")
@@ -187,6 +192,11 @@ program
   .option("--json", "Machine-readable output")
   .action(run((options) => Commands.remotes(options)));
 program.command("remote:sync <name>").description("Refresh role and available hosts for a remote").action(run((name) => Commands.remoteSync(name)));
+program
+  .command("remote:domain <name> [domain]")
+  .description("Set the local domain for a remote's localhost (admin only); no domain picks a random one")
+  .option("--off", "Remove the domain")
+  .action(run((name, domain, options) => Commands.remoteDomain(name, domain, options)));
 program
   .command("remote:alias <name> <remoteHost> <localHost>")
   .description("Map a local .localhost name to a host on a remote")

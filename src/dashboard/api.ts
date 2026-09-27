@@ -240,6 +240,8 @@ async function buildRemoteRows(ctx: DashboardContext) {
           hosts: result.remote.hosts,
           sender: result.remote.sender,
           connectedAt: result.remote.connectedAt,
+          domain: result.remote.domain,
+          localhost: result.remote.localhost,
           status: "ok" as const,
           available: result.hosts,
           mapped: result.mapped,
@@ -252,6 +254,8 @@ async function buildRemoteRows(ctx: DashboardContext) {
           hosts: remote.hosts,
           sender: remote.sender,
           connectedAt: remote.connectedAt,
+          domain: remote.domain,
+          localhost: remote.localhost,
           status: "error" as const,
           error: clean(String(error?.message || error)),
           available: null,
@@ -270,6 +274,7 @@ function buildHubBody(ctx: DashboardContext) {
   return {
     hub: ctx.hub(),
     config: config ?? null,
+    localhost: config?.localhost !== false,
     invites: invites.map(sanitizeInvite),
     peers: peers.map(sanitizePeer),
   };
@@ -315,6 +320,7 @@ export async function route(
     (hostMatch && (method === "PUT" || method === "DELETE")) ||
     (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/proxy/restart", "/api/cloudflared/install", "/api/hub", "/api/invites", "/api/remotes"].includes(path) &&
       method === "POST") ||
+    (path === "/api/hub/localhost" && method === "PUT") ||
     (path === "/api/settings" && method === "PUT") ||
     (inviteMatch && method === "DELETE") ||
     (peerMatch && (method === "PUT" || method === "DELETE")) ||
@@ -413,6 +419,15 @@ export async function route(
       return { status: 200, body: { hub: ctx.hub() } };
     }
 
+    if (path === "/api/hub/localhost" && method === "PUT") {
+      const enabled = requiredBool(body.enabled, "enabled");
+      const config = HubConfigStore.read();
+      if (!config) throw new ApiError(400, "The hub isn't configured yet. Set it up first: locadot hub:setup / hub:quick / hub:manual.");
+      HubConfigStore.write({ ...config, localhost: enabled });
+      ctx.reloadHub();
+      return { status: 200, body: { localhost: enabled } };
+    }
+
     if (path === "/api/invites" && method === "POST") {
       if (!isRole(body.role)) throw new ApiError(400, "`role` must be viewer, editor or admin.");
       const hosts = optionalHosts(body.hosts);
@@ -445,9 +460,20 @@ export async function route(
     if (path === "/api/remotes" && method === "POST") {
       if (typeof body.string !== "string" || !body.string.trim()) throw new ApiError(400, "`string` is required.");
       const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined;
-      const result = await Remotes.connect(body.string.trim(), { name });
+      const domain = optionalString(body.domain, "domain");
+      const result = await Remotes.connect(body.string.trim(), { name, domain });
       ctx.reload();
       return { status: 200, body: { ...result, remote: sanitizeRemote(result.remote) } };
+    }
+
+    if (remoteMatch && method === "PUT" && "domain" in body) {
+      const domain = body.domain;
+      if (domain !== null && domain !== "random" && typeof domain !== "string") {
+        throw new ApiError(400, '`domain` must be a string, "random" or null.');
+      }
+      const remote = Remotes.setDomain(decodeURIComponent(remoteMatch[1]), domain);
+      ctx.reload();
+      return { status: 200, body: { remote: sanitizeRemote(remote) } };
     }
 
     if (remoteMatch && method === "PUT") {

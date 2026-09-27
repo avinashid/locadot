@@ -12,6 +12,16 @@ const { handleDashboardRequest } = require("../src/dashboard");
 const RegistryStore = require("../src/lib/registry").default;
 const FileModule = require("../src/utils/file").default;
 const Constants = require("../src/constants").default;
+const Remotes = require("../src/lib/remotes").default;
+const HubConfigStore = require("../src/lib/hub-config").default;
+
+function readJson(req: http.IncomingMessage): Promise<any> {
+  return new Promise((resolve) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => resolve(body ? JSON.parse(body) : {}));
+  });
+}
 
 test.after(() => {
   fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -94,6 +104,40 @@ test("dashboard api", async (t) => {
   const server = http.createServer((req, res) => handleDashboardRequest(req, res, ctx));
   const port = await listen(server);
   t.after(() => server.close());
+
+  const SENDER_TOKEN = "sender_tok";
+  const SENDER_CODE = "lnk_cafebabe.codeXYZ_-1";
+  const senderState = { role: "admin" as string, localhost: true as boolean | undefined, hostname: "sender-box", hosts: [] as any[] };
+  const senderServer = http.createServer(async (req, res) => {
+    const url = new URL(req.url || "/", "http://x");
+    const send = (status: number, obj: unknown) => {
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(obj));
+    };
+    const authed = req.headers.authorization === `Bearer ${SENDER_TOKEN}`;
+    if (url.pathname === "/_locadot/v1/connect" && req.method === "POST") {
+      const body = await readJson(req);
+      if (body.code !== SENDER_CODE) return send(401, { error: "invalid or expired code" });
+      return send(200, {
+        token: SENDER_TOKEN,
+        localhost: senderState.localhost,
+        peer: { id: "peer1", name: body.name, role: senderState.role },
+        sender: { hostname: senderState.hostname, version: "1.2.3" },
+      });
+    }
+    if (url.pathname === "/_locadot/v1/whoami" && req.method === "GET") {
+      if (!authed) return send(401, { error: "unauthorized" });
+      return send(200, { localhost: senderState.localhost, peer: { id: "peer1", name: "r", role: senderState.role }, sender: { hostname: senderState.hostname, version: "1.2.3" } });
+    }
+    if (url.pathname === "/_locadot/v1/hosts" && req.method === "GET") {
+      if (!authed) return send(401, { error: "unauthorized" });
+      return send(200, { hosts: senderState.hosts });
+    }
+    send(404, { error: "no route" });
+  });
+  const senderPort = await listen(senderServer);
+  const senderInvite = `http://127.0.0.1:${senderPort}/#${SENDER_CODE}`;
+  t.after(() => senderServer.close());
 
   await t.test("403: no token", async () => {
     const r = await request(port, "POST", "/api/logs/clear");
@@ -307,6 +351,94 @@ test("dashboard api", async (t) => {
       body: JSON.stringify({ enabled: "yes" }),
     });
     assert.equal(startup.status, 400);
+  });
+
+  await t.test("PUT /api/hub/localhost: 400 unconfigured, then toggles and shows up in GET /api/hub", async () => {
+    const notConfigured = await request(port, "PUT", "/api/hub/localhost", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ enabled: false }),
+    });
+    assert.equal(notConfigured.status, 400);
+
+    HubConfigStore.write({ mode: "manual", url: "http://example.com" });
+    const off = await request(port, "PUT", "/api/hub/localhost", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ enabled: false }),
+    });
+    assert.equal(off.status, 200);
+    assert.equal(off.json.localhost, false);
+    assert.equal((await request(port, "GET", "/api/hub")).json.localhost, false);
+
+    const on = await request(port, "PUT", "/api/hub/localhost", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ enabled: true }),
+    });
+    assert.equal(on.status, 200);
+    assert.equal(on.json.localhost, true);
+    assert.equal((await request(port, "GET", "/api/hub")).json.localhost, true);
+
+    const badBody = await request(port, "PUT", "/api/hub/localhost", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ enabled: "yes" }),
+    });
+    assert.equal(badBody.status, 400);
+  });
+
+  await t.test("POST /api/remotes connects with a domain; GET /api/remotes exposes domain/localhost and never a token", async () => {
+    const connect = await request(port, "POST", "/api/remotes", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ string: senderInvite, name: "carol", domain: "team-alpha" }),
+    });
+    assert.equal(connect.status, 200);
+    assert.equal(connect.json.remote.domain, "team-alpha");
+    assert.equal(connect.json.remote.token, undefined);
+
+    const list = await request(port, "GET", "/api/remotes");
+    const row = list.json.remotes.find((r: any) => r.name === "carol");
+    assert.ok(row);
+    assert.equal(row.domain, "team-alpha");
+    assert.equal(row.localhost, true);
+    assert.equal(row.token, undefined);
+  });
+
+  await t.test("PUT /api/remotes/:name sets/validates/clashes on domain", async () => {
+    const invalid = await request(port, "PUT", "/api/remotes/carol", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ domain: "Not Valid!" }),
+    });
+    assert.equal(invalid.status, 400);
+
+    const unknown = await request(port, "PUT", "/api/remotes/nope", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ domain: "random" }),
+    });
+    assert.equal(unknown.status, 404);
+
+    const now = new Date().toISOString();
+    await RegistryStore.mutate((registry: any) => {
+      registry.hosts["already-used.localhost"] = { target: "http://localhost:9", createdAt: now, updatedAt: now };
+    });
+    const clash = await request(port, "PUT", "/api/remotes/carol", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ domain: "already-used" }),
+    });
+    assert.equal(clash.status, 409);
+
+    const ok = await request(port, "PUT", "/api/remotes/carol", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ domain: "team-beta" }),
+    });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.remote.domain, "team-beta");
+
+    const off = await request(port, "PUT", "/api/remotes/carol", {
+      headers: authed({ "content-type": "application/json" }),
+      body: JSON.stringify({ domain: null }),
+    });
+    assert.equal(off.status, 200);
+    assert.equal(off.json.remote.domain, undefined);
+
+    await Remotes.disconnect("carol");
   });
 
   await t.test("unknown /api/nope 404s", async () => {

@@ -88,8 +88,8 @@ export interface DashboardContext {
 
 export type Role = "viewer" | "editor" | "admin";
 
-/** read: list + browse; write: add/edit mappings; delete: remove mappings; settings: cors, sharing. */
-export type Permission = "read" | "write" | "delete" | "settings";
+/** read: list + browse; write: add/edit mappings; delete: remove mappings; settings: cors, sharing; localhost: any port on the sender (admin). */
+export type Permission = "read" | "write" | "delete" | "settings" | "localhost";
 
 /**
  * How the sender is reachable. `named`: the user's own Cloudflare tunnel on their domain (stable).
@@ -104,6 +104,8 @@ export interface HubConfig {
   tunnel?: string;
   /** manual: public base URL, e.g. https://hub.example.com or http://hub.localhost:8081 */
   url?: string;
+  /** Admin peers may reach any port on this machine's localhost. Default true; false turns it off. */
+  localhost?: boolean;
 }
 
 export interface HubState {
@@ -150,6 +152,10 @@ export interface Remote {
   hosts?: string[];
   sender: { hostname: string; version: string };
   connectedAt: string;
+  /** Admin only: `<domain>.localhost` and `<port>.<domain>.localhost` reach the sender's own localhost. */
+  domain?: string;
+  /** Whether the sender currently allows this peer to reach its localhost (from whoami). */
+  localhost?: boolean;
 }
 
 /** A mapping as the sender shows it to a receiver. */

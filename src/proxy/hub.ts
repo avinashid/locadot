@@ -4,6 +4,7 @@ import Constants from "../constants";
 import logger from "../utils/logger";
 import Links, { LinkError } from "../lib/links";
 import HostOps, { ConflictError, NotFoundError } from "../lib/hosts";
+import HubConfigStore from "../lib/hub-config";
 import { InputError } from "../lib/localhost";
 import { RegistryError } from "../lib/registry";
 import { hostOf } from "./request";
@@ -19,6 +20,7 @@ export type HubDecision =
   | { kind: "none" }
   | { kind: "api" }
   | { kind: "app"; host: string; peer: Peer }
+  | { kind: "local"; port: number; peer: Peer }
   | { kind: "deny"; status: number; message: string };
 
 export interface HubApiContext {
@@ -68,7 +70,12 @@ const bearerToken = (req: http.IncomingMessage) => {
 
 /* ---------- app traffic: classify every request that arrives on the hub's public hostname ---------- */
 
-export function classify(req: http.IncomingMessage, publicHost: string | undefined, hosts: Record<string, HostEntry>): HubDecision {
+export function classify(
+  req: http.IncomingMessage,
+  publicHost: string | undefined,
+  hosts: Record<string, HostEntry>,
+  opts?: { localhost?: boolean; blockedPorts?: number[] }
+): HubDecision {
   if (!publicHost || hostOf(req) !== publicHost) return { kind: "none" };
 
   const pathname = (req.url || "/").split("?")[0];
@@ -83,6 +90,22 @@ export function classify(req: http.IncomingMessage, publicHost: string | undefin
   if (!peer) {
     recordFailure(ip);
     return { kind: "deny", status: 401, message: "Unauthorized" };
+  }
+
+  const portHeader = req.headers["x-locadot-port"];
+  if (portHeader !== undefined) {
+    if (!Links.can(peer, "localhost")) return { kind: "deny", status: 403, message: "Forbidden" };
+    if (opts?.localhost === false) return { kind: "deny", status: 403, message: "Localhost access is off on this machine." };
+
+    const raw = typeof portHeader === "string" ? portHeader.trim() : "";
+    if (!/^[0-9]+$/.test(raw)) return { kind: "deny", status: 400, message: "Bad request" };
+    const port = Number(raw);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return { kind: "deny", status: 400, message: "Bad request" };
+    if (opts?.blockedPorts?.includes(port)) return { kind: "deny", status: 403, message: "Forbidden" };
+
+    for (const name of Object.keys(req.headers)) if (name.toLowerCase().startsWith("x-locadot-")) delete req.headers[name];
+
+    return { kind: "local", port, peer };
   }
 
   const hostHeader = req.headers["x-locadot-host"];
@@ -161,6 +184,9 @@ const peerView = (peer: Peer) => {
 
 const senderInfo = () => ({ hostname: os.hostname(), version: String(version) });
 
+/** Whether this peer may currently reach the sender's localhost: permission granted and the feature not turned off. */
+const localhostFor = (peer: Pick<Peer, "role">) => Links.can(peer, "localhost") && HubConfigStore.readCached()?.localhost !== false;
+
 const hostView = (host: string, entry: HostEntry): RemoteHost => ({
   host,
   target: entry.target,
@@ -181,7 +207,7 @@ export async function handleHubApi(req: http.IncomingMessage, res: http.ServerRe
       const name = sanitizeName(body.name);
       const { peer, token } = Links.redeem(code, name);
       logger.info(`🔗 hub: ${peer.name} connected as ${peer.role}`);
-      return send(res, 200, { token, peer: peerView(peer), sender: senderInfo() });
+      return send(res, 200, { token, peer: peerView(peer), sender: senderInfo(), localhost: localhostFor(peer) });
     }
 
     if (isLimited(ip)) return send(res, 429, { error: "Too many failed attempts. Try again later." });
@@ -194,7 +220,7 @@ export async function handleHubApi(req: http.IncomingMessage, res: http.ServerRe
 
     if (path === "/_locadot/v1/whoami" && method === "GET") {
       requirePerm(peer, "read");
-      return send(res, 200, { peer: peerView(peer), sender: senderInfo() });
+      return send(res, 200, { peer: peerView(peer), sender: senderInfo(), localhost: localhostFor(peer) });
     }
 
     if (path === "/_locadot/v1/hosts" && method === "GET") {

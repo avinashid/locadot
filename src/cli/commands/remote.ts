@@ -9,7 +9,7 @@ import Links from "../../lib/links";
 import HubConfigStore from "../../lib/hub-config";
 import { setupNamedTunnel } from "../../proxy/hub-tunnel";
 import Remotes from "../../lib/remotes";
-import type { HubConfig, HubState, Role } from "../../types";
+import type { HubConfig, HubState, Remote, Role } from "../../types";
 import { print } from "../shared";
 
 const ROLES: Role[] = ["viewer", "editor", "admin"];
@@ -140,6 +140,18 @@ export async function hubOff() {
   print("🔒 Remote access turned off.");
 }
 
+export async function hubLocalhost(value: string) {
+  if (value !== "on" && value !== "off") throw new InputError('❌ Use "on" or "off".');
+  requireRunning();
+  const { status, json } = await dashboardRequest("PUT", "/api/hub/localhost", {
+    headers: { "X-Locadot-Token": apiToken() },
+    body: { enabled: value === "on" },
+  });
+  if (status === 400) throw new InputError(`❌ ${json?.error || "Set up the hub first: locadot hub:setup / hub:quick / hub:manual."}`);
+  if (status !== 200) throw new InputError(`❌ Couldn't update (${status})${json?.error ? `: ${json.error}` : ""}.`);
+  print(json.localhost ? "🖥️  Admin peers can now reach this machine's localhost." : "🔒 Admin peers can no longer reach this machine's localhost.");
+}
+
 export async function share(options: { role?: string; hosts?: string }) {
   const role = requireRole(options.role);
   if (options.hosts && role !== "viewer") {
@@ -189,11 +201,20 @@ export async function peersRevoke(id: string) {
   print(`🗑️  Revoked peer ${id}.`);
 }
 
-export async function connect(value: string, options: { name?: string }) {
-  const { remote, mapped, skipped } = await Remotes.connect(value, { name: options.name });
+/** After connect/sync/remote:domain: the sender's own localhost, reachable when this remote has a domain and we're admin. */
+const printDomain = (remote: Remote) => {
+  if (remote.domain && remote.role === "admin") {
+    print(`🖥️  ${remote.sender.hostname} localhost: ${urlFor(`${remote.domain}.localhost`)}  (any port: ${urlFor(`<port>.${remote.domain}.localhost`)})`);
+  }
+};
+
+export async function connect(value: string, options: { name?: string; domain?: string }) {
+  const { remote, mapped, skipped, note } = await Remotes.connect(value, { name: options.name, domain: options.domain });
   print(`✅ Connected to ${remote.name} (${remote.sender.hostname}) as ${remote.role}.`);
   for (const m of mapped) print(`   ${urlFor(m.local)}  →  ${m.host}`);
   for (const reason of skipped) print(`   ⚠️  skipped: ${reason}`);
+  if (note) print(`   ⚠️  ${note}`);
+  printDomain(remote);
 }
 
 export async function remotes(options: { json?: boolean }) {
@@ -219,15 +240,27 @@ export async function remotes(options: { json?: boolean }) {
     return;
   }
   for (const remote of list) {
-    print(`${remote.name}  ${remote.url}  (${remote.role})`);
+    print(`${remote.name}  ${remote.url}  (${remote.role})${remote.domain ? `  domain: ${remote.domain}.localhost` : ""}`);
     for (const alias of aliasesFor(remote.name)) print(`   ${urlFor(alias.local)}  →  ${alias.host}`);
   }
 }
 
 export async function remoteSync(name: string) {
-  const { mapped } = await Remotes.sync(name);
+  const { remote, mapped } = await Remotes.sync(name);
   print(`✅ ${name} synced.`);
   for (const m of mapped) print(`   + ${urlFor(m.local)}  →  ${m.host}`);
+  printDomain(remote);
+}
+
+export async function remoteDomain(name: string, domain: string | undefined, options: { off?: boolean }) {
+  if (options.off) {
+    Remotes.setDomain(name, null);
+    print(`🗑️  Removed the local domain for ${name}.`);
+    return;
+  }
+  const remote = Remotes.setDomain(name, domain || "random");
+  print(`✅ ${name} domain: ${remote.domain}.localhost.`);
+  printDomain(remote);
 }
 
 export async function remoteAlias(name: string, remoteHost: string, localHost: string) {

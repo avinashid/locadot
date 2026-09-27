@@ -14,6 +14,11 @@
   - Dashboard preferences: theme, refresh interval, start page, collapsed sidebar, confirm-before-remove.
   - New-host defaults (insecure TLS, CORS) and a danger zone.
 - API: `GET/PUT /api/settings` and `POST /api/proxy/restart`.
+- Remote localhost for admins: an admin peer reaches any port on the sender's machine at `<port>.<domain>.localhost`, where
+  `<domain>.localhost` is a landing page listing that machine's shared hosts. The domain is chosen with
+  `connect --domain` or in the dashboard, and otherwise defaults to two random words (e.g. `brave-otter`). Change it with
+  `remote:domain`. The sender checks the role on every request, never exposes its own proxy ports, and can turn this off
+  with `hub:localhost off` or the dashboard switch.
 
 ### Fixed
 - The proxy can now tell a user's `LOCADOT_HTTP_PORT`/`LOCADOT_HTTPS_PORT` from the copies the CLI pins on every spawn

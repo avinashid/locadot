@@ -132,6 +132,72 @@ test("classify: app traffic decisions for a valid peer", () => {
   assert.deepEqual(classify(reqMissing, "hub.example.com", hosts), { kind: "deny", status: 404, message: "Not found" });
 });
 
+/* ---------- classify(): localhost (admin, any port on the sender) ---------- */
+
+test("classify: admin peer with a port header gets a local decision, headers stripped", () => {
+  resetRateLimiter();
+  const { code } = Links.createInvite({ role: "admin" });
+  const { token } = Links.redeem(code, "Admin");
+
+  const req = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": token, "x-locadot-port": "5173" }, ip: "10.0.0.4" });
+  const decision = classify(req, "hub.example.com", {}, { localhost: true, blockedPorts: [80, 443] });
+  assert.equal(decision.kind, "local");
+  assert.equal((decision as any).port, 5173);
+  assert.equal((decision as any).peer.role, "admin");
+  assert.equal(req.headers["x-locadot-peer"], undefined);
+  assert.equal(req.headers["x-locadot-port"], undefined);
+});
+
+test("classify: editor and viewer peers are forbidden from localhost", () => {
+  resetRateLimiter();
+  for (const role of ["editor", "viewer"] as const) {
+    const { code } = Links.createInvite({ role });
+    const { token } = Links.redeem(code, role);
+    const req = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": token, "x-locadot-port": "5173" }, ip: "10.0.0.5" });
+    assert.deepEqual(classify(req, "hub.example.com", {}, { localhost: true, blockedPorts: [] }), { kind: "deny", status: 403, message: "Forbidden" });
+  }
+});
+
+test("classify: localhost access disabled on this machine", () => {
+  resetRateLimiter();
+  const { code } = Links.createInvite({ role: "admin" });
+  const { token } = Links.redeem(code, "Admin");
+  const req = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": token, "x-locadot-port": "5173" }, ip: "10.0.0.6" });
+  assert.deepEqual(classify(req, "hub.example.com", {}, { localhost: false, blockedPorts: [] }), {
+    kind: "deny",
+    status: 403,
+    message: "Localhost access is off on this machine.",
+  });
+});
+
+test("classify: bad port values are rejected with 400", () => {
+  resetRateLimiter();
+  const { code } = Links.createInvite({ role: "admin" });
+  const { token } = Links.redeem(code, "Admin");
+  for (const bad of ["0", "70000", "abc", "3.5", "-1", "1 2"]) {
+    const req = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": token, "x-locadot-port": bad }, ip: "10.0.0.7" });
+    assert.deepEqual(classify(req, "hub.example.com", {}, { localhost: true, blockedPorts: [] }), { kind: "deny", status: 400, message: "Bad request" });
+  }
+});
+
+test("classify: the sender's own proxy ports are refused even for an admin", () => {
+  resetRateLimiter();
+  const { code } = Links.createInvite({ role: "admin" });
+  const { token } = Links.redeem(code, "Admin");
+  const req = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": token, "x-locadot-port": "8080" }, ip: "10.0.0.8" });
+  assert.deepEqual(classify(req, "hub.example.com", {}, { localhost: true, blockedPorts: [8080, 8443] }), {
+    kind: "deny",
+    status: 403,
+    message: "Forbidden",
+  });
+});
+
+test("classify: a bad token on a port request is still 401, not localhost-specific", () => {
+  resetRateLimiter();
+  const req = fakeReq({ host: "hub.example.com", headers: { "x-locadot-port": "5173" }, ip: "10.0.0.11" });
+  assert.deepEqual(classify(req, "hub.example.com", {}, { localhost: true, blockedPorts: [] }), { kind: "deny", status: 401, message: "Unauthorized" });
+});
+
 test("classify: rate limits an IP after 20 auth failures in the window", () => {
   resetRateLimiter();
   const ip = "10.0.0.9";
@@ -171,8 +237,18 @@ test("handleHubApi: connect, hosts, write/delete permissions", async (t) => {
   assert.equal(connectEditor.body.sender.hostname, os.hostname());
   const editorToken = connectEditor.body.token as string;
 
+  assert.equal(connectEditor.body.localhost, false); // editor: no permission regardless of the machine's setting
+
   const connectAdmin = await request(port, "POST", "/_locadot/v1/connect", { body: { code: adminCode, name: "Admin box" } });
   const adminToken = connectAdmin.body.token as string;
+  assert.equal(connectAdmin.body.localhost, true); // admin, and no HUB_FILE means localhost defaults to enabled
+
+  const whoamiAdmin = await request(port, "GET", "/_locadot/v1/whoami", { token: adminToken });
+  assert.equal(whoamiAdmin.status, 200);
+  assert.equal(whoamiAdmin.body.localhost, true);
+
+  const whoamiEditor = await request(port, "GET", "/_locadot/v1/whoami", { token: editorToken });
+  assert.equal(whoamiEditor.body.localhost, false);
 
   // one-time: redeeming the same code again fails
   const connectAgain = await request(port, "POST", "/_locadot/v1/connect", { body: { code: editorCode, name: "Again" } });

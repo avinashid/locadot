@@ -839,6 +839,9 @@ select.input { padding-right: 8px; cursor: pointer; }
 .token-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-xs); }
 .help-list { display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--fg-2); }
 .help-list p { margin: 0; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.remote-local { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.remote-local a { font-family: var(--mono); font-size: 13px; }
 .role-table { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .role-table div { display: flex; gap: 10px; padding: 8px 12px; font-size: 12.5px; }
 .role-table div + div { border-top: 1px solid var(--border); }
@@ -1051,6 +1054,9 @@ const clientJs = `
   var connectForm = document.getElementById("connect-form");
   var connectStringInput = document.getElementById("connect-string");
   var connectNameInput = document.getElementById("connect-name");
+  var connectDomainInput = document.getElementById("connect-domain");
+  var hubLocalhostRow = document.getElementById("hub-localhost-row");
+  var hubLocalhostSwitch = document.getElementById("hub-localhost");
   var connectSubmitBtn = document.getElementById("connect-submit");
   var connectErrorEl = document.getElementById("connect-error");
   var remotesEmptyEl = document.getElementById("remotes-empty");
@@ -1495,6 +1501,9 @@ const clientJs = `
 
     hubQuickWarning.hidden = !(status === "up" && hub.mode === "quick");
 
+    hubLocalhostRow.hidden = !data.config;
+    setSwitch(hubLocalhostSwitch, data.localhost !== false);
+
     hubErrorRow.hidden = !(status === "error" && hub.error);
     if (status === "error" && hub.error) hubErrorRow.textContent = hub.error;
 
@@ -1619,6 +1628,7 @@ const clientJs = `
       });
       urlRow.appendChild(urlEditBtn);
       item.appendChild(urlRow);
+      if (remote.role === "admin") item.appendChild(remoteLocalRow(remote));
 
       var actions = document.createElement("div");
       actions.className = "remote-controls";
@@ -1760,16 +1770,114 @@ const clientJs = `
     var value = connectStringInput.value.trim();
     if (!value) { showConnectError("Paste a pairing link first."); return; }
     var name = connectNameInput.value.trim();
+    var domain = connectDomainInput.value.trim().toLowerCase();
     connectSubmitBtn.disabled = true;
     connectSubmitBtn.classList.add("busy");
-    apiFetch("/api/remotes", { method: "POST", body: JSON.stringify({ string: value, name: name || undefined }) })
+    apiFetch("/api/remotes", { method: "POST", body: JSON.stringify({ string: value, name: name || undefined, domain: domain || undefined }) })
       .then(function (data) {
-        showToast("Connected to " + data.remote.name, "success");
+        var r = data.remote;
+        showToast("Connected to " + r.name, "success", r.domain && r.role === "admin" ? "Its localhost: " + localUrl(r.domain) : (domain && r.role !== "admin" ? "Domain ignored: you're " + r.role + ", not admin." : undefined));
         connectForm.reset();
         return Promise.all([loadRemotes(), loadHosts()]);
       })
       .catch(function (err) { showConnectError(err.message); })
       .then(function () { connectSubmitBtn.disabled = false; connectSubmitBtn.classList.remove("busy"); });
+  });
+
+  function localUrl(domain, port) {
+    return location.protocol + "//" + (port ? port + "." : "") + domain + ".localhost" + (location.port ? ":" + location.port : "") + "/";
+  }
+
+  function saveDomain(remote, domain) {
+    return apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "PUT", body: JSON.stringify({ domain: domain }) })
+      .then(function (data) {
+        var next = data && data.remote ? data.remote.domain : null;
+        showToast(next ? "Localhost of " + remote.name + " is " + next + ".localhost" : "Removed the localhost domain", "success");
+        return loadRemotes();
+      })
+      .catch(function (err) { apiError(err, "Couldn't set the domain"); });
+  }
+
+  /** Admin remotes: link to the sender's whole localhost, and an inline editor for the domain. */
+  function remoteLocalRow(remote) {
+    var row = document.createElement("div");
+    row.className = "hub-row remote-local";
+    if (remote.localhost === false) {
+      var off = document.createElement("span");
+      off.className = "dim";
+      off.textContent = "Localhost access is off on " + ((remote.sender && remote.sender.hostname) || remote.name) + ".";
+      row.appendChild(off);
+      return row;
+    }
+    var label = document.createElement("span");
+    label.className = "label";
+    label.textContent = "Localhost";
+    row.appendChild(label);
+
+    var form = document.createElement("form");
+    form.className = "mini-form";
+    form.hidden = Boolean(remote.domain);
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "input input-sm";
+    input.value = remote.domain || "";
+    input.placeholder = "office";
+    input.setAttribute("aria-label", "Localhost domain for " + remote.name);
+    var save = document.createElement("button");
+    save.type = "submit";
+    save.className = "btn btn-sm btn-primary";
+    save.textContent = "Save";
+    var random = document.createElement("button");
+    random.type = "button";
+    random.className = "btn btn-sm";
+    random.textContent = "Random";
+    random.addEventListener("click", function () { saveDomain(remote, "random"); });
+    form.appendChild(input);
+    form.appendChild(save);
+    form.appendChild(random);
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var value = input.value.trim().toLowerCase();
+      if (!value) { input.focus(); return; }
+      saveDomain(remote, value);
+    });
+
+    if (remote.domain) {
+      var link = document.createElement("a");
+      link.href = localUrl(remote.domain);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = remote.domain + ".localhost";
+      link.title = "Any port: " + localUrl(remote.domain, "<port>");
+      row.appendChild(link);
+      row.appendChild(makeCopyButton(function () { return localUrl(remote.domain); }));
+      var change = document.createElement("button");
+      change.type = "button";
+      change.className = "btn btn-sm btn-ghost";
+      change.textContent = "Change";
+      change.addEventListener("click", function () { form.hidden = !form.hidden; if (!form.hidden) input.focus(); });
+      row.appendChild(change);
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-sm btn-ghost";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", function () { saveDomain(remote, null); });
+      row.appendChild(remove);
+    }
+    row.appendChild(form);
+    return row;
+  }
+
+  hubLocalhostSwitch.addEventListener("click", function () {
+    var next = hubLocalhostSwitch.getAttribute("aria-checked") !== "true";
+    hubLocalhostSwitch.disabled = true;
+    apiFetch("/api/hub/localhost", { method: "PUT", body: JSON.stringify({ enabled: next }) })
+      .then(function () {
+        setSwitch(hubLocalhostSwitch, next);
+        showToast(next ? "Admins can open any port on this machine" : "Localhost access is off", "success");
+      })
+      .catch(function (err) { apiError(err, "Couldn't change localhost access"); })
+      .then(function () { hubLocalhostSwitch.disabled = false; });
   });
 
   function refreshHubAndRemotes() {
@@ -3131,6 +3239,13 @@ export function renderPage(nonce: string, token: string): string {
             <button type="button" id="hub-quick-btn" class="btn btn-sm">Use quick tunnel</button>
             <button type="button" id="hub-stop-btn" class="btn btn-sm btn-danger" hidden>Stop</button>
           </div>
+          <div id="hub-localhost-row" class="toggle-row" hidden>
+            <div>
+              <div class="label">Admins can open any port</div>
+              <div class="tile-sub">Admin peers reach this machine's localhost at <span class="mono">&lt;port&gt;.&lt;domain&gt;.localhost</span> on their side.</div>
+            </div>
+            <button type="button" id="hub-localhost" class="switch" role="switch" aria-checked="true" aria-label="Let admins open any port on this machine"><span class="switch-knob"></span></button>
+          </div>
         </div>
 
         <div id="hub-share-section" class="hub-section" hidden>
@@ -3178,7 +3293,7 @@ export function renderPage(nonce: string, token: string): string {
             <div class="role-table">
               <div><strong>Viewer</strong><span>browse the hosts you pick</span></div>
               <div><strong>Editor</strong><span>also add and change hosts here</span></div>
-              <div><strong>Admin</strong><span>also delete hosts and change sharing</span></div>
+              <div><strong>Admin</strong><span>also delete hosts, change sharing, and open any port on this machine</span></div>
             </div>
             <p class="dim">Editors can reach anything this machine can. Change or revoke a role any time under Peers.</p>
           </div>
@@ -3206,6 +3321,10 @@ export function renderPage(nonce: string, token: string): string {
             <div class="field">
               <label for="connect-name">Name (optional)</label>
               <input type="text" id="connect-name" placeholder="my-mac" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="connect-domain">Localhost domain (admins)</label>
+              <input type="text" id="connect-domain" placeholder="auto: two random words" autocomplete="off">
             </div>
             <button type="submit" id="connect-submit" class="btn btn-sm btn-primary">Connect</button>
           </form>

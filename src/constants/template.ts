@@ -71,4 +71,42 @@ const upstreamDown = (host: string, target: string, reason: string, dashboardUrl
     dashboardUrl
   );
 
-export { proxyNotFound, upstreamDown };
+/** Receiver side: the landing page of `<domain>.localhost`, an admin's door to a sender's whole localhost. */
+const remoteLocalhost = (opts: {
+  domain: string;
+  name: string;
+  sender: string;
+  allowed: boolean;
+  hosts: { local: string; url: string }[];
+  portUrl: string;
+  dashboardUrl: string;
+}) =>
+  page(
+    `locadot: ${opts.sender} localhost`,
+    opts.allowed
+      ? `<strong style="color: #7ee2a8;">${escapeHtml(opts.sender)}</strong>: localhost<br/><br/>
+    Any port on that machine is at <code>${escapeHtml(opts.portUrl.replace("PORT", "<port>"))}</code>.<br/><br/>
+    <form id="go" style="display:flex;gap:8px">
+      <input id="port" inputmode="numeric" pattern="[0-9]{1,5}" placeholder="3000" required
+        style="flex:1;padding:6px 10px;border-radius:4px;border:1px solid #444;background:#2e2e2e;color:#fff" />
+      <button style="padding:6px 14px;border-radius:4px;border:0;background:#61dafb;color:#000;font-weight:bold">Open</button>
+    </form>
+    <script>
+      document.getElementById("go").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var port = document.getElementById("port").value.trim();
+        if (/^[0-9]{1,5}$/.test(port)) location.href = ${JSON.stringify(opts.portUrl)}.replace("PORT", port);
+      });
+    </script>
+    ${
+      opts.hosts.length
+        ? `<br/>Shared hosts:<br/>${opts.hosts.map((h) => `<a href="${escapeHtml(h.url)}">${escapeHtml(h.local)}</a>`).join("<br/>")}`
+        : ""
+    }`
+      : `<strong style="color: #ff6b6b;">Not available:</strong>
+    <code>${escapeHtml(opts.domain)}.localhost</code> reaches ${escapeHtml(opts.sender)}'s localhost only while you're an
+    admin there and it allows localhost access. Ask its owner, then run <code>locadot remote:sync ${escapeHtml(opts.name)}</code>.`,
+    opts.dashboardUrl
+  );
+
+export { proxyNotFound, remoteLocalhost, upstreamDown };

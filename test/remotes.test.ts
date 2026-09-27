@@ -8,11 +8,12 @@ import path from "node:path";
 process.env.LOCADOT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-remotes-"));
 
 const Remotes = require("../src/lib/remotes").default;
-const { RemoteError } = require("../src/lib/remotes");
+const { RemoteError, isDomainLabel } = require("../src/lib/remotes");
 const { ConflictError, NotFoundError } = require("../src/lib/hosts");
 const RegistryStore = require("../src/lib/registry").default;
 const Constants = require("../src/constants").default;
 const { remoteFor, remoteOptions } = require("../src/proxy/remote");
+const { randomDomain } = require("../src/lib/words");
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as any).port)));
@@ -216,5 +217,182 @@ test("remotes (receiver)", async (t) => {
     for (const entry of Object.values(registry.hosts) as any[]) {
       assert.notEqual(entry.remote?.name, remoteName);
     }
+  });
+});
+
+test("words: randomDomain", () => {
+  const taken = new Set<string>();
+  for (let i = 0; i < 200; i++) {
+    const domain = randomDomain(taken);
+    assert.match(domain, /^[a-z]+-[a-z]+(-\d+)?$/);
+    assert.ok(!taken.has(domain));
+    taken.add(domain);
+  }
+
+  // Force the fallback: every plain "adjective-noun" combo is pre-taken, so it must append a digit.
+  const original = Math.random;
+  try {
+    let i = 0;
+    Math.random = () => {
+      i++;
+      return 0; // always picks the first adjective/noun -> the same base every time
+    };
+    const base = randomDomain(new Set());
+    const forced = randomDomain(new Set([base]));
+    assert.equal(forced, `${base}-2`);
+  } finally {
+    Math.random = original;
+  }
+});
+
+test("remotes: domains", async (t) => {
+  const domainState = {
+    role: "admin" as string,
+    localhost: true as boolean | undefined,
+    hostname: "bob",
+    hosts: [] as { host: string; target: string; cors: boolean; insecure: boolean }[],
+  };
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url || "/", "http://x");
+    const send = (status: number, obj: unknown) => {
+      res.writeHead(status, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(obj));
+    };
+    const authed = req.headers.authorization === `Bearer ${TOKEN}`;
+    if (url.pathname === "/_locadot/v1/connect" && req.method === "POST") {
+      const body = await readJson(req);
+      if (body.code !== CODE) return send(401, { error: "invalid or expired code" });
+      return send(200, {
+        token: TOKEN,
+        localhost: domainState.localhost,
+        peer: { id: "peer1", name: body.name, role: domainState.role },
+        sender: { hostname: domainState.hostname, version: "1.2.3" },
+      });
+    }
+    if (url.pathname === "/_locadot/v1/whoami" && req.method === "GET") {
+      if (!authed) return send(401, { error: "unauthorized" });
+      return send(200, { localhost: domainState.localhost, peer: { id: "peer1", name: "r", role: domainState.role }, sender: { hostname: domainState.hostname, version: "1.2.3" } });
+    }
+    if (url.pathname === "/_locadot/v1/hosts" && req.method === "GET") {
+      if (!authed) return send(401, { error: "unauthorized" });
+      return send(200, { hosts: domainState.hosts });
+    }
+    send(404, { error: "no route" });
+  });
+  const port = await listen(server);
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const invite = `${baseUrl}/#${CODE}`;
+  t.after(() => server.close());
+
+  await t.test("isDomainLabel: shape and reserved words", () => {
+    assert.ok(isDomainLabel("brave-otter"));
+    assert.ok(!isDomainLabel("localhost"));
+    assert.ok(!isDomainLabel("Not_Valid!"));
+    assert.ok(!isDomainLabel(""));
+  });
+
+  await t.test("connect: admin + localhost allowed picks a domain", async () => {
+    const result = await Remotes.connect(invite, { name: "bob1", domain: "myteam" });
+    assert.equal(result.domain, "myteam");
+    assert.equal(result.remote.domain, "myteam");
+    assert.equal(result.remote.localhost, true);
+    assert.equal(Remotes.get("bob1").domain, "myteam");
+    await Remotes.disconnect("bob1");
+  });
+
+  await t.test("connect: wanted domain already used by another remote is rejected before redeeming", async () => {
+    await Remotes.connect(invite, { name: "bob2", domain: "taken-domain" });
+    await assert.rejects(() => Remotes.connect(invite, { name: "bob3", domain: "taken-domain" }), (error: any) => {
+      assert.ok(error instanceof RemoteError);
+      assert.equal(error.status, 409);
+      return true;
+    });
+    assert.equal(Remotes.get("bob3"), undefined);
+    await Remotes.disconnect("bob2");
+  });
+
+  await t.test("connect: not admin gets no domain, and a wanted one is ignored with a note", async () => {
+    domainState.role = "editor";
+    domainState.localhost = false;
+    const result = await Remotes.connect(invite, { name: "bob4", domain: "ignored" });
+    assert.equal(result.remote.domain, undefined);
+    assert.equal(result.remote.localhost, false);
+    assert.equal(result.note, "domain ignored: not admin");
+  });
+
+  await t.test("sync: becoming admin auto-assigns a domain", async () => {
+    domainState.role = "admin";
+    domainState.localhost = true;
+    const synced = await Remotes.sync("bob4");
+    assert.ok(synced.remote.domain);
+    assert.equal(synced.domain, synced.remote.domain);
+  });
+
+  await t.test("sync: role dropping again keeps the existing domain", async () => {
+    domainState.role = "viewer";
+    const synced = await Remotes.sync("bob4");
+    assert.equal(synced.remote.role, "viewer");
+    assert.ok(synced.remote.domain, "domain must be kept even though the router will ignore it for non-admins");
+    await Remotes.disconnect("bob4");
+  });
+
+  await t.test("connect: missing `localhost` field on an older sender defaults to admin-allowed", async () => {
+    domainState.role = "admin";
+    domainState.localhost = undefined;
+    const result = await Remotes.connect(invite, { name: "bob5" });
+    assert.equal(result.remote.localhost, true);
+    assert.ok(result.remote.domain);
+    await Remotes.disconnect("bob5");
+  });
+
+  await t.test("setDomain: explicit, random, clash, off, unknown remote", async () => {
+    domainState.role = "admin";
+    domainState.localhost = true;
+    await Remotes.connect(invite, { name: "bob6" });
+    await Remotes.connect(invite, { name: "bob7" });
+
+    const explicit = Remotes.setDomain("bob6", "picked-one");
+    assert.equal(explicit.domain, "picked-one");
+
+    assert.throws(() => Remotes.setDomain("bob7", "picked-one"), (error: any) => {
+      assert.ok(error instanceof RemoteError);
+      assert.equal(error.status, 409);
+      return true;
+    });
+
+    const random = Remotes.setDomain("bob7", "random");
+    assert.ok(random.domain && random.domain !== "picked-one");
+
+    const off = Remotes.setDomain("bob6", null);
+    assert.equal(off.domain, undefined);
+
+    assert.throws(() => Remotes.setDomain("nope", "random"), (error: any) => {
+      assert.ok(error instanceof RemoteError);
+      assert.equal(error.status, 404);
+      return true;
+    });
+
+    assert.throws(() => Remotes.setDomain("bob7", "Not Valid!"), (error: any) => {
+      assert.ok(error instanceof RemoteError);
+      assert.equal(error.status, 400);
+      return true;
+    });
+
+    await Remotes.disconnect("bob6");
+    await Remotes.disconnect("bob7");
+  });
+
+  await t.test("setDomain: registry host clash is rejected", async () => {
+    const now = new Date().toISOString();
+    await RegistryStore.mutate((registry: any) => {
+      registry.hosts["clashy.localhost"] = { target: "http://localhost:9", createdAt: now, updatedAt: now };
+    });
+    await Remotes.connect(invite, { name: "bob8" });
+    assert.throws(() => Remotes.setDomain("bob8", "clashy"), (error: any) => {
+      assert.ok(error instanceof RemoteError);
+      assert.equal(error.status, 409);
+      return true;
+    });
+    await Remotes.disconnect("bob8");
   });
 });

@@ -5,6 +5,7 @@ import FileModule from "../utils/file";
 import RegistryStore from "./registry";
 import Localhost from "./localhost";
 import { NotFoundError, ConflictError } from "./hosts";
+import { randomDomain } from "./words";
 import type { Remote, RemoteHost } from "../types";
 
 interface RemotesFile {
@@ -80,6 +81,34 @@ const uniqueName = (base: string, existing: Set<string>) => {
   return `${base}-${i}`;
 };
 
+/** DNS label used for `<domain>.localhost` / `<port>.<domain>.localhost`. Not "localhost" itself. */
+const DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/;
+
+export const isDomainLabel = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  const label = value.trim().toLowerCase();
+  return label !== "localhost" && DOMAIN_RE.test(label);
+};
+
+/** Sender allows the peer onto its localhost, treating an older sender (no `localhost` field) as "yes" when admin. */
+const localhostAllowed = (data: { localhost?: unknown }, role: string): boolean =>
+  typeof data.localhost === "boolean" ? data.localhost : role === "admin";
+
+/** Domains already spoken for: other remotes' `domain`, and any single-label `*.localhost` registry host. */
+const takenDomains = (excludeName?: string): Set<string> => {
+  const store = readFile();
+  const taken = new Set<string>(["localhost"]);
+  for (const remote of Object.values(store.remotes)) {
+    if (remote.domain && remote.name !== excludeName) taken.add(remote.domain);
+  }
+  const registry = RegistryStore.read();
+  for (const host of Object.keys(registry.hosts)) {
+    const match = /^([a-z0-9-]+)\.localhost$/.exec(host);
+    if (match) taken.add(match[1]);
+  }
+  return taken;
+};
+
 export default class Remotes {
   static parseInvite(value: string): { url: string; code: string } {
     const trimmed = String(value || "").trim();
@@ -112,13 +141,39 @@ export default class Remotes {
     return remote;
   }
 
-  static async connect(value: string, opts: { name?: string } = {}) {
+  /** Validates a domain label's shape/reserved words. Doesn't check clashes (see `domainAvailable`). */
+  static isDomainLabel(value: unknown): value is string {
+    return isDomainLabel(value);
+  }
+
+  /** Throws if `label` is already another remote's domain or `<label>.localhost` is a registry host. */
+  static domainAvailable(label: string, excludeName?: string): void {
+    if (takenDomains(excludeName).has(label)) {
+      throw new RemoteError(409, `"${label}.localhost" is already in use.`);
+    }
+  }
+
+  static normalizeDomain(value: string): string {
+    const label = String(value ?? "").trim().toLowerCase();
+    if (!isDomainLabel(label)) {
+      throw new RemoteError(400, 'Domain must be a DNS label: a-z, 0-9 and -, up to 30 characters, and not "localhost".');
+    }
+    return label;
+  }
+
+  static async connect(value: string, opts: { name?: string; domain?: string } = {}) {
     const { url, code } = Remotes.parseInvite(value);
     // Checked before redeeming: the code works once, and the name ends up in hostnames (app.<name>.localhost).
     const wanted = opts.name?.trim().toLowerCase();
     if (wanted && !/^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/.test(wanted)) {
       throw new RemoteError(400, "Name must be a DNS label: a-z, 0-9 and -, up to 30 characters.");
     }
+    let wantedDomain: string | undefined;
+    if (opts.domain !== undefined) {
+      wantedDomain = Remotes.normalizeDomain(opts.domain);
+      Remotes.domainAvailable(wantedDomain);
+    }
+
     const data = await call(`${apiBase(url)}/connect`, { method: "POST", body: { code, name: os.hostname() } });
 
     const store = readFile();
@@ -126,15 +181,27 @@ export default class Remotes {
     const base = wanted || toLabel(data.sender.hostname);
     const name = uniqueName(base, existingNames);
 
+    const role = data.peer.role;
+    const allowLocalhost = localhostAllowed(data, role);
+    let domain: string | undefined;
+    let note: string | undefined;
+    if (role === "admin" && allowLocalhost) {
+      domain = wantedDomain || randomDomain(takenDomains());
+    } else if (wantedDomain) {
+      note = "domain ignored: not admin";
+    }
+
     const remote: Remote = {
       name,
       url,
       token: data.token,
       peerId: data.peer.id,
-      role: data.peer.role,
+      role,
       hosts: data.peer.hosts,
       sender: data.sender,
       connectedAt: new Date().toISOString(),
+      localhost: allowLocalhost,
+      ...(domain ? { domain } : {}),
     };
     store.remotes[name] = remote;
     writeFile(store);
@@ -159,13 +226,27 @@ export default class Remotes {
       }
     });
 
-    return { remote, hosts, mapped, skipped };
+    return { remote, hosts, mapped, skipped, domain, note };
   }
 
   static async sync(name: string) {
     const remote = Remotes.mustGet(name);
     const who = await call(`${apiBase(remote.url)}/whoami`, { token: remote.token });
-    const updated: Remote = { ...remote, role: who.peer.role, hosts: who.peer.hosts, sender: who.sender };
+    const role = who.peer.role;
+    const allowLocalhost = localhostAllowed(who, role);
+    // Keep an existing domain even if the role has dropped: the router checks role, not this field.
+    let domain = remote.domain;
+    if (!domain && role === "admin" && allowLocalhost) {
+      domain = randomDomain(takenDomains(name));
+    }
+    const updated: Remote = {
+      ...remote,
+      role,
+      hosts: who.peer.hosts,
+      sender: who.sender,
+      localhost: allowLocalhost,
+      ...(domain ? { domain } : {}),
+    };
     const store = readFile();
     store.remotes[name] = updated;
     writeFile(store);
@@ -194,7 +275,7 @@ export default class Remotes {
       .filter(([, e]) => e.remote?.name === name)
       .map(([local, e]) => ({ local, host: e.remote!.host }));
 
-    return { remote: updated, hosts, mapped };
+    return { remote: updated, hosts, mapped, domain: updated.domain };
   }
 
   static async alias(name: string, remoteHost: string, localHost: string): Promise<void> {
@@ -217,6 +298,27 @@ export default class Remotes {
     if (!remote) throw new RemoteError(404, `No remote named "${name}".`);
     store.remotes[name] = { ...remote, url: url.replace(/\/+$/, "") };
     writeFile(store);
+  }
+
+  /** `null` removes the domain, `"random"` auto-picks one, otherwise a wanted label (validated, must be free). */
+  static setDomain(name: string, domain: string | null | "random"): Remote {
+    const store = readFile();
+    const remote = store.remotes[name];
+    if (!remote) throw new RemoteError(404, `No remote named "${name}".`);
+
+    const updated: Remote = { ...remote };
+    if (domain === null) {
+      delete updated.domain;
+    } else if (domain === "random") {
+      updated.domain = randomDomain(takenDomains(name));
+    } else {
+      const label = Remotes.normalizeDomain(domain);
+      Remotes.domainAvailable(label, name);
+      updated.domain = label;
+    }
+    store.remotes[name] = updated;
+    writeFile(store);
+    return updated;
   }
 
   static async disconnect(name: string): Promise<void> {
