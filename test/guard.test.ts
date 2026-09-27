@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 
-const { isPublicAddress, isPublicHost, publicOnlyAgents } = require("../src/proxy/guard");
+const { isLoopbackHost, isPublicAddress, isPublicHost, publicOnlyAgents } = require("../src/proxy/guard");
 
 test("isPublicAddress: loopback, LAN, CGNAT, link-local, metadata and mapped forms are not public", () => {
   for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.5", "100.64.0.1", "169.254.169.254", "0.0.0.0", "224.0.0.1", "::1", "::", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:a00:1", "64:ff9b::10.0.0.1"]) {
@@ -16,6 +16,13 @@ test("isPublicHost: rejects local names and private literals before DNS", () => 
     assert.equal(isPublicHost(host), false, host);
   }
   for (const host of ["api.example.com", "api.example.com:8443", "1.1.1.1"]) assert.equal(isPublicHost(host), true, host);
+});
+
+test("isLoopbackHost: this machine's names and addresses", () => {
+  for (const host of ["localhost", "localhost:3100", "app.localhost:80", "127.0.0.1:3100", "127.1.2.3", "0.0.0.0:80", "[::1]:3000", "::ffff:127.0.0.1"]) {
+    assert.equal(isLoopbackHost(host), true, host);
+  }
+  for (const host of ["api.example.com", "10.0.0.1:3100", "192.168.1.5", "notlocalhost:80"]) assert.equal(isLoopbackHost(host), false, host);
 });
 
 test("publicOnlyAgents refuse a name that resolves to loopback", async () => {

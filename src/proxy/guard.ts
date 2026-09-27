@@ -48,6 +48,15 @@ export const isPublicAddress = (address: string) => {
   return net.isIPv6(address) && !blocked.check(address, "ipv6");
 };
 
+/** localhost, *.localhost, 127.0.0.0/8, ::1 or 0.0.0.0: this machine itself. */
+export const isLoopbackHost = (host: string) => {
+  const name = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
+  if (name === "localhost" || name.endsWith(".localhost")) return true;
+  const v4 = net.isIPv4(name) ? name : net.isIPv6(name) ? embeddedV4(name) : undefined;
+  if (v4) return v4.startsWith("127.") || v4 === "0.0.0.0";
+  return name === "::1" || name === "::";
+};
+
 /** A host the pass-through may call for a tunnel visitor, judged before any DNS lookup. */
 export const isPublicHost = (host: string) => {
   const name = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();

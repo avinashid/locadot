@@ -57,12 +57,16 @@ export const shimScript = `(() => {
   if (window.__locadotShim) return;
   window.__locadotShim = true;
   const VIA = ${JSON.stringify(VIA)};
+  const portOf = (url) => url.port || (url.protocol === "https:" || url.protocol === "wss:" ? "443" : "80");
   const route = (input) => {
     try {
       const url = new URL(String(input), location.href);
       if (!/^(https?|wss?):$/.test(url.protocol)) return null;
-      const local = url.hostname === "localhost" || url.hostname.endsWith(".localhost") || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
-      if (local || url.host === location.host) return null;
+      if (url.hostname.endsWith(".localhost") || url.host === location.host) return null;
+      // Bare localhost:<port> (an app's API or dev server) exists only where the app runs, so it goes through the
+      // page's origin too; a remote viewer's own localhost doesn't have it. The page's own proxy port stays direct.
+      const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+      if (loopback && portOf(url) === portOf(location)) return null;
       const ws = url.protocol === "ws:" || url.protocol === "wss:";
       const base = ws ? (location.protocol === "https:" ? "wss://" : "ws://") + location.host : location.origin;
       return base + VIA + url.protocol.slice(0, -1) + "/" + url.host + url.pathname + url.search + url.hash;
@@ -150,7 +154,7 @@ export const rewriteViaResponse = (headers: http.IncomingHttpHeaders, via: Via, 
     else {
       try {
         const url = new URL(location, `${via.scheme}://${via.host}/`);
-        if (/^https?:$/.test(url.protocol) && !/(^|\.)localhost$/.test(url.hostname)) headers.location = viaPath(url) + url.hash;
+        if (/^https?:$/.test(url.protocol) && !url.hostname.endsWith(".localhost")) headers.location = viaPath(url) + url.hash;
       } catch {}
     }
   }

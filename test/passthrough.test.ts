@@ -81,6 +81,9 @@ test("shim: fetch, XHR, EventSource, WebSocket and sendBeacon to other origins g
   window.fetch("https://api.x.com/v1/me?x=1");
   window.fetch("/same/origin");
   window.fetch("https://other.localhost/y");
+  window.fetch("http://localhost:3100/auth/token");
+  window.fetch("http://127.0.0.1:3100/x");
+  window.fetch("https://localhost:8443/dashboard");
   window.fetch(new FakeRequest("http://plain.example/z"));
   new window.XMLHttpRequest().open("POST", "https://api.x.com/v1/login");
   new window.WebSocket("wss://ws.x.com/socket");
@@ -91,6 +94,9 @@ test("shim: fetch, XHR, EventSource, WebSocket and sendBeacon to other origins g
     "fetch https://app.localhost:8443/__locadot/x/https/api.x.com/v1/me?x=1",
     "fetch /same/origin",
     "fetch https://other.localhost/y",
+    "fetch https://app.localhost:8443/__locadot/x/http/localhost:3100/auth/token",
+    "fetch https://app.localhost:8443/__locadot/x/http/127.0.0.1:3100/x",
+    "fetch https://localhost:8443/dashboard",
     "fetch https://app.localhost:8443/__locadot/x/http/plain.example/z",
     "xhr https://app.localhost:8443/__locadot/x/https/api.x.com/v1/login",
     "ws wss://app.localhost:8443/__locadot/x/wss/ws.x.com/socket",

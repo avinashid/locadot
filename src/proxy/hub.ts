@@ -19,8 +19,8 @@ const RATE_LIMIT_MAX = 20;
 export type HubDecision =
   | { kind: "none" }
   | { kind: "api" }
-  | { kind: "app"; host: string; peer: Peer; names?: Record<string, string> }
-  | { kind: "local"; port: number; peer: Peer; names?: Record<string, string>; host?: string }
+  | { kind: "app"; host: string; peer: Peer; names?: Record<string, string>; loopback?: number[] }
+  | { kind: "local"; port: number; peer: Peer; names?: Record<string, string>; host?: string; loopback?: number[] }
   | { kind: "dashboard"; peer: Peer; origin: string }
   | { kind: "deny"; status: number; message: string };
 
@@ -169,7 +169,7 @@ export function classify(
     if (host && names && self && scheme) names[host] = `${scheme}://${self}`;
     stripLocadotHeaders(req);
 
-    return { kind: "local", port, peer, names, host };
+    return { kind: "local", port, peer, names, host, loopback: opts?.blockedPorts ?? [] };
   }
 
   const hostHeader = req.headers["x-locadot-host"];
@@ -186,7 +186,9 @@ export function classify(
   const names = req.headers["x-locadot-names"] === undefined ? undefined : peerNames(req, visible);
   stripLocadotHeaders(req);
 
-  return { kind: "app", host, peer, names };
+  // A --cors page's pass-through calls to localhost:<port> reach this machine only for peers allowed its localhost.
+  const loopback = Links.can(peer, "localhost") && opts?.localhost !== false ? opts?.blockedPorts ?? [] : undefined;
+  return { kind: "app", host, peer, names, loopback };
 }
 
 /* ---------- /_locadot/v1 API ---------- */

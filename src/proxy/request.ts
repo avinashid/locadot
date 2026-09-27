@@ -15,6 +15,8 @@ interface RequestTag {
   peerOrigin?: string;
   /** Sender side: the receiver's URL for each of our hosts it maps, from `X-Locadot-Names`. */
   peerNames?: Record<string, string>;
+  /** Sender side: the peer's pass-through may reach this machine's loopback, except these ports. Absent: not at all. */
+  loopback?: number[];
 }
 
 const tags = new WeakMap<http.IncomingMessage, RequestTag>();
@@ -40,6 +42,8 @@ export const fromRemote = (req: http.IncomingMessage) => Boolean(tags.get(req)?.
 export const peerOriginOf = (req: http.IncomingMessage) => tags.get(req)?.peerOrigin;
 
 export const peerNamesOf = (req: http.IncomingMessage) => tags.get(req)?.peerNames;
+
+export const loopbackOf = (req: http.IncomingMessage) => tags.get(req)?.loopback;
 
 export const viaOf = (req: http.IncomingMessage) => tags.get(req)?.via;
 

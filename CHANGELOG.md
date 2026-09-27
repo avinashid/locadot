@@ -33,6 +33,10 @@
   Senders must run this version too; an older sender answers `<domain>.localhost` with a 404.
 
 ### Fixed
+- `--cors` pages that call an API on a bare `localhost:<port>` (e.g. `VITE_SERVER_URL=http://localhost:3100`) now send those
+  calls through the page's own origin (`/__locadot/x/http/localhost:3100/…`) like any other cross-origin call. Opened through
+  remote access, the API used to be called on the *viewer's* localhost, where it doesn't exist. A peer's pass-through reaches
+  the sender's localhost only with localhost access (admin, `hub:localhost on`), and never the proxy's own ports.
 - The proxy can now tell a user's `LOCADOT_HTTP_PORT`/`LOCADOT_HTTPS_PORT` from the copies the CLI pins on every spawn
   (`LOCADOT_USER_PORTS`), so saved ports aren't reported as env-overridden.
 - `--cors` through remote access: a shared `--cors` mapping is now `--cors` on the receiver too (shown in `list` and the

@@ -295,6 +295,8 @@ locadot add --host signalsant.localhost --target https://signalsant.com --cors
   `XMLHttpRequest`, `EventSource`, `WebSocket` and `sendBeacon` calls to other origins through the page's own origin
   (`/__locadot/x/https/api.signalsant.com/…`). The browser sees a same-origin request, so CORS never applies, and locadot
   forwards it with `Origin: https://signalsant.com`. Only the page itself can use it: requests from other sites get a 403.
+  Calls to a bare `localhost:<port>` (an API or dev server next to the app) go the same way, so the page works when opened
+  from another machine through remote access too. There, only admin peers reach the sender's localhost this way.
 - **Cookies.** The page's cookies are forwarded only to the same site (`api.signalsant.com`), never to third parties.
   Cookies set by third parties are dropped.
 - **Mapped domains.** If you also map a domain (`api.signalsant.localhost` → `https://api.signalsant.com --cors`), its URLs in

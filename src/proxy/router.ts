@@ -10,9 +10,9 @@ import type { HubDecision } from "./hub";
 import { LANDING_PATH, canReachLocalhost, localOptions, remoteOptions, type LocalTarget } from "./remote";
 import { allowOrigin, isPreflight, preflightHeaders, type Lookup } from "./cors";
 import { proxyOptions, viaOptions, viaOrigin } from "./options";
-import { isPublicHost } from "./guard";
+import { isLoopbackHost, isPublicHost } from "./guard";
 import { SHIM_PATH, isSameOrigin, parseVia, shimScript, type Via } from "./passthrough";
-import { fromTunnel, hostOf, isTls, tag } from "./request";
+import { fromRemote, fromTunnel, hostOf, isTls, loopbackOf, tag } from "./request";
 import { record } from "./stats";
 
 export interface RouterContext {
@@ -39,7 +39,7 @@ export interface RouterContext {
 /** Resolves a tunnel's public host to its mapping and tags the request, before any routing. */
 const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDecision | undefined) => {
   if (hub?.kind === "app") {
-    tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names });
+    tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names, loopback: hub.loopback });
     return hub.host;
   }
   if (hub?.kind === "dashboard") {
@@ -49,7 +49,7 @@ const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDeci
   if (hub?.kind === "local") {
     // A port behind a --cors mapping is served as that mapping, cors included.
     const host = hub.host ?? `localhost:${hub.port}`;
-    tag(req, { host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names });
+    tag(req, { host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names, loopback: hub.loopback });
     return host;
   }
   const host = hostOf(req);
@@ -62,8 +62,17 @@ const dashboardUrl = (req: http.IncomingMessage) => `${urlFor("localhost", isTls
 
 const passThrough = (req: http.IncomingMessage, entry: HostEntry) => Boolean(entry.cors);
 
-/** Same-origin only, and a tunnel visitor may only reach public hosts (see guard.ts). */
-const viaAllowed = (req: http.IncomingMessage, via: Via) => isSameOrigin(req) && (!fromTunnel(req) || isPublicHost(via.host));
+/** A hub peer reaches this machine's localhost:<port> only with localhost access, and never the proxy's own ports. */
+const peerMayReach = (req: http.IncomingMessage, via: Via) => {
+  if (!fromRemote(req) || !isLoopbackHost(via.host)) return true;
+  const allowed = loopbackOf(req);
+  const port = Number(via.host.match(/:(\d+)$/)?.[1] || (via.scheme === "https" || via.scheme === "wss" ? 443 : 80));
+  return Boolean(allowed && !allowed.includes(port));
+};
+
+/** Same-origin only, a tunnel visitor may only reach public hosts (see guard.ts), and a peer only its share of localhost. */
+const viaAllowed = (req: http.IncomingMessage, via: Via) =>
+  isSameOrigin(req) && (!fromTunnel(req) || isPublicHost(via.host)) && peerMayReach(req, via);
 
 /**
  * Receiver side: `<sender host>=<our URL for it>` for every mapping of this remote, so a --cors sender rewrites
