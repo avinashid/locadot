@@ -111,10 +111,10 @@ short-lived pairing string, and the sender's mappings then show up in the receiv
 | `locadot hub:setup --domain dev.example.com` | Sender: publish through your own named tunnel on your Cloudflare domain (runs `cloudflared` login, creates the tunnel and routes DNS). The address stays the same. |
 | `locadot hub:quick` | Sender: publish on a trycloudflare URL. No account is needed, but **the URL changes if the tunnel restarts**, so receivers have to run `remote:url`. |
 | `locadot hub` / `hub:off` | Show the hub status and URL, or stop it. |
-| `locadot hub:localhost <on\|off>` | Sender: allow or block admin peers from reaching any port on this machine's localhost. |
+| `locadot hub:localhost <on\|off>` | Sender: allow or block admin peers from opening this machine's dashboard and any port on its localhost. |
 | `locadot share --role viewer\|editor\|admin [--hosts a.localhost,b.localhost]` | Sender: print a pairing string. It works once and expires after 5 minutes. `--hosts` limits a viewer to those mappings. |
 | `locadot peers` / `peers:role <id> <role>` / `peers:revoke <id>` | Sender: list the connected machines, change a role, or cut one off. |
-| `locadot connect "<pairing string>" [--name alice] [--domain dev]` | Receiver: connect and import the sender's mappings. If a name clashes, `app.localhost` becomes `app.alice.localhost`. Admins get a local domain to reach the sender's own localhost (see below); `--domain` picks it, otherwise it's a random `adjective-noun`. |
+| `locadot connect "<pairing string>" [--name alice] [--domain dev]` | Receiver: connect and import the sender's mappings. If a name clashes, `app.localhost` becomes `app.alice.localhost`. Admins get a local domain that opens the sender's dashboard and localhost (see below); `--domain` picks it, otherwise it's a random `adjective-noun`. |
 | `locadot remotes` / `remote:sync <name>` / `disconnect <name>` | Receiver: list the connections (with their domain), pull new mappings, or remove the connection and its names. |
 | `locadot remote:domain <name> [domain] [--off]` | Receiver, admin only: set the local domain for a remote's localhost, randomize it (no domain given), or remove it (`--off`). |
 | `locadot remote:alias <name> <remote host> <local host>` | Receiver: give a sender mapping another local name, e.g. `he.localhost`. |
@@ -123,10 +123,12 @@ short-lived pairing string, and the sender's mappings then show up in the receiv
 
 Roles: **viewer** can only browse (optionally limited to the mappings picked on the invite). **editor** can also add and change
 mappings on the sender. **admin** can also delete them and change sharing, and (unless the sender turned it off with
-`hub:localhost off`) reach any port on the sender's own localhost through `https://<domain>.localhost` (the landing page) and
-`https://<port>.<domain>.localhost` (`sender's localhost:<port>`). Traffic goes receiver → Cloudflare → sender →
+`hub:localhost off`) open the sender's own dashboard at `https://<domain>.localhost` and manage it as if they were sitting at it,
+and reach any port on the sender's localhost at `https://<port>.<domain>.localhost` (`sender's localhost:<port>`). The port
+picker is at `https://<domain>.localhost/_locadot/ports`. The admin's browser never gets the sender's API token, so revoking or
+demoting the peer cuts off its dashboard access at once; a dashboard password on the sender still applies. Traffic goes receiver → Cloudflare → sender →
 target, so an editor can reach anything the sender's machine can reach. Only give that role to people you trust. Only hashes
-of the tokens are stored, and failed attempts are rate limited. The sender's dashboard is never reachable through the hub.
+of the tokens are stored, and failed attempts are rate limited. Only admins can open the sender's dashboard through the hub.
 The dashboard has **Remote access** and **Connected machines** cards for all of this.
 
 ### Certificates

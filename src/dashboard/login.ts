@@ -1,9 +1,9 @@
 import http from "http";
 import crypto from "crypto";
 import type { TLSSocket } from "tls";
-import Constants from "../constants";
 import logger from "../utils/logger";
 import { escapeHtml } from "./escape";
+import { isDashboardOrigin } from "./api";
 import UiAuth, { SESSION_COOKIE, SESSION_TTL_SEC, cookieOf } from "../lib/ui-auth";
 
 const MAX_LOGIN_BODY = 4096;
@@ -65,11 +65,7 @@ const sameOrigin = (req: http.IncomingMessage) => {
   if (site) return site === "same-origin" || site === "none";
   const origin = req.headers.origin;
   if (!origin || origin === "null") return !origin;
-  try {
-    return Constants.dashboardHosts.includes(new URL(origin).hostname.replace(/^\[|\]$/g, ""));
-  } catch {
-    return false;
-  }
+  return isDashboardOrigin(req, origin);
 };
 
 const cookie = (req: http.IncomingMessage, value: string, maxAge: number) =>

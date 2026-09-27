@@ -7,7 +7,7 @@ import http from "node:http";
 import net from "node:net";
 import { spawnSync } from "node:child_process";
 
-// Admin peers reach any port on the sender's localhost via <port>.<domain>.localhost on the receiver.
+// Admin peers get the sender's dashboard at <domain>.localhost and any port on its localhost via <port>.<domain>.localhost.
 // Same setup as remote.e2e: two real proxies, `hub:manual` standing in for the Cloudflare tunnel.
 
 const CLI = path.join(path.resolve(__dirname, ".."), "dist", "index.js");
@@ -114,10 +114,56 @@ test("remote localhost: an admin reaches any port on the sender", { timeout: 120
     assert.equal(remotes().carol.domain, "office");
   });
 
-  await t.test("<domain>.localhost is a landing page", async () => {
-    const res = await request(receiver.httpPort, "office.localhost", "/");
+  await t.test("<domain>.localhost/_locadot/ports is the port picker", async () => {
+    const res = await request(receiver.httpPort, "office.localhost", "/_locadot/ports");
     assert.equal(res.status, 200);
     assert.match(res.body, /PORT\.office\.localhost/);
+  });
+
+  const office = `office.localhost:${receiver.httpPort}`;
+  const senderToken = () => fs.readFileSync(path.join(sender.home, ".locadot-token"), "utf8").trim();
+  const addHost = (headers: Record<string, string>, host = "fromadmin.localhost") =>
+    new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const body = JSON.stringify({ host, target: String(port) });
+      const req = http.request(
+        { host: "127.0.0.1", port: receiver.httpPort, path: "/api/hosts", method: "POST", agent: false, timeout: 5000,
+          headers: { Host: office, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body), ...headers } },
+        (res) => {
+          let text = "";
+          res.on("data", (c) => (text += c));
+          res.on("end", () => resolve({ status: res.statusCode!, body: text }));
+        }
+      );
+      req.on("error", reject);
+      req.end(body);
+    });
+
+  await t.test("<domain>.localhost is the sender's dashboard, without its API token", async () => {
+    const res = await request(receiver.httpPort, office, "/");
+    assert.equal(res.status, 200, res.body);
+    assert.match(res.body, /<meta name="locadot-token" content="hub-peer">/);
+    assert.ok(!res.body.includes(senderToken()), "the sender's API token is never sent to a peer");
+    const hosts = await request(receiver.httpPort, office, "/api/hosts");
+    assert.equal(hosts.status, 200);
+    assert.ok(Array.isArray(JSON.parse(hosts.body)));
+  });
+
+  await t.test("the admin can change the sender from its dashboard", async () => {
+    const res = await addHost({ Origin: `http://${office}`, "X-Locadot-Token": "hub-peer" });
+    assert.equal(res.status, 201, res.body);
+    assert.equal(sender.registry()["fromadmin.localhost"].target, `http://localhost:${port}`);
+  });
+
+  await t.test("other origins and a missing token can't use the sender's dashboard API", async () => {
+    assert.equal((await addHost({ Origin: `http://evil.localhost:${receiver.httpPort}`, "X-Locadot-Token": "hub-peer" }, "evil.localhost")).status, 403);
+    assert.equal((await addHost({ Origin: `http://${office}` }, "evil.localhost")).status, 403);
+    assert.equal((await addHost({ Origin: `http://${office}`, "X-Locadot-Token": senderToken() }, "evil.localhost")).status, 403);
+    assert.equal(sender.registry()["evil.localhost"], undefined);
+  });
+
+  await t.test("the dashboard isn't reachable on the hub without the dashboard request from an admin", async () => {
+    const res = await request(sender.httpPort, hubHost, "/", { headers: { "X-Locadot-Dashboard": "1", "X-Original-Host": office } });
+    assert.equal(res.status, 401);
   });
 
   await t.test("<port>.<domain>.localhost reaches the sender's localhost:<port>, unmapped", async () => {
@@ -144,7 +190,7 @@ test("remote localhost: an admin reaches any port on the sender", { timeout: 120
   });
 
   await t.test("a crafted Host port can't break out of the landing page script", async () => {
-    const res = await request(receiver.httpPort, 'office.localhost:1"</script><script>alert(1)//', "/");
+    const res = await request(receiver.httpPort, 'office.localhost:1"</script><script>alert(1)//', "/_locadot/ports");
     assert.doesNotMatch(res.body, /<script>alert/);
   });
 
@@ -155,6 +201,7 @@ test("remote localhost: an admin reaches any port on the sender", { timeout: 120
   await t.test("the sender can turn it off and on", async () => {
     assert.equal(sender.run("hub:localhost", "off").status, 0);
     assert.equal((await request(receiver.httpPort, `${port}.office.localhost`, "/")).status, 403);
+    assert.equal((await request(receiver.httpPort, office, "/")).status, 403, "and so is its dashboard");
     assert.equal(sender.run("hub:localhost", "on").status, 0);
     assert.equal((await request(receiver.httpPort, `${port}.office.localhost`, "/")).status, 200);
   });
@@ -184,5 +231,7 @@ test("remote localhost: an admin reaches any port on the sender", { timeout: 120
     const carol = list.find((p: any) => p.id === remotes().carol.peerId);
     assert.equal(sender.run("peers:role", carol.id, "editor").status, 0);
     assert.equal((await request(receiver.httpPort, `${port}.lab.localhost`, "/")).status, 403);
+    const dash = await request(receiver.httpPort, `lab.localhost:${receiver.httpPort}`, "/");
+    assert.doesNotMatch(dash.body, /locadot-token/, "a demoted admin loses the dashboard");
   });
 });

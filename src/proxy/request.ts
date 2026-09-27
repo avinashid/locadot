@@ -11,6 +11,8 @@ interface RequestTag {
   /** The public side of a remote request was https. */
   secure?: boolean;
   via?: Via;
+  /** Sender side: an admin peer's browser viewing this dashboard; the receiver's `host[:port]` it runs on. */
+  peerOrigin?: string;
 }
 
 const tags = new WeakMap<http.IncomingMessage, RequestTag>();
@@ -32,6 +34,8 @@ export const mappedHost = (req: http.IncomingMessage) => tags.get(req)?.host ?? 
 export const fromTunnel = (req: http.IncomingMessage) => Boolean(tags.get(req)?.tunnel);
 
 export const fromRemote = (req: http.IncomingMessage) => Boolean(tags.get(req)?.remote);
+
+export const peerOriginOf = (req: http.IncomingMessage) => tags.get(req)?.peerOrigin;
 
 export const viaOf = (req: http.IncomingMessage) => tags.get(req)?.via;
 

@@ -54,9 +54,12 @@ export const remoteOptions = (req: http.IncomingMessage, entry: HostEntry, remot
 export interface LocalTarget {
   remote: Remote;
   domain: string;
-  /** Absent for the bare `<domain>.localhost` landing page. */
+  /** Absent for the bare `<domain>.localhost`, which is the sender's dashboard. */
   port?: number;
 }
+
+/** Receiver side: the port picker and shared-host list, on `<domain>.localhost` itself (the rest of it is the dashboard). */
+export const LANDING_PATH = "/_locadot/ports";
 
 /** Receiver side: `<domain>.localhost` / `<port>.<domain>.localhost` → the admin remote that owns `domain`. */
 export const localFor = (host: string): LocalTarget | undefined => {
@@ -76,7 +79,8 @@ export const localFor = (host: string): LocalTarget | undefined => {
 
 export const canReachLocalhost = (remote: Remote) => remote.role === "admin" && remote.localhost !== false;
 
-export const localOptions = (req: http.IncomingMessage, remote: Remote, port: number): httpProxy.ServerOptions => ({
+/** Without a port the sender serves its dashboard. */
+export const localOptions = (req: http.IncomingMessage, remote: Remote, port?: number): httpProxy.ServerOptions => ({
   target: remote.url,
   changeOrigin: true,
   xfwd: false,
@@ -89,6 +93,6 @@ export const localOptions = (req: http.IncomingMessage, remote: Remote, port: nu
   headers: {
     "X-Original-Host": req.headers.host || "",
     "X-Locadot-Peer": remote.token,
-    "X-Locadot-Port": String(port),
+    ...(port ? { "X-Locadot-Port": String(port) } : { "X-Locadot-Dashboard": "1" }),
   },
 });

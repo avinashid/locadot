@@ -25,6 +25,13 @@
   to a signed-out visitor. It uses a 7-day HttpOnly SameSite=Strict session, rate-limits wrong passwords, and adds a Sign out button to the sidebar.
   Mapped hosts are not affected, and neither are scripts or the CLI that send `X-Locadot-Token`.
 
+### Changed
+- `<domain>.localhost` now opens the sender's own dashboard for an admin peer, with full control (hosts, sharing, peers,
+  settings), instead of a landing page; no port needed. The port picker moved to `<domain>.localhost/_locadot/ports`.
+  The page never carries the sender's API token, the API only accepts calls from that `<domain>.localhost` origin, the sender
+  checks the admin role on every request, `hub:localhost off` turns it off, and a dashboard password still asks for sign-in.
+  Senders must run this version too; an older sender answers `<domain>.localhost` with a 404.
+
 ### Fixed
 - The proxy can now tell a user's `LOCADOT_HTTP_PORT`/`LOCADOT_HTTPS_PORT` from the copies the CLI pins on every spawn
   (`LOCADOT_USER_PORTS`), so saved ports aren't reported as env-overridden.

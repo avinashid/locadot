@@ -204,10 +204,10 @@ export async function peersRevoke(id: string) {
   print(`🗑️  Revoked peer ${id}.`);
 }
 
-/** After connect/sync/remote:domain: the sender's own localhost, reachable when this remote has a domain and we're admin. */
+/** After connect/sync/remote:domain: the sender's dashboard and localhost, reachable when this remote has a domain and we're admin. */
 const printDomain = (remote: Remote) => {
   if (remote.domain && remote.role === "admin") {
-    print(`🖥️  ${remote.sender.hostname} localhost: ${urlFor(`${remote.domain}.localhost`)}  (any port: ${urlFor(`<port>.${remote.domain}.localhost`)})`);
+    print(`🖥️  ${remote.sender.hostname} dashboard: ${urlFor(`${remote.domain}.localhost`)}  (any port: ${urlFor(`<port>.${remote.domain}.localhost`)})`);
   }
 };
 

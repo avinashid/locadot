@@ -5,7 +5,7 @@ import logger from "../utils/logger";
 import Links, { LinkError } from "../lib/links";
 import HostOps, { ConflictError, NotFoundError } from "../lib/hosts";
 import HubConfigStore from "../lib/hub-config";
-import { InputError } from "../lib/localhost";
+import Localhost, { InputError } from "../lib/localhost";
 import { RegistryError } from "../lib/registry";
 import { hostOf } from "./request";
 import type { HostEntry, Peer, Permission, Registry, RemoteHost } from "../types";
@@ -21,6 +21,7 @@ export type HubDecision =
   | { kind: "api" }
   | { kind: "app"; host: string; peer: Peer }
   | { kind: "local"; port: number; peer: Peer }
+  | { kind: "dashboard"; peer: Peer; origin: string }
   | { kind: "deny"; status: number; message: string };
 
 export interface HubApiContext {
@@ -62,6 +63,18 @@ const clientIp = (req: http.IncomingMessage) => {
   return value || req.socket.remoteAddress || "unknown";
 };
 
+/** `X-Original-Host` from the receiver, only if it is a `*.localhost` name with an optional port. */
+const receiverHost = (req: http.IncomingMessage) => {
+  const header = req.headers["x-original-host"];
+  const raw = typeof header === "string" ? header.trim().toLowerCase() : "";
+  const match = /^([^:]+)(?::(\d{1,5}))?$/.exec(raw);
+  return match && Localhost.isValidLocalhostDomain(match[1]) ? raw : undefined;
+};
+
+const stripLocadotHeaders = (req: http.IncomingMessage) => {
+  for (const name of Object.keys(req.headers)) if (name.toLowerCase().startsWith("x-locadot-")) delete req.headers[name];
+};
+
 const bearerToken = (req: http.IncomingMessage) => {
   const header = req.headers.authorization;
   const match = typeof header === "string" ? /^Bearer\s+(\S+)$/i.exec(header) : null;
@@ -93,9 +106,19 @@ export function classify(
   }
 
   const portHeader = req.headers["x-locadot-port"];
-  if (portHeader !== undefined) {
+  const wantsDashboard = req.headers["x-locadot-dashboard"] !== undefined;
+  if (portHeader !== undefined || wantsDashboard) {
     if (!Links.can(peer, "localhost")) return { kind: "deny", status: 403, message: "Forbidden" };
     if (opts?.localhost === false) return { kind: "deny", status: 403, message: "Localhost access is off on this machine." };
+
+    // The dashboard's page and API trust this origin in place of their own (see peerOriginOf).
+    if (wantsDashboard) {
+      const origin = receiverHost(req);
+      if (!origin) return { kind: "deny", status: 400, message: "Bad request" };
+      // Keep X-Locadot-Token: the dashboard page sends it on every mutating call.
+      for (const name of ["x-locadot-peer", "x-locadot-dashboard", "x-locadot-host", "x-locadot-port"]) delete req.headers[name];
+      return { kind: "dashboard", peer, origin };
+    }
 
     const raw = typeof portHeader === "string" ? portHeader.trim() : "";
     if (!/^[0-9]+$/.test(raw)) return { kind: "deny", status: 400, message: "Bad request" };
@@ -103,7 +126,7 @@ export function classify(
     if (!Number.isInteger(port) || port < 1 || port > 65535) return { kind: "deny", status: 400, message: "Bad request" };
     if (opts?.blockedPorts?.includes(port)) return { kind: "deny", status: 403, message: "Forbidden" };
 
-    for (const name of Object.keys(req.headers)) if (name.toLowerCase().startsWith("x-locadot-")) delete req.headers[name];
+    stripLocadotHeaders(req);
 
     return { kind: "local", port, peer };
   }
@@ -119,7 +142,7 @@ export function classify(
     return { kind: "deny", status: 403, message: "Forbidden" };
   }
 
-  for (const name of Object.keys(req.headers)) if (name.toLowerCase().startsWith("x-locadot-")) delete req.headers[name];
+  stripLocadotHeaders(req);
 
   return { kind: "app", host, peer };
 }

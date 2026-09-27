@@ -192,6 +192,26 @@ script was syntax-checked but not clicked through: headless Chromium can't start
 
 ---
 
+### ENH-13
+**Admins open the remote machine's dashboard at `<domain>.localhost`, no port needed** · P1 · Resolved
+
+**Why:** An admin peer only had a landing page at `<domain>.localhost` and had to pick a port. Admins should be able to
+see and manage the remote locadot as if they were at that machine.
+
+**What changed:**
+- Receiver: `<domain>.localhost` forwards to the sender with `X-Locadot-Dashboard: 1`. The port picker moved to
+  `<domain>.localhost/_locadot/ports`. `<port>.<domain>.localhost` is unchanged.
+- Sender: the hub accepts that header only from an admin peer while `hub:localhost` is on, then serves its dashboard.
+- The page carries the placeholder token `hub-peer`, never the real API token, so revoking or demoting the peer ends
+  access at once. The API accepts calls only from the receiver's own `<domain>.localhost[:port]` origin. A dashboard
+  password on the sender still asks for sign-in.
+
+**Verified:** `test/remote-localhost.e2e.test.ts` covers the dashboard, a host added through it, rejection of other
+origins, a missing token and the real token, `hub:localhost off`, and a demoted admin. Also checked in headless Chromium
+with two live locadots.
+
+---
+
 ## Resolved
 
 | ID | P | Title | Resolved | Commit |
@@ -208,3 +228,4 @@ script was syntax-checked but not clicked through: headless Chromium can't start
 | [ENH-10](#enh-10) | P2 | Useful commands: `open`, `start`, `logs -n/--no-follow`, `list --json`, `status --json`, `rm`/`ls` aliases, `--no-start` | 2026-09-25 | uncommitted |
 | [ENH-12](#enh-12) | P1 | `--cors`: rewrite Origin/Referer to the target, answer preflights, allow any origin | 2026-09-25 | uncommitted |
 | [ENH-11](#enh-11) | P1 | Reliability: readiness-checked start, graceful stop, cert warm-up, no broken log pipe | 2026-09-25 | uncommitted |
+| [ENH-13](#enh-13) | P1 | Admins open the remote machine's dashboard at `<domain>.localhost` | 2026-09-27 | uncommitted |

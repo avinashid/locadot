@@ -1782,7 +1782,7 @@ const clientJs = `
     apiFetch("/api/remotes", { method: "POST", body: JSON.stringify({ string: value, name: name || undefined, domain: domain || undefined }) })
       .then(function (data) {
         var r = data.remote;
-        showToast("Connected to " + r.name, "success", r.domain && r.role === "admin" ? "Its localhost: " + localUrl(r.domain) : (domain && r.role !== "admin" ? "Domain ignored: you're " + r.role + ", not admin." : undefined));
+        showToast("Connected to " + r.name, "success", r.domain && r.role === "admin" ? "Its dashboard: " + localUrl(r.domain) : (domain && r.role !== "admin" ? "Domain ignored: you're " + r.role + ", not admin." : undefined));
         connectForm.reset();
         return Promise.all([loadRemotes(), loadHosts()]);
       })
@@ -1854,7 +1854,7 @@ const clientJs = `
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.textContent = remote.domain + ".localhost";
-      link.title = "Any port: " + localUrl(remote.domain, "<port>");
+      link.title = "Its dashboard. Any port: " + localUrl(remote.domain, "<port>");
       row.appendChild(link);
       row.appendChild(makeCopyButton(function () { return localUrl(remote.domain); }));
       var change = document.createElement("button");
@@ -1880,7 +1880,7 @@ const clientJs = `
     apiFetch("/api/hub/localhost", { method: "PUT", body: JSON.stringify({ enabled: next }) })
       .then(function () {
         setSwitch(hubLocalhostSwitch, next);
-        showToast(next ? "Admins can open any port on this machine" : "Localhost access is off", "success");
+        showToast(next ? "Admins can open this dashboard and any port" : "Localhost access is off", "success");
       })
       .catch(function (err) { apiError(err, "Couldn't change localhost access"); })
       .then(function () { hubLocalhostSwitch.disabled = false; });
@@ -3310,10 +3310,10 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
           </div>
           <div id="hub-localhost-row" class="toggle-row" hidden>
             <div>
-              <div class="label">Admins can open any port</div>
-              <div class="tile-sub">Admin peers reach this machine's localhost at <span class="mono">&lt;port&gt;.&lt;domain&gt;.localhost</span> on their side.</div>
+              <div class="label">Admins can open this dashboard and any port</div>
+              <div class="tile-sub">Admin peers get this dashboard at <span class="mono">&lt;domain&gt;.localhost</span> and this machine's localhost at <span class="mono">&lt;port&gt;.&lt;domain&gt;.localhost</span> on their side.</div>
             </div>
-            <button type="button" id="hub-localhost" class="switch" role="switch" aria-checked="true" aria-label="Let admins open any port on this machine"><span class="switch-knob"></span></button>
+            <button type="button" id="hub-localhost" class="switch" role="switch" aria-checked="true" aria-label="Let admins open this dashboard and any port on this machine"><span class="switch-knob"></span></button>
           </div>
         </div>
 
@@ -3362,7 +3362,7 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
             <div class="role-table">
               <div><strong>Viewer</strong><span>browse the hosts you pick</span></div>
               <div><strong>Editor</strong><span>also add and change hosts here</span></div>
-              <div><strong>Admin</strong><span>also delete hosts, change sharing, and open any port on this machine</span></div>
+              <div><strong>Admin</strong><span>also delete hosts, change sharing, and open this dashboard and any port on this machine</span></div>
             </div>
             <p class="dim">Editors can reach anything this machine can. Change or revoke a role any time under Peers.</p>
           </div>

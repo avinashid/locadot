@@ -2,7 +2,8 @@ import crypto from "crypto";
 import http from "http";
 import { DashboardContext, HostEntry, HostStats, ProbeResult, Role, TunnelState } from "../types";
 import { renderPage } from "./page";
-import { ApiError, assertTrusted, readJson, route } from "./api";
+import { ApiError, PEER_TOKEN, assertTrusted, readJson, route } from "./api";
+import { peerOriginOf } from "../proxy/request";
 import { gate, sessionCookie } from "./login";
 import UiAuth, { SESSION_COOKIE } from "../lib/ui-auth";
 import { systemStatus } from "../lib/system";
@@ -133,7 +134,7 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
 
   switch (url.pathname) {
     case "/":
-      sendBody(res, method, 200, "text/html; charset=utf-8", renderPage(nonce, ctx.token, UiAuth.enabled()));
+      sendBody(res, method, 200, "text/html; charset=utf-8", renderPage(nonce, peerOriginOf(req) ? PEER_TOKEN : ctx.token, UiAuth.enabled()));
       return;
     case "/favicon.ico":
       res.statusCode = 204;

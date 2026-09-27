@@ -71,7 +71,7 @@ const upstreamDown = (host: string, target: string, reason: string, dashboardUrl
     dashboardUrl
   );
 
-/** Receiver side: the landing page of `<domain>.localhost`, an admin's door to a sender's whole localhost. */
+/** Receiver side: `<domain>.localhost/_locadot/ports`, the port picker and shared hosts of an admin remote. */
 const remoteLocalhost = (opts: {
   domain: string;
   name: string;
@@ -85,6 +85,7 @@ const remoteLocalhost = (opts: {
     `locadot: ${opts.sender} localhost`,
     opts.allowed
       ? `<strong style="color: #7ee2a8;">${escapeHtml(opts.sender)}</strong>: localhost<br/><br/>
+    Its dashboard is <a href="/">${escapeHtml(opts.domain)}.localhost</a>.<br/>
     Any port on that machine is at <code>${escapeHtml(opts.portUrl.replace("PORT", "<port>"))}</code>.<br/><br/>
     <form id="go" style="display:flex;gap:8px">
       <input id="port" inputmode="numeric" pattern="[0-9]{1,5}" placeholder="3000" required

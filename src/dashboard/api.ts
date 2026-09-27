@@ -19,6 +19,7 @@ import HubConfigStore from "../lib/hub-config";
 import Remotes, { RemoteError } from "../lib/remotes";
 import type { DashboardContext, HubConfig, Peer, Remote, Role } from "../types";
 import UiAuth from "../lib/ui-auth";
+import { peerOriginOf } from "../proxy/request";
 
 const MAX_BODY = 64 * 1024;
 
@@ -38,10 +39,19 @@ const safeEqual = (a: string, b: string) => {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 };
 
-const isDashboardOrigin = (origin: string) => {
+/**
+ * What the page carries instead of the API token when an admin peer views it through the hub: the hub already
+ * authenticated the peer, and the real token would outlive a revoked peer.
+ */
+export const PEER_TOKEN = "hub-peer";
+
+/** The page's own origin: the dashboard hosts, or for an admin peer the receiver's `<domain>.localhost`. */
+export const isDashboardOrigin = (req: http.IncomingMessage, origin: string) => {
   try {
-    const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, "");
-    return Constants.dashboardHosts.includes(hostname);
+    const url = new URL(origin);
+    const peerOrigin = peerOriginOf(req);
+    if (peerOrigin) return url.host === peerOrigin;
+    return Constants.dashboardHosts.includes(url.hostname.replace(/^\[|\]$/g, ""));
   } catch {
     return false;
   }
@@ -55,10 +65,10 @@ const isDashboardOrigin = (origin: string) => {
  */
 export function assertTrusted(req: http.IncomingMessage, ctx: DashboardContext) {
   const origin = req.headers.origin;
-  if (origin && !isDashboardOrigin(origin)) throw new ApiError(403, "Cross-origin requests are not allowed.");
+  if (origin && !isDashboardOrigin(req, origin)) throw new ApiError(403, "Cross-origin requests are not allowed.");
   if (req.headers["sec-fetch-site"] === "cross-site") throw new ApiError(403, "Cross-site requests are not allowed.");
   const token = req.headers["x-locadot-token"];
-  if (typeof token !== "string" || !safeEqual(token, ctx.token)) {
+  if (typeof token !== "string" || !safeEqual(token, peerOriginOf(req) ? PEER_TOKEN : ctx.token)) {
     throw new ApiError(403, "Missing or wrong X-Locadot-Token.", `Token file: ${Constants.paths.API_TOKEN}`);
   }
 }

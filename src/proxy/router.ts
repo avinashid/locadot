@@ -7,7 +7,7 @@ import logger from "../utils/logger";
 import { urlFor } from "../lib/urls";
 import type { HostEntry, HostStats, Remote } from "../types";
 import type { HubDecision } from "./hub";
-import { canReachLocalhost, localOptions, remoteOptions, type LocalTarget } from "./remote";
+import { LANDING_PATH, canReachLocalhost, localOptions, remoteOptions, type LocalTarget } from "./remote";
 import { allowOrigin, isPreflight, preflightHeaders, type Lookup } from "./cors";
 import { proxyOptions, viaOptions, viaOrigin } from "./options";
 import { isPublicHost } from "./guard";
@@ -30,7 +30,7 @@ export interface RouterContext {
   };
   /** Receiver side: the sender a `remote` mapping forwards to. */
   remoteFor?(name: string): Remote | undefined;
-  /** Receiver side: `<domain>.localhost` / `<port>.<domain>.localhost` of an admin remote. */
+  /** Receiver side: `<domain>.localhost` (the sender's dashboard) / `<port>.<domain>.localhost` of an admin remote. */
   localFor?(host: string): LocalTarget | undefined;
   /** Receiver side: local names of a remote's mappings, for the landing page. */
   remoteHosts?(name: string): string[];
@@ -41,6 +41,10 @@ const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDeci
   if (hub?.kind === "app") {
     tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure() });
     return hub.host;
+  }
+  if (hub?.kind === "dashboard") {
+    tag(req, { host: "localhost", remote: true, secure: ctx.hub!.secure(), peerOrigin: hub.origin });
+    return "localhost";
   }
   if (hub?.kind === "local") {
     const host = `localhost:${hub.port}`;
@@ -194,25 +198,30 @@ function forwardRemote(req: http.IncomingMessage, res: http.ServerResponse, ctx:
   });
 }
 
-/** Receiver side: the sender checks the role again and proxies to its own localhost:<port>. */
+/**
+ * Receiver side: `<domain>.localhost` is the sender's dashboard and `<port>.<domain>.localhost` its localhost:<port>.
+ * The sender checks the role again on every request.
+ */
 function forwardLocal(req: http.IncomingMessage, res: http.ServerResponse, ctx: RouterContext, host: string, local: LocalTarget) {
   const { remote, domain, port } = local;
   const allowed = canReachLocalhost(remote);
-  if (!port || !allowed) {
+  const landing = !port && (req.url || "/").split("?")[0] === LANDING_PATH;
+  if (!allowed || landing) {
     const hosts = (ctx.remoteHosts?.(remote.name) || []).map((h) => ({ local: h, url: `${urlFor(h, isTls(req))}/` }));
     const body = remoteLocalhost({ domain, name: remote.name, sender: remote.sender.hostname, allowed, hosts, portUrl: portUrl(req, domain), dashboardUrl: dashboardUrl(req) });
-    html(res, port ? 403 : 200, body);
+    html(res, port && !allowed ? 403 : 200, body);
     return;
   }
+  const label = `${remote.name}: ${port ? `localhost:${port}` : "dashboard"}`;
   const started = Date.now();
   res.once("finish", () => record(ctx.stats, host, res.statusCode, Date.now() - started, res.statusCode >= 500));
   ctx.proxy.web(req, res, localOptions(req, remote, port), (err: NodeJS.ErrnoException) => {
-    logger.warn(`${host} → ${remote.name} localhost:${port}: ${reason(err)}`);
+    logger.warn(`${host} → ${label}: ${reason(err)}`);
     if (res.headersSent) {
       res.destroy();
       return;
     }
-    html(res, 502, upstreamDown(host, `${remote.name}: localhost:${port}`, reason(err) || "error", dashboardUrl(req)));
+    html(res, 502, upstreamDown(host, label, reason(err) || "error", dashboardUrl(req)));
   });
 }
 
