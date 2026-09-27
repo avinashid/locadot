@@ -144,4 +144,14 @@ test("remote pass-through: a --cors page's localhost:<port> calls reach the send
     });
     assert.equal(res.status, 403);
   });
+
+  await t.test("a stopped API is a 503 with locadot's page, which Cloudflare passes through", async () => {
+    const down = await freePort();
+    const res = await request(admin.httpPort, `app.localhost:${admin.httpPort}`, `/__locadot/x/http/localhost:${down}/auth/token`, {
+      headers: { "Sec-Fetch-Site": "same-origin" },
+    });
+    assert.equal(res.status, 503);
+    assert.match(res.body, new RegExp(`localhost:${down}`));
+    assert.match(res.body, /ECONNREFUSED/);
+  });
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Through a tunnel or remote access, a stopped or unmapped upstream is now a 503 with locadot's "upstream unreachable"
+  page. With 502, Cloudflare replaced the page with its own "origin bad gateway" error, which hid the real cause.
+
 ## 2.1.0 (2026-09-27)
 
 ### Added

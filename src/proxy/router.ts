@@ -36,6 +36,9 @@ export interface RouterContext {
   remoteHosts?(name: string): string[];
 }
 
+// Cloudflare swaps an origin's 502/504 for its own "bad gateway" page, so through a tunnel say 503 and the page survives.
+const downStatus = (req: http.IncomingMessage) => (fromTunnel(req) || fromRemote(req) ? 503 : 502);
+
 /** Resolves a tunnel's public host to its mapping and tags the request, before any routing. */
 const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDecision | undefined) => {
   if (hub?.kind === "app") {
@@ -141,7 +144,7 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
         forwardLocal(req, res, ctx, host, local);
         return;
       }
-      res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      res.writeHead(downStatus(req), { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
       res.end(proxyNotFound(host, dashboardUrl(req)));
       return;
     }
@@ -188,8 +191,8 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
         res.destroy();
         return;
       }
-      // With --cors the page should see a 502, not a CORS error.
-      res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...(entry.cors ? allowOrigin(req) : {}) });
+      // With --cors the page should see the error, not a CORS failure.
+      res.writeHead(downStatus(req), { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...(entry.cors ? allowOrigin(req) : {}) });
       res.end(upstreamDown(host, upstream, reason(err) || "error", dashboardUrl(req)));
     });
   } catch (error) {
@@ -243,7 +246,7 @@ function forwardLocal(req: http.IncomingMessage, res: http.ServerResponse, ctx: 
       res.destroy();
       return;
     }
-    html(res, 502, upstreamDown(host, label, reason(err) || "error", dashboardUrl(req)));
+    html(res, downStatus(req), upstreamDown(host, label, reason(err) || "error", dashboardUrl(req)));
   });
 }
 
