@@ -162,6 +162,13 @@ program
   .action(run((value) => Commands.hubLocalhost(value)));
 
 program
+  .command("ui:password")
+  .description("Set or reset the dashboard password (prompts; hashed with scrypt). The API token keeps working for scripts")
+  .option("--off", "Remove the password; the dashboard is open to anyone on this machine again")
+  .option("--stdin", "Read the password from stdin instead of prompting")
+  .action(run((options) => Commands.uiPassword(options)));
+
+program
   .command("share")
   .description("Create a one-time pairing code for someone to connect to this locadot")
   .addOption(roleOption())

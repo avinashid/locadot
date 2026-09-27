@@ -20,6 +20,11 @@
   `remote:domain`. The sender checks the role on every request, never exposes its own proxy ports, and can turn this off
   with `hub:localhost off` or the dashboard switch.
 
+- Dashboard password (UI only): `locadot ui:password` sets or resets it from the terminal (scrypt hash, 0600 file), `--off` removes it,
+  and **Settings → Dashboard password** changes it in the UI. When it is set, the dashboard shows a sign-in page and never serves the API token
+  to a signed-out visitor. It uses a 7-day HttpOnly SameSite=Strict session, rate-limits wrong passwords, and adds a Sign out button to the sidebar.
+  Mapped hosts are not affected, and neither are scripts or the CLI that send `X-Locadot-Token`.
+
 ### Fixed
 - The proxy can now tell a user's `LOCADOT_HTTP_PORT`/`LOCADOT_HTTPS_PORT` from the copies the CLI pins on every spawn
   (`LOCADOT_USER_PORTS`), so saved ports aren't reported as env-overridden.

@@ -222,6 +222,8 @@ body.offline .live-label { color: var(--down); }
 .sb-count { margin-left: auto; font-size: 11px; font-weight: 600; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); color: var(--fg-2); display: inline-flex; align-items: center; justify-content: center; }
 .sb-collapse { margin: 8px 10px 12px; width: auto; flex-shrink: 0; }
 .sb-collapse svg { transition: transform 0.18s ease; }
+.sb-signout { margin-bottom: 0; }
+.sb-signout[hidden] { display: none; }
 :root[data-sidebar="collapsed"] .sb-label { display: none; }
 :root[data-sidebar="collapsed"] .sb-head { padding: 0; justify-content: center; }
 :root[data-sidebar="collapsed"] .sb-link { justify-content: center; padding: 0; }
@@ -948,6 +950,8 @@ const clientJs = `
 
   var tokenMeta = document.querySelector('meta[name="locadot-token"]');
   var TOKEN = tokenMeta ? tokenMeta.getAttribute("content") : "";
+  var uiAuthMeta = document.querySelector('meta[name="locadot-ui-auth"]');
+  var UI_AUTH = uiAuthMeta ? uiAuthMeta.getAttribute("content") === "on" : false;
 
   var versionEl = document.getElementById("version");
   var uptimeEl = document.getElementById("uptime");
@@ -1171,6 +1175,8 @@ const clientJs = `
   }
 
   function parseJsonOrThrow(r) {
+    // The dashboard session ran out (or the password was set elsewhere): back to the sign-in page.
+    if (r.status === 401) location.reload();
     return r.json().catch(function () { return {}; }).then(function (body) {
       if (!r.ok) {
         var err = new Error((body && body.error) || ("Request failed (" + r.status + ")"));
@@ -2810,6 +2816,7 @@ const clientJs = `
 
   function renderSettings(s) {
     settingsLoaded = s;
+    if (s.uiAuth) renderUiAuth(s.uiAuth.enabled);
     if (document.activeElement !== httpPortInput) httpPortInput.value = String((s.saved && s.saved.httpPort) || s.httpPort);
     if (document.activeElement !== httpsPortInput) httpsPortInput.value = String((s.saved && s.saved.httpsPort) || s.httpsPort);
     var notes = ["Running on http :" + s.httpPort + " and https :" + s.httpsPort + "."];
@@ -2934,6 +2941,66 @@ const clientJs = `
   tokenCopy.addEventListener("click", function () { copyText(TOKEN, tokenCopy); });
   dangerClearLogs.addEventListener("click", function () { logsClearBtn.click(); });
 
+  // ---------- dashboard password ----------
+
+  var uiAuthForm = document.getElementById("ui-auth-form");
+  var uiAuthBadge = document.getElementById("ui-auth-badge");
+  var uiAuthCurrentField = document.getElementById("ui-auth-current-field");
+  var uiAuthCurrent = document.getElementById("ui-auth-current");
+  var uiAuthNew = document.getElementById("ui-auth-new");
+  var uiAuthRepeat = document.getElementById("ui-auth-repeat");
+  var uiAuthError = document.getElementById("ui-auth-error");
+  var uiAuthSave = document.getElementById("ui-auth-save");
+  var uiAuthRemove = document.getElementById("ui-auth-remove");
+  var signOutBtn = document.getElementById("sb-signout");
+
+  function renderUiAuth(enabled) {
+    UI_AUTH = enabled;
+    uiAuthBadge.textContent = enabled ? "On" : "Off";
+    uiAuthBadge.className = "badge " + (enabled ? "badge-up" : "badge-count");
+    uiAuthCurrentField.hidden = !enabled;
+    uiAuthSave.textContent = enabled ? "Change password" : "Set password";
+    uiAuthRemove.hidden = !enabled;
+    signOutBtn.hidden = !enabled;
+  }
+  renderUiAuth(UI_AUTH);
+
+  function uiAuthFail(message) {
+    uiAuthError.textContent = message;
+    uiAuthError.hidden = false;
+  }
+
+  function sendUiAuth(body, done) {
+    uiAuthError.hidden = true;
+    uiAuthSave.disabled = uiAuthRemove.disabled = true;
+    apiFetch("/api/settings/ui-password", { method: "PUT", body: JSON.stringify(body) })
+      .then(function (res) {
+        uiAuthCurrent.value = uiAuthNew.value = uiAuthRepeat.value = "";
+        renderUiAuth(res.uiAuth.enabled);
+        showToast(done, "success");
+      })
+      .catch(function (err) { uiAuthFail(err.message + (err.hint ? " " + err.hint : "")); })
+      .then(function () { uiAuthSave.disabled = uiAuthRemove.disabled = false; });
+  }
+
+  uiAuthForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (uiAuthNew.value.length < 8) return uiAuthFail("The password must be at least 8 characters.");
+    if (uiAuthNew.value !== uiAuthRepeat.value) return uiAuthFail("The passwords don't match.");
+    if (UI_AUTH && !uiAuthCurrent.value) return uiAuthFail("Enter the current password.");
+    var wasOn = UI_AUTH;
+    sendUiAuth({ password: uiAuthNew.value, current: uiAuthCurrent.value }, wasOn ? "Password changed. Other sessions are signed out." : "The dashboard now asks for this password");
+  });
+
+  uiAuthRemove.addEventListener("click", function () {
+    if (!uiAuthCurrent.value) return uiAuthFail("Enter the current password to remove it.");
+    sendUiAuth({ enabled: false, current: uiAuthCurrent.value }, "Password removed");
+  });
+
+  signOutBtn.addEventListener("click", function () {
+    fetch("/logout", { method: "POST" }).then(function () { location.reload(); });
+  });
+
   // ---------- polling ----------
 
   function tickViews() {
@@ -2962,7 +3029,7 @@ const clientJs = `
 })();
 `;
 
-export function renderPage(nonce: string, token: string): string {
+export function renderPage(nonce: string, token: string, uiAuth = false): string {
   // The nonce and token are server-generated but still escaped before landing
   // in HTML attributes, defensively.
   const safeNonce = escapeHtml(nonce);
@@ -2974,6 +3041,7 @@ export function renderPage(nonce: string, token: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="locadot-token" content="${safeToken}">
+<meta name="locadot-ui-auth" content="${uiAuth ? "on" : "off"}">
 <title>locadot dashboard</title>
 <script nonce="${safeNonce}">try { var t = localStorage.getItem("locadot.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); var s = localStorage.getItem("locadot.sidebar"); if (s === "collapsed" || (s !== "expanded" && window.innerWidth < 1280)) document.documentElement.setAttribute("data-sidebar", "collapsed"); } catch (e) {}</script>
 <style nonce="${safeNonce}">${css}</style>
@@ -2996,6 +3064,7 @@ export function renderPage(nonce: string, token: string): string {
     <a class="sb-link" href="#/logs" data-view="logs" title="Logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sb-label">Logs</span></a>
     <a class="sb-link" href="#/settings" data-view="settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="sb-label">Settings</span></a>
   </div>
+  <button type="button" id="sb-signout" class="sb-link sb-collapse sb-signout" title="Sign out" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="sb-label">Sign out</span></button>
   <button type="button" id="sb-collapse" class="sb-link sb-collapse" aria-controls="sidebar" aria-expanded="true" title="Collapse sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg><span class="sb-label">Collapse</span></button>
 </nav>
 <div id="sb-backdrop" class="sb-backdrop" hidden></div>
@@ -3500,6 +3569,23 @@ export function renderPage(nonce: string, token: string): string {
           </div>
         </div>
       </section>
+
+        <section id="ui-auth-card" class="card" aria-label="Dashboard password">
+          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Dashboard password</h3><span id="ui-auth-badge" class="badge">Off</span></div></div>
+          <form id="ui-auth-form" class="card-body token-body" novalidate>
+            <div id="ui-auth-note" class="tile-sub">Ask for a password before the dashboard opens. Only the dashboard is protected: your hosts and scripts using the API token work as before. Forgot it? Run <code class="mono">locadot ui:password</code> in a terminal.</div>
+            <div id="ui-auth-current-field" class="field" hidden><label for="ui-auth-current">Current password</label><input type="password" id="ui-auth-current" class="input" autocomplete="current-password"></div>
+            <div class="form-row-2">
+              <div class="field"><label for="ui-auth-new">New password</label><input type="password" id="ui-auth-new" class="input" autocomplete="new-password" minlength="8" placeholder="8+ characters"></div>
+              <div class="field"><label for="ui-auth-repeat">Repeat it</label><input type="password" id="ui-auth-repeat" class="input" autocomplete="new-password"></div>
+            </div>
+            <div id="ui-auth-error" class="field-error" role="alert" hidden></div>
+            <div class="form-actions">
+              <button type="submit" id="ui-auth-save" class="btn btn-sm btn-primary">Set password</button>
+              <button type="button" id="ui-auth-remove" class="btn btn-sm btn-danger" hidden>Remove password</button>
+            </div>
+          </form>
+        </section>
 
         <section class="card" aria-label="API token">
           <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">API token</h3></div></div>

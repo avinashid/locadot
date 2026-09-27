@@ -177,9 +177,23 @@ Trust and start-at-boot may need elevation. locadot asks the OS for it (polkit o
 If that isn't possible, for example on a headless Linux box, the panel shows the exact command to run instead: `sudo locadot trust`,
 `locadot startup:enable`, and so on.
 
+### Dashboard password
+
+The dashboard is open to anyone on this machine by default. To require a password for the UI only:
+
+```sh
+locadot ui:password          # set or reset it (prompts twice; stored as an scrypt hash, 0600)
+locadot ui:password --off    # remove it
+echo "$PW" | locadot ui:password --stdin
+```
+
+You can also set, change or remove it under **Settings → Dashboard password** (changing or removing it there needs the current one).
+Only the dashboard is protected. Your mapped hosts work as before, and so do scripts and the CLI that send `X-Locadot-Token`.
+Sessions last 7 days, and changing the password signs everyone out. If you forget it, run `locadot ui:password` again in a terminal.
+
 ### JSON API (for scripts and AI agents)
 
-Everything the page does is a plain JSON API on the dashboard origin. The read routes are open to local callers. Every mutating route needs the
+Everything the page does is a plain JSON API on the dashboard origin. The read routes are open to local callers, unless a [dashboard password](#dashboard-password) is set; then they need a signed-in session or the token. Every mutating route needs the
 `X-Locadot-Token` header. Get the token with `locadot token`. It lives in `<state dir>/.locadot-token` (mode 0600) and is regenerated
 each time the proxy starts.
 
@@ -198,6 +212,7 @@ each time the proxy starts.
 | `GET /api/settings` | | Running ports/bind, `logLevel`, `stateDir`, `saved`/`env` overrides, and `restartRequired`. |
 | `PUT /api/settings` | `{ "httpPort": 8080, "httpsPort": 8443 }` | Save new ports to the config file (400 if invalid or equal). Takes effect after a restart. |
 | `POST /api/proxy/restart` | | Restart the proxy (e.g. to pick up saved ports). |
+| `PUT /api/settings/ui-password` | `{ "password": "…", "current": "…" }` or `{ "enabled": false, "current": "…" }` | Set, change or remove the dashboard password (`current` is required once one is set). |
 | `GET /api/hub` | | Hub status/config, plus `localhost` (sender: is localhost access on). |
 | `PUT /api/hub/localhost` | `{ "enabled": true }` | Sender: turn localhost access for admin peers on/off (400 if the hub isn't configured). |
 | `GET /api/remotes` | | Every remote (never the token), including `domain` and `localhost`. |

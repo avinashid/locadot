@@ -18,6 +18,7 @@ import Links, { LinkError } from "../lib/links";
 import HubConfigStore from "../lib/hub-config";
 import Remotes, { RemoteError } from "../lib/remotes";
 import type { DashboardContext, HubConfig, Peer, Remote, Role } from "../types";
+import UiAuth from "../lib/ui-auth";
 
 const MAX_BODY = 64 * 1024;
 
@@ -62,7 +63,7 @@ export function assertTrusted(req: http.IncomingMessage, ctx: DashboardContext) 
   }
 }
 
-function readJson(req: http.IncomingMessage): Promise<Json> {
+export function readJson(req: http.IncomingMessage): Promise<Json> {
   return new Promise((resolve, reject) => {
     const type = String(req.headers["content-type"] || "");
     const chunks: Buffer[] = [];
@@ -201,6 +202,7 @@ function buildSettingsBody(ctx: DashboardContext, warning?: string) {
     saved,
     env,
     restartRequired,
+    uiAuth: { enabled: UiAuth.enabled(), updatedAt: UiAuth.read()?.updatedAt },
     ...(warning ? { warning } : {}),
   };
 }

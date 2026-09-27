@@ -3,6 +3,7 @@ import Localhost, { InputError } from "../../lib/localhost";
 import HostOps from "../../lib/hosts";
 import Constants from "../../constants";
 import { cloudflaredInfo, installCloudflared } from "../../proxy/tunnel";
+import FileModule from "../../utils/file";
 import type { TunnelState } from "../../types";
 import { ensureRunning, print } from "../shared";
 
@@ -13,7 +14,7 @@ type TunnelRow = { host: string; tunnel: TunnelState };
 /** Tunnel state lives in the proxy process; ask it over the local read-only API. */
 const tunnelRows = () =>
   new Promise<TunnelRow[]>((resolve, reject) => {
-    const req = http.get({ host: "127.0.0.1", port: Constants.server.httpPort, path: "/api/hosts", headers: { Host: "localhost" }, timeout: 5000 }, (res) => {
+    const req = http.get({ host: "127.0.0.1", port: Constants.server.httpPort, path: "/api/hosts", headers: { Host: "localhost", "X-Locadot-Token": FileModule.read("API_TOKEN")?.trim() || "" }, timeout: 5000 }, (res) => {
       let body = "";
       res.on("data", (chunk) => (body += chunk));
       res.on("end", () => {

@@ -53,6 +53,8 @@ export default class Constants {
     // Secret for the dashboard's mutating API; rotated on every proxy start.
     API_TOKEN: path.join(PACKAGE_PATH, ".locadot-token"),
     CONFIG_FILE,
+    // Optional dashboard password: scrypt hash + session signing secret (0600).
+    UI_AUTH_FILE: path.join(PACKAGE_PATH, ".locadot-ui-auth.json"),
     // Remote access. Sender: public hostname config, invites + peers (0600). Receiver: remotes (0600).
     HUB_FILE: path.join(PACKAGE_PATH, ".locadot-hub.json"),
     LINKS_FILE: path.join(PACKAGE_PATH, ".locadot-links.json"),

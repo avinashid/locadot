@@ -43,6 +43,7 @@ const apiToken = () => {
 const dashboardRequest = (method: string, path: string, options: { headers?: Record<string, string>; body?: unknown } = {}) =>
   new Promise<{ status: number; json: any }>((resolve, reject) => {
     const data = options.body !== undefined ? JSON.stringify(options.body) : undefined;
+    const token = FileModule.read("API_TOKEN")?.trim();
     const req = http.request(
       {
         host: "127.0.0.1",
@@ -51,6 +52,8 @@ const dashboardRequest = (method: string, path: string, options: { headers?: Rec
         method,
         headers: {
           Host: "localhost",
+          // Reads need it too once the dashboard has a password.
+          ...(token ? { "X-Locadot-Token": token } : {}),
           ...(data ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) } : {}),
           ...options.headers,
         },

@@ -2,7 +2,9 @@ import crypto from "crypto";
 import http from "http";
 import { DashboardContext, HostEntry, HostStats, ProbeResult, Role, TunnelState } from "../types";
 import { renderPage } from "./page";
-import { ApiError, route } from "./api";
+import { ApiError, assertTrusted, readJson, route } from "./api";
+import { gate, sessionCookie } from "./login";
+import UiAuth, { SESSION_COOKIE } from "../lib/ui-auth";
 import { systemStatus } from "../lib/system";
 import { cloudflaredInfo as cloudflared } from "../proxy/tunnel";
 import { formatUrl } from "../lib/urls";
@@ -107,6 +109,13 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
     }
   };
 
+  if (gate(req, res, url, ctx.token, nonce)) return;
+
+  if (url.pathname === "/api/settings/ui-password" && method === "PUT") {
+    uiPassword(req, res, ctx).catch(fail);
+    return;
+  }
+
   if (url.pathname.startsWith("/api/") && !(["/api/status", "/api/hosts"].includes(url.pathname) && (method === "GET" || method === "HEAD"))) {
     route(req, url, ctx)
       .then((result) => {
@@ -124,7 +133,7 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
 
   switch (url.pathname) {
     case "/":
-      sendBody(res, method, 200, "text/html; charset=utf-8", renderPage(nonce, ctx.token));
+      sendBody(res, method, 200, "text/html; charset=utf-8", renderPage(nonce, ctx.token, UiAuth.enabled()));
       return;
     case "/favicon.ico":
       res.statusCode = 204;
@@ -156,4 +165,32 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
     default:
       sendJson(res, method, 404, { error: "not found" });
   }
+}
+
+/** Set, change or remove the dashboard password from the dashboard; once one is set, the current one is required. */
+async function uiPassword(req: http.IncomingMessage, res: http.ServerResponse, ctx: DashboardContext): Promise<void> {
+  assertTrusted(req, ctx);
+  const body = await readJson(req);
+  const ip = req.socket.remoteAddress || "";
+  if (UiAuth.enabled()) {
+    if (UiAuth.limited(ip)) throw new ApiError(429, "Too many wrong passwords. Wait a few minutes and try again.");
+    if (!UiAuth.verify(body.current)) {
+      UiAuth.fail(ip);
+      throw new ApiError(403, "The current password is wrong.", "Forgot it? Run `locadot ui:password` in a terminal.");
+    }
+    UiAuth.succeed(ip);
+  }
+  if (body.enabled === false) {
+    UiAuth.clear();
+    res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+    sendJson(res, req.method || "PUT", 200, { uiAuth: { enabled: false } });
+    return;
+  }
+  try {
+    UiAuth.set(body.password as string);
+  } catch (err) {
+    throw new ApiError(400, (err as Error).message);
+  }
+  res.setHeader("Set-Cookie", sessionCookie(req));
+  sendJson(res, req.method || "PUT", 200, { uiAuth: { enabled: true } });
 }
