@@ -180,6 +180,72 @@ header {
 .live-dot.down { background: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
 body.offline .live-label { color: var(--down); }
 
+/* ---------- sidebar ---------- */
+:root { --sb-w: 232px; }
+:root[data-sidebar="collapsed"] { --sb-w: 64px; }
+.sidebar {
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  z-index: 7;
+  width: var(--sb-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.18s ease, transform 0.2s ease;
+}
+.shell { margin-left: var(--sb-w); min-height: 100vh; transition: margin-left 0.18s ease; }
+.sb-head { height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; white-space: nowrap; }
+.sb-links { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; }
+.sb-section { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-dim); padding: 14px 12px 6px; white-space: nowrap; }
+.sb-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.sb-link:hover { background: var(--surface-2); color: var(--fg); text-decoration: none; }
+.sb-link[aria-current="true"] { background: var(--accent-bg); color: var(--accent-strong); }
+.sb-link svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sb-count { margin-left: auto; font-size: 11px; font-weight: 600; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); color: var(--fg-2); display: inline-flex; align-items: center; justify-content: center; }
+.sb-collapse { margin: 8px 10px 12px; width: auto; flex-shrink: 0; }
+.sb-collapse svg { transition: transform 0.18s ease; }
+:root[data-sidebar="collapsed"] .sb-label { display: none; }
+:root[data-sidebar="collapsed"] .sb-head { padding: 0; justify-content: center; }
+:root[data-sidebar="collapsed"] .sb-link { justify-content: center; padding: 0; }
+:root[data-sidebar="collapsed"] .sb-collapse svg { transform: scaleX(-1); }
+:root[data-sidebar="collapsed"] .sb-links { padding-top: 12px; }
+.sb-menu, .brand-mobile { display: none; }
+.btn.sb-menu { display: none; width: 32px; height: 32px; padding: 0; color: var(--muted); }
+.sb-menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.sb-backdrop { position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.45); }
+.card, details.card { scroll-margin-top: 76px; }
+@media (max-width: 899px) {
+  :root, :root[data-sidebar="collapsed"] { --sb-w: 0px; }
+  .sidebar { width: 260px; transform: translateX(-100%); box-shadow: none; visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; }
+  body.sb-open .sidebar { transform: none; box-shadow: var(--shadow-md); visibility: visible; transition: transform 0.2s ease; }
+  :root[data-sidebar="collapsed"] .sb-label { display: revert; }
+  :root[data-sidebar="collapsed"] .sb-count { display: inline-flex; }
+  :root[data-sidebar="collapsed"] .sb-head { padding: 0 20px; justify-content: flex-start; }
+  :root[data-sidebar="collapsed"] .sb-link { justify-content: flex-start; padding: 0 12px; }
+  .sb-collapse { display: none; }
+  .btn.sb-menu { display: inline-flex; }
+  .brand-mobile { display: inline-block; }
+  span.wordmark.brand-mobile { display: inline; }
+}
+
 /* ---------- page layout ---------- */
 main {
   max-width: 1360px;
@@ -830,6 +896,85 @@ const clientJs = `
     btn.addEventListener("click", function () { apply(order[(order.indexOf(mode) + 1) % order.length]); });
   })();
 
+  (function () {
+    var root = document.documentElement;
+    var sidebar = document.getElementById("sidebar");
+    var collapseBtn = document.getElementById("sb-collapse");
+    var menuBtn = document.getElementById("sb-menu");
+    var backdrop = document.getElementById("sb-backdrop");
+    var links = Array.prototype.slice.call(sidebar.querySelectorAll("a.sb-link"));
+    var drawer = window.matchMedia("(max-width: 899px)");
+
+    function syncCollapse() {
+      var collapsed = root.getAttribute("data-sidebar") === "collapsed";
+      collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+      collapseBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+      collapseBtn.querySelector(".sb-label").textContent = collapsed ? "Expand" : "Collapse";
+    }
+    syncCollapse();
+    collapseBtn.addEventListener("click", function () {
+      var collapse = root.getAttribute("data-sidebar") !== "collapsed";
+      if (collapse) root.setAttribute("data-sidebar", "collapsed");
+      else root.removeAttribute("data-sidebar");
+      try { localStorage.setItem("locadot.sidebar", collapse ? "collapsed" : "expanded"); } catch (e) {}
+      syncCollapse();
+    });
+
+    function setDrawer(open) {
+      document.body.classList.toggle("sb-open", open);
+      backdrop.hidden = !open;
+      menuBtn.setAttribute("aria-expanded", String(open));
+      menuBtn.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+      if (open && links[0]) links[0].focus();
+    }
+    menuBtn.addEventListener("click", function () { setDrawer(!document.body.classList.contains("sb-open")); });
+    backdrop.addEventListener("click", function () { setDrawer(false); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && document.body.classList.contains("sb-open")) { setDrawer(false); menuBtn.focus(); }
+    });
+    var onDrawerChange = function () { if (!drawer.matches) setDrawer(false); };
+    if (drawer.addEventListener) drawer.addEventListener("change", onDrawerChange);
+
+    function setActive(id) {
+      links.forEach(function (a) {
+        if (a.getAttribute("href") === "#" + id) a.setAttribute("aria-current", "true");
+        else a.removeAttribute("aria-current");
+      });
+    }
+    links.forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        var target = document.getElementById(a.getAttribute("href").slice(1));
+        if (!target) return;
+        e.preventDefault();
+        if (target.tagName === "DETAILS") target.open = true;
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        setActive(target.id);
+        if (drawer.matches) setDrawer(false);
+      });
+    });
+
+    // The section nearest the top of the viewport wins; a click sets it immediately.
+    var visible = {};
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { visible[en.target.id] = en.isIntersecting ? en.boundingClientRect.top : undefined; });
+        var best = null;
+        links.forEach(function (a) {
+          var id = a.getAttribute("href").slice(1);
+          var el = document.getElementById(id);
+          if (visible[id] === undefined || !el) return;
+          var top = el.getBoundingClientRect().top;
+          if (best === null || Math.abs(top - 76) < Math.abs(best.top - 76)) best = { id: id, top: top };
+        });
+        if (best) setActive(best.id);
+      }, { rootMargin: "-64px 0px -40% 0px" });
+      links.forEach(function (a) {
+        var el = document.getElementById(a.getAttribute("href").slice(1));
+        if (el) io.observe(el);
+      });
+    }
+  })();
+
   var tokenMeta = document.querySelector('meta[name="locadot-token"]');
   var TOKEN = tokenMeta ? tokenMeta.getAttribute("content") : "";
 
@@ -876,6 +1021,8 @@ const clientJs = `
   var tbody = document.getElementById("tbody");
   var hostsSkeletonEl = document.getElementById("hosts-skeleton");
   var hostsCountEl = document.getElementById("hosts-count");
+  var sbHostsCountEl = document.getElementById("sb-hosts-count");
+  var sbRemotesCountEl = document.getElementById("sb-remotes-count");
   var hostsFilterInput = document.getElementById("hosts-filter");
   // As many skeleton rows as hosts last time, so the table doesn't jump when data lands.
   try {
@@ -1450,6 +1597,8 @@ const clientJs = `
   function renderRemotes(remotes) {
     lastRemotes = remotes;
     remotesEmptyEl.hidden = remotes.length !== 0;
+    sbRemotesCountEl.textContent = String(remotes.length);
+    sbRemotesCountEl.hidden = remotes.length === 0;
     clear(remotesListEl);
     remotes.forEach(function (remote) {
       var item = document.createElement("div");
@@ -2168,6 +2317,8 @@ const clientJs = `
     });
     hostsCountEl.textContent = String(hosts.length);
     hostsCountEl.hidden = false;
+    sbHostsCountEl.textContent = String(hosts.length);
+    sbHostsCountEl.hidden = false;
     applyHostsFilter();
   }
 
@@ -2269,16 +2420,38 @@ export function renderPage(nonce: string, token: string): string {
 <meta name="color-scheme" content="dark light">
 <meta name="locadot-token" content="${safeToken}">
 <title>locadot dashboard</title>
-<script nonce="${safeNonce}">try { var t = localStorage.getItem("locadot.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
+<script nonce="${safeNonce}">try { var t = localStorage.getItem("locadot.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); var s = localStorage.getItem("locadot.sidebar"); if (s === "collapsed" || (s !== "expanded" && window.innerWidth < 1280)) document.documentElement.setAttribute("data-sidebar", "collapsed"); } catch (e) {}</script>
 <style nonce="${safeNonce}">${css}</style>
 </head>
 <body class="boot">
+<nav id="sidebar" class="sidebar" aria-label="Sections">
+  <div class="sb-head">
+    <span class="logo" aria-hidden="true"></span>
+    <h1 class="wordmark sb-label">locadot</h1>
+    <span id="version" class="muted mono sb-label"></span>
+  </div>
+  <div class="sb-links">
+    <a class="sb-link" href="#hosts-card" title="Hosts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg><span class="sb-label">Hosts</span><span id="sb-hosts-count" class="sb-count sb-label" hidden></span></a>
+    <a class="sb-link" href="#add-card" title="Add host"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span class="sb-label">Add host</span></a>
+    <a class="sb-link" href="#system-card" title="System"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="sb-label">System</span></a>
+    <a class="sb-link" href="#sharing-card" title="Public sharing"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="sb-label">Public sharing</span></a>
+    <div class="sb-section sb-label">Remote</div>
+    <a class="sb-link" href="#hub-card" title="Remote access"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/></svg><span class="sb-label">Remote access</span></a>
+    <a class="sb-link" href="#remotes-card" title="Connected machines"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="9" height="7" rx="1.5"/><rect x="13" y="13" width="9" height="7" rx="1.5"/><path d="M6.5 11v4.5h6.5M17.5 13V8.5H11"/></svg><span class="sb-label">Connected machines</span><span id="sb-remotes-count" class="sb-count sb-label" hidden></span></a>
+    <div class="sb-section sb-label">Tools</div>
+    <a class="sb-link" href="#logs-panel" title="Logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sb-label">Logs</span></a>
+    <a class="sb-link" href="#cli-card" title="CLI &amp; API"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-5-6-5M12 19h8"/></svg><span class="sb-label">CLI &amp; API</span></a>
+  </div>
+  <button type="button" id="sb-collapse" class="sb-link sb-collapse" aria-controls="sidebar" aria-expanded="true" title="Collapse sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg><span class="sb-label">Collapse</span></button>
+</nav>
+<div id="sb-backdrop" class="sb-backdrop" hidden></div>
+<div class="shell">
 <header>
   <div class="topbar">
     <div class="brand">
-      <span class="logo" aria-hidden="true"></span>
-      <h1 class="wordmark">locadot</h1>
-      <span id="version" class="muted mono"></span>
+      <button type="button" id="sb-menu" class="btn sb-menu" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <span class="logo brand-mobile" aria-hidden="true"></span>
+      <span class="wordmark brand-mobile">locadot</span>
     </div>
     <div class="header-meta">
       <span class="chip chip-live"><span id="live-dot" class="live-dot"></span> <span id="live-label" class="live-label">live</span></span>
@@ -2588,6 +2761,7 @@ export function renderPage(nonce: string, token: string): string {
 <footer>
   <a href="https://github.com/avinashid/locadot" target="_blank" rel="noopener noreferrer">github.com/avinashid/locadot</a>
 </footer>
+</div>
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 <script nonce="${safeNonce}">${clientJs}</script>
 </body>

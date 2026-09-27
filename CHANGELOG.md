@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.1.0-beta.0 (2026-09-27)
 
 ### Added
 - Remote access: share your whole locadot with another locadot over a Cloudflare named tunnel, a quick tunnel, or any URL.
   Receivers pair with a one-time string (5 minutes) and get viewer, editor or admin access, which the sender can change or
   revoke. The sender's mappings appear in the receiver's locadot; clashing names become `<host>.<remote>.localhost`.
   New commands: `hub*`, `share`, `peers*`, `connect`, `remotes`, `remote:*` and `disconnect`. There are also new dashboard cards.
+- Dashboard: a collapsible sidebar with section links, active-section highlighting and counts. Collapse it to an icon rail
+  (remembered per browser); on small screens it is a slide-out drawer.
 
 ## 2.0.0 (2026-09-26)
 
