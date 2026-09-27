@@ -33,7 +33,7 @@ const remotes = (): Record<string, Remote> => {
 
 export const remoteFor = (name: string): Remote | undefined => remotes()[name];
 
-export const remoteOptions = (req: http.IncomingMessage, entry: HostEntry, remote: Remote): httpProxy.ServerOptions => ({
+export const remoteOptions = (req: http.IncomingMessage, entry: HostEntry, remote: Remote, names?: string): httpProxy.ServerOptions => ({
   target: remote.url,
   changeOrigin: true,
   // Don't leak the receiver's LAN addresses to the sender.
@@ -48,6 +48,7 @@ export const remoteOptions = (req: http.IncomingMessage, entry: HostEntry, remot
     "X-Original-Host": req.headers.host || "",
     "X-Locadot-Peer": remote.token,
     "X-Locadot-Host": entry.remote!.host,
+    ...(names ? { "X-Locadot-Names": names } : {}),
   },
 });
 
@@ -80,7 +81,7 @@ export const localFor = (host: string): LocalTarget | undefined => {
 export const canReachLocalhost = (remote: Remote) => remote.role === "admin" && remote.localhost !== false;
 
 /** Without a port the sender serves its dashboard. */
-export const localOptions = (req: http.IncomingMessage, remote: Remote, port?: number): httpProxy.ServerOptions => ({
+export const localOptions = (req: http.IncomingMessage, remote: Remote, port?: number, names?: string): httpProxy.ServerOptions => ({
   target: remote.url,
   changeOrigin: true,
   xfwd: false,
@@ -93,6 +94,6 @@ export const localOptions = (req: http.IncomingMessage, remote: Remote, port?: n
   headers: {
     "X-Original-Host": req.headers.host || "",
     "X-Locadot-Peer": remote.token,
-    ...(port ? { "X-Locadot-Port": String(port) } : { "X-Locadot-Dashboard": "1" }),
+    ...(port ? { "X-Locadot-Port": String(port), ...(names ? { "X-Locadot-Names": names } : {}) } : { "X-Locadot-Dashboard": "1" }),
   },
 });

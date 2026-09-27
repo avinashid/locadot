@@ -94,6 +94,9 @@ export const isDomainLabel = (value: unknown): value is string => {
 const localhostAllowed = (data: { localhost?: unknown }, role: string): boolean =>
   typeof data.localhost === "boolean" ? data.localhost : role === "admin";
 
+/** A shared --cors mapping is --cors here too; the sender still does the CORS work (see router forwardRemote). */
+const inherited = (h: Pick<RemoteHost, "cors">) => (h.cors ? { cors: true } : {});
+
 /** Domains already spoken for: other remotes' `domain`, and any single-label `*.localhost` registry host. */
 const takenDomains = (excludeName?: string): Set<string> => {
   const store = readFile();
@@ -221,7 +224,7 @@ export default class Remotes {
           continue;
         }
         taken.add(local);
-        registry.hosts[local] = { target: remote.url, remote: { name, host: h.host }, createdAt: now, updatedAt: now };
+        registry.hosts[local] = { target: remote.url, remote: { name, host: h.host }, ...inherited(h), createdAt: now, updatedAt: now };
         mapped.push({ local, host: h.host });
       }
     });
@@ -257,8 +260,12 @@ export default class Remotes {
     const now = new Date().toISOString();
     await RegistryStore.mutate((registry) => {
       const already = new Set<string>();
-      for (const entry of Object.values(registry.hosts)) {
-        if (entry.remote?.name === name) already.add(entry.remote.host);
+      const flags = new Map(hosts.map((h) => [h.host, h]));
+      for (const [local, entry] of Object.entries(registry.hosts)) {
+        if (entry.remote?.name !== name) continue;
+        already.add(entry.remote.host);
+        const h = flags.get(entry.remote.host);
+        if (h && Boolean(h.cors) !== Boolean(entry.cors)) registry.hosts[local] = { ...entry, cors: h.cors || undefined };
       }
       const taken = new Set(Object.keys(registry.hosts));
       for (const h of hosts) {
@@ -266,7 +273,7 @@ export default class Remotes {
         const local = Remotes.localName(name, h.host, taken);
         if (!local) continue;
         taken.add(local);
-        registry.hosts[local] = { target: updated.url, remote: { name, host: h.host }, createdAt: now, updatedAt: now };
+        registry.hosts[local] = { target: updated.url, remote: { name, host: h.host }, ...inherited(h), createdAt: now, updatedAt: now };
       }
     });
 
@@ -283,12 +290,13 @@ export default class Remotes {
     const local = Localhost.requireHost(localHost);
     const hostsRes = await call(`${apiBase(remote.url)}/hosts`, { token: remote.token });
     const hosts: RemoteHost[] = hostsRes.hosts;
-    if (!hosts.some((h) => h.host === remoteHost)) throw new NotFoundError(`"${remoteHost}" is not available on "${name}".`);
+    const shared = hosts.find((h) => h.host === remoteHost);
+    if (!shared) throw new NotFoundError(`"${remoteHost}" is not available on "${name}".`);
 
     const now = new Date().toISOString();
     await RegistryStore.mutate((registry) => {
       if (registry.hosts[local]) throw new ConflictError(`❌ ${local} is already mapped to ${registry.hosts[local].target}.`);
-      registry.hosts[local] = { target: remote.url, remote: { name, host: remoteHost }, createdAt: now, updatedAt: now };
+      registry.hosts[local] = { target: remote.url, remote: { name, host: remoteHost }, ...inherited(shared), createdAt: now, updatedAt: now };
     });
   }
 
@@ -344,7 +352,7 @@ export default class Remotes {
     await RegistryStore.mutate((registry) => {
       const taken = new Set(Object.keys(registry.hosts));
       const local = Remotes.localName(name, created.host, taken);
-      if (local) registry.hosts[local] = { target: remote.url, remote: { name, host: created.host }, createdAt: now, updatedAt: now };
+      if (local) registry.hosts[local] = { target: remote.url, remote: { name, host: created.host }, ...inherited(created), createdAt: now, updatedAt: now };
     });
 
     return created;
@@ -361,7 +369,13 @@ export default class Remotes {
       token: remote.token,
       body: input,
     });
-    return data.host;
+    const updated: RemoteHost = data.host;
+    await RegistryStore.mutate((registry) => {
+      for (const [local, entry] of Object.entries(registry.hosts)) {
+        if (entry.remote?.name === name && entry.remote.host === host) registry.hosts[local] = { ...entry, cors: updated.cors || undefined };
+      }
+    });
+    return updated;
   }
 
   static async removeHost(name: string, host: string): Promise<void> {

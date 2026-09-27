@@ -4,7 +4,7 @@ import logger from "../utils/logger";
 import { urlFor } from "../lib/urls";
 import type { HostEntry } from "../types";
 import { injectShim } from "./passthrough";
-import { fromTunnel, hostOf, isTls, mappedHost } from "./request";
+import { fromTunnel, hostOf, isTls, mappedHost, peerNamesOf } from "./request";
 
 const REWRITABLE = /^(text\/(?!event-stream)|application\/(javascript|x-javascript|ecmascript|json|xml|[\w.+-]+\+(json|xml))\b)/i;
 const DECODERS: Record<string, (body: Buffer) => Buffer> = {
@@ -26,9 +26,11 @@ export const originMap = (req: http.IncomingMessage, hosts: Record<string, HostE
   const tls = isTls(req);
   const self = mappedHost(req);
   const tunnel = fromTunnel(req);
+  // A peer's browser knows our hosts by its own names; older receivers don't send them.
+  const peer = peerNamesOf(req);
   const pairs: [string, string, boolean][] = [];
   for (const [host, entry] of Object.entries(hosts)) {
-    const local = tunnel ? publicUrl(host) : urlFor(host, tls);
+    const local = tunnel ? publicUrl(host) : peer ? peer[host] : urlFor(host, tls);
     if (!local) continue;
     try {
       pairs.push([new URL(entry.target).origin, local, host === self]);

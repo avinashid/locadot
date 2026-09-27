@@ -35,6 +35,13 @@
 ### Fixed
 - The proxy can now tell a user's `LOCADOT_HTTP_PORT`/`LOCADOT_HTTPS_PORT` from the copies the CLI pins on every spawn
   (`LOCADOT_USER_PORTS`), so saved ports aren't reported as env-overridden.
+- `--cors` through remote access: a shared `--cors` mapping is now `--cors` on the receiver too (shown in `list` and the
+  dashboard, kept in step by `remote:sync` and `remote:update`). The sender used to rewrite its apps' origins in pages to its
+  *own* local URLs, which don't exist on the receiver. Now the receiver sends the names it uses (`X-Locadot-Names`), so a
+  page's API calls go to the receiver's name for that mapping (e.g. `api.alice.localhost` after a clash), on the receiver's
+  port. The upstream still sees the calling page's real origin. `<port>.<domain>.localhost` gets the CORS handling of a
+  `--cors` mapping on that port. The sender keeps names only for mappings the peer can see, and only as `*.localhost` URLs.
+  Both machines need this version for the rewriting; with an older receiver the sender behaves as before.
 
 ## 2.1.0-beta.0 (2026-09-27)
 

@@ -13,6 +13,8 @@ interface RequestTag {
   via?: Via;
   /** Sender side: an admin peer's browser viewing this dashboard; the receiver's `host[:port]` it runs on. */
   peerOrigin?: string;
+  /** Sender side: the receiver's URL for each of our hosts it maps, from `X-Locadot-Names`. */
+  peerNames?: Record<string, string>;
 }
 
 const tags = new WeakMap<http.IncomingMessage, RequestTag>();
@@ -36,6 +38,8 @@ export const fromTunnel = (req: http.IncomingMessage) => Boolean(tags.get(req)?.
 export const fromRemote = (req: http.IncomingMessage) => Boolean(tags.get(req)?.remote);
 
 export const peerOriginOf = (req: http.IncomingMessage) => tags.get(req)?.peerOrigin;
+
+export const peerNamesOf = (req: http.IncomingMessage) => tags.get(req)?.peerNames;
 
 export const viaOf = (req: http.IncomingMessage) => tags.get(req)?.via;
 

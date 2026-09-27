@@ -131,6 +131,12 @@ target, so an editor can reach anything the sender's machine can reach. Only giv
 of the tokens are stored, and failed attempts are rate limited. Only admins can open the sender's dashboard through the hub.
 The dashboard has **Remote access** and **Connected machines** cards for all of this.
 
+`--cors` carries over: a sender's `--cors` mapping is `--cors` on the receiver too, with no extra flag. Preflights and CORS
+headers work as they do locally, and origins in the sender's pages are rewritten to the receiver's own names and port (so
+`http://localhost:8000` in a page becomes `http://api.alice.localhost` if that's the receiver's name for `api.localhost`).
+An admin's `<port>.<domain>.localhost` gets the same treatment when a `--cors` mapping points at that port.
+`remote:sync` picks up a sender turning `--cors` on or off.
+
 ### Certificates
 
 | Command | What it does |

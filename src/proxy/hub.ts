@@ -19,8 +19,8 @@ const RATE_LIMIT_MAX = 20;
 export type HubDecision =
   | { kind: "none" }
   | { kind: "api" }
-  | { kind: "app"; host: string; peer: Peer }
-  | { kind: "local"; port: number; peer: Peer }
+  | { kind: "app"; host: string; peer: Peer; names?: Record<string, string> }
+  | { kind: "local"; port: number; peer: Peer; names?: Record<string, string>; host?: string }
   | { kind: "dashboard"; peer: Peer; origin: string }
   | { kind: "deny"; status: number; message: string };
 
@@ -71,6 +71,41 @@ const receiverHost = (req: http.IncomingMessage) => {
   return match && Localhost.isValidLocalhostDomain(match[1]) ? raw : undefined;
 };
 
+const MAX_NAMES = 16 * 1024;
+
+/**
+ * `X-Locadot-Names` from the receiver: `<our host>=<its URL for it>,…`. Kept only for hosts this peer can see and
+ * `http(s)://*.localhost[:port]` URLs; they only ever end up in responses to that same peer.
+ */
+const peerNames = (req: http.IncomingMessage, visible: string[]): Record<string, string> | undefined => {
+  const header = req.headers["x-locadot-names"];
+  if (typeof header !== "string" || header.length > MAX_NAMES) return undefined;
+  const names: Record<string, string> = {};
+  for (const pair of header.split(",")) {
+    const [host, url] = pair.trim().toLowerCase().split("=");
+    const match = url ? /^https?:\/\/([^/:]+)(?::(\d{1,5}))?$/.exec(url) : null;
+    if (host && match && visible.includes(host) && Localhost.isValidLocalhostDomain(match[1])) names[host] = url;
+  }
+  return names;
+};
+
+/** Sender side: a --cors mapping whose target is this machine's `port`, so port access gets its cors too. */
+const corsMappingFor = (hosts: Record<string, HostEntry>, port: number) =>
+  Object.keys(hosts).find((host) => {
+    const entry = hosts[host];
+    if (!entry.cors || entry.remote) return false;
+    try {
+      const url = new URL(entry.target);
+      const own = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+      return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && own === port;
+    } catch {
+      return false;
+    }
+  });
+
+const ownHosts = (hosts: Record<string, HostEntry>, peer: Peer) =>
+  Links.visibleHosts(peer, Object.keys(hosts)).filter((host) => !hosts[host].remote);
+
 const stripLocadotHeaders = (req: http.IncomingMessage) => {
   for (const name of Object.keys(req.headers)) if (name.toLowerCase().startsWith("x-locadot-")) delete req.headers[name];
 };
@@ -116,7 +151,7 @@ export function classify(
       const origin = receiverHost(req);
       if (!origin) return { kind: "deny", status: 400, message: "Bad request" };
       // Keep X-Locadot-Token: the dashboard page sends it on every mutating call.
-      for (const name of ["x-locadot-peer", "x-locadot-dashboard", "x-locadot-host", "x-locadot-port"]) delete req.headers[name];
+      for (const name of ["x-locadot-peer", "x-locadot-dashboard", "x-locadot-host", "x-locadot-port", "x-locadot-names"]) delete req.headers[name];
       return { kind: "dashboard", peer, origin };
     }
 
@@ -126,9 +161,15 @@ export function classify(
     if (!Number.isInteger(port) || port < 1 || port > 65535) return { kind: "deny", status: 400, message: "Bad request" };
     if (opts?.blockedPorts?.includes(port)) return { kind: "deny", status: 403, message: "Forbidden" };
 
+    const names = req.headers["x-locadot-names"] === undefined ? undefined : peerNames(req, ownHosts(hosts, peer));
+    const host = corsMappingFor(hosts, port);
+    // The page stays on <port>.<domain>.localhost rather than moving to the receiver's name for the mapping.
+    const self = receiverHost(req);
+    const scheme = names && Object.values(names)[0]?.split(":")[0];
+    if (host && names && self && scheme) names[host] = `${scheme}://${self}`;
     stripLocadotHeaders(req);
 
-    return { kind: "local", port, peer };
+    return { kind: "local", port, peer, names, host };
   }
 
   const hostHeader = req.headers["x-locadot-host"];
@@ -142,9 +183,10 @@ export function classify(
     return { kind: "deny", status: 403, message: "Forbidden" };
   }
 
+  const names = req.headers["x-locadot-names"] === undefined ? undefined : peerNames(req, visible);
   stripLocadotHeaders(req);
 
-  return { kind: "app", host, peer };
+  return { kind: "app", host, peer, names };
 }
 
 /* ---------- /_locadot/v1 API ---------- */

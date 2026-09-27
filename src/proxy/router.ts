@@ -39,7 +39,7 @@ export interface RouterContext {
 /** Resolves a tunnel's public host to its mapping and tags the request, before any routing. */
 const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDecision | undefined) => {
   if (hub?.kind === "app") {
-    tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure() });
+    tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names });
     return hub.host;
   }
   if (hub?.kind === "dashboard") {
@@ -47,8 +47,9 @@ const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDeci
     return "localhost";
   }
   if (hub?.kind === "local") {
-    const host = `localhost:${hub.port}`;
-    tag(req, { host, remote: true, secure: ctx.hub!.secure() });
+    // A port behind a --cors mapping is served as that mapping, cors included.
+    const host = hub.host ?? `localhost:${hub.port}`;
+    tag(req, { host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names });
     return host;
   }
   const host = hostOf(req);
@@ -63,6 +64,18 @@ const passThrough = (req: http.IncomingMessage, entry: HostEntry) => Boolean(ent
 
 /** Same-origin only, and a tunnel visitor may only reach public hosts (see guard.ts). */
 const viaAllowed = (req: http.IncomingMessage, via: Via) => isSameOrigin(req) && (!fromTunnel(req) || isPublicHost(via.host));
+
+/**
+ * Receiver side: `<sender host>=<our URL for it>` for every mapping of this remote, so a --cors sender rewrites
+ * its apps' origins to the names this machine uses rather than its own.
+ */
+const peerNames = (req: http.IncomingMessage, ctx: RouterContext, name: string) =>
+  (ctx.remoteHosts?.(name) || [])
+    .flatMap((local) => {
+      const host = ctx.lookup(local)?.remote?.host;
+      return host ? [`${host}=${urlFor(local, isTls(req))}`] : [];
+    })
+    .join(",");
 
 const reason = (err: NodeJS.ErrnoException | undefined) => err?.code || err?.message;
 
@@ -112,7 +125,7 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
       return;
     }
 
-    const entry = hub?.kind === "local" ? localEntry(hub.port) : ctx.lookup(host);
+    const entry = hub?.kind === "local" && !hub.host ? localEntry(hub.port) : ctx.lookup(host);
     if (!entry) {
       const local = localTarget(req, ctx, host, hub);
       if (local) {
@@ -187,7 +200,7 @@ function forwardRemote(req: http.IncomingMessage, res: http.ServerResponse, ctx:
   }
   const started = Date.now();
   res.once("finish", () => record(ctx.stats, host, res.statusCode, Date.now() - started, res.statusCode >= 500));
-  ctx.proxy.web(req, res, remoteOptions(req, entry, remote), (err: NodeJS.ErrnoException) => {
+  ctx.proxy.web(req, res, remoteOptions(req, entry, remote, peerNames(req, ctx, remote.name)), (err: NodeJS.ErrnoException) => {
     logger.warn(`${host} → ${remote.name} (${remote.url}): ${reason(err)}`);
     if (res.headersSent) {
       res.destroy();
@@ -215,7 +228,7 @@ function forwardLocal(req: http.IncomingMessage, res: http.ServerResponse, ctx: 
   const label = `${remote.name}: ${port ? `localhost:${port}` : "dashboard"}`;
   const started = Date.now();
   res.once("finish", () => record(ctx.stats, host, res.statusCode, Date.now() - started, res.statusCode >= 500));
-  ctx.proxy.web(req, res, localOptions(req, remote, port), (err: NodeJS.ErrnoException) => {
+  ctx.proxy.web(req, res, localOptions(req, remote, port, port ? peerNames(req, ctx, remote.name) : undefined), (err: NodeJS.ErrnoException) => {
     logger.warn(`${host} → ${label}: ${reason(err)}`);
     if (res.headersSent) {
       res.destroy();

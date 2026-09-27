@@ -1,6 +1,6 @@
 import http from "http";
 import type { HostEntry } from "../types";
-import { isTls } from "./request";
+import { isTls, peerNamesOf } from "./request";
 
 export type Lookup = (host: string) => HostEntry | undefined;
 
@@ -28,12 +28,17 @@ export const preflightHeaders = (req: http.IncomingMessage) => {
 /**
  * --cors: the upstream should see a request from a site it trusts, so origin/CSRF checks pass.
  * A page on another mapped domain (signalsant.localhost calling api.signalsant.localhost) is
- * sent as that domain's real origin; anything else as the target's own origin.
+ * sent as that domain's real origin; anything else as the target's own origin. A peer's page is on the
+ * receiver's name for one of our domains, so it is matched by those names, never by our own.
  */
 export const sameOriginHeaders = (req: http.IncomingMessage, entry: HostEntry, lookup: Lookup) => {
+  const names = peerNamesOf(req);
+  const callerHost = (url: URL) =>
+    names ? Object.keys(names).find((host) => new URL(names[host]).host === url.host) : url.hostname;
   const upstreamOrigin = (value: string) => {
     try {
-      const caller = lookup(new URL(value).hostname);
+      const host = callerHost(new URL(value));
+      const caller = host ? lookup(host) : undefined;
       if (caller) return new URL(caller.target).origin;
     } catch {}
     return new URL(entry.target).origin;

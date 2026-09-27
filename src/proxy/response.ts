@@ -29,7 +29,8 @@ export const handleProxyResponse = (
   if (proxyRes.statusCode === 101) return;
   stripHopByHop(proxyRes.headers);
   const entry = hosts[mappedHost(req)];
-  if (!entry?.cors) return;
+  // A remote mapping's cors flag is inherited: the sender already applied it.
+  if (!entry?.cors || entry.remote) return;
   applyCors(req, proxyRes.headers);
   const via = viaOf(req);
   const pairs = originMap(req, hosts, publicUrl);

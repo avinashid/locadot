@@ -130,6 +130,18 @@ test("classify: app traffic decisions for a valid peer", () => {
   // missing mapping
   const reqMissing = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": editorToken, "x-locadot-host": "nope.localhost" }, ip: "10.0.0.3" });
   assert.deepEqual(classify(reqMissing, "hub.example.com", hosts), { kind: "deny", status: 404, message: "Not found" });
+
+  // the receiver's names are kept only for hosts the peer can see, and only as *.localhost URLs
+  const names = [
+    "a.localhost=http://a.alice.localhost:8080",
+    "b.localhost=http://b.alice.localhost",
+    "a.localhost=https://evil.example.com",
+    "a.localhost=javascript:alert(1)",
+  ].join(",");
+  const reqNames = fakeReq({ host: "hub.example.com", headers: { "x-locadot-peer": viewerToken, "x-locadot-host": "a.localhost", "x-locadot-names": names }, ip: "10.0.0.3" });
+  const named = classify(reqNames, "hub.example.com", hosts) as any;
+  assert.deepEqual(named.names, { "a.localhost": "http://a.alice.localhost:8080" });
+  assert.equal(reqNames.headers["x-locadot-names"], undefined);
 });
 
 /* ---------- classify(): localhost (admin, any port on the sender) ---------- */
