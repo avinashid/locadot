@@ -70,7 +70,7 @@ export default class Localhost {
   }
 
   /** Any HTTP response (even 404/500) counts as up: the upstream is reachable. */
-  static probe(target: string, timeoutMs = 1500, insecure = false): Promise<ProbeResult> {
+  static probe(target: string, timeoutMs = 1500, insecure = false, headers: Record<string, string> = {}): Promise<ProbeResult> {
     const started = Date.now();
     return new Promise((resolve) => {
       let url: URL;
@@ -82,7 +82,7 @@ export default class Localhost {
       const client = url.protocol === "https:" ? https : http;
       const req = client.request(
         url,
-        { method: "HEAD", timeout: timeoutMs, rejectUnauthorized: !insecure },
+        { method: "HEAD", timeout: timeoutMs, rejectUnauthorized: !insecure, headers },
         (res) => {
           res.resume();
           resolve({ up: true, status: res.statusCode, ms: Date.now() - started });

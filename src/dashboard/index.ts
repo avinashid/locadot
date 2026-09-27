@@ -1,11 +1,14 @@
 import crypto from "crypto";
 import http from "http";
-import { DashboardContext, HostEntry, HostStats, ProbeResult, TunnelState } from "../types";
+import { DashboardContext, HostEntry, HostStats, ProbeResult, Role, TunnelState } from "../types";
 import { renderPage } from "./page";
 import { ApiError, route } from "./api";
 import { systemStatus } from "../lib/system";
 import { cloudflaredInfo as cloudflared } from "../proxy/tunnel";
 import { formatUrl } from "../lib/urls";
+import Localhost from "../lib/localhost";
+import { remoteFor } from "../proxy/remote";
+import Remotes from "../lib/remotes";
 
 interface HostRow {
   host: string;
@@ -18,6 +21,15 @@ interface HostRow {
   stats: HostStats | null;
   probe: ProbeResult;
   tunnel: TunnelState;
+  remote?: { name: string; host: string; role: Role };
+}
+
+/** A remote mapping is only reachable through its sender, with the peer's credentials. */
+function probeEntry(ctx: DashboardContext, entry: HostEntry): Promise<ProbeResult> {
+  if (!entry.remote) return ctx.probe(entry.target);
+  const remote = remoteFor(entry.remote.name);
+  if (!remote) return Promise.resolve({ up: false, error: "disconnected" });
+  return Localhost.probe(remote.url, 3000, false, { "X-Locadot-Peer": remote.token, "X-Locadot-Host": entry.remote.host });
 }
 
 function hostUrls(host: string, httpPort: number, httpsPort: number): { https: string; http: string } {
@@ -56,7 +68,7 @@ async function buildHosts(ctx: DashboardContext): Promise<HostRow[]> {
 
   const rows = await Promise.all(
     entries.map(async ([host, entry]): Promise<HostRow> => {
-      const probe = await ctx.probe(entry.target);
+      const probe = await probeEntry(ctx, entry);
       return {
         host,
         target: entry.target,
@@ -68,6 +80,9 @@ async function buildHosts(ctx: DashboardContext): Promise<HostRow[]> {
         stats: stats[host] ?? null,
         probe,
         tunnel: ctx.tunnel(host),
+        remote: entry.remote
+          ? { name: entry.remote.name, host: entry.remote.host, role: Remotes.get(entry.remote.name)?.role ?? "viewer" }
+          : undefined,
       };
     })
   );
@@ -122,7 +137,13 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
       const uptimeSec = Math.max(0, Math.round((Date.now() - new Date(ctx.proxyInfo.startedAt).getTime()) / 1000));
       systemStatus(ctx.proxyInfo.caTrusted)
         .then((system) =>
-          sendJson(res, method, 200, { proxy: ctx.proxyInfo, uptimeSec, hosts: Object.keys(ctx.getRegistry().hosts).length, system: { ...system, cloudflared: cloudflared() } })
+          sendJson(res, method, 200, {
+            proxy: ctx.proxyInfo,
+            uptimeSec,
+            hosts: Object.keys(ctx.getRegistry().hosts).length,
+            system: { ...system, cloudflared: cloudflared() },
+            hub: ctx.hub(),
+          })
         )
         .catch(fail);
       return;

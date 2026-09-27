@@ -7,6 +7,10 @@ import Localhost from "../lib/localhost";
 import { handleRequest, handleUpgrade, type RouterContext } from "../proxy/router";
 import { handleProxyResponse } from "../proxy/response";
 import { TunnelManager } from "../proxy/tunnel";
+import { HubTunnel } from "../proxy/hub-tunnel";
+import { classify, handleHubApi } from "../proxy/hub";
+import { remoteFor } from "../proxy/remote";
+import HubConfigStore from "../lib/hub-config";
 import FileModule from "../utils/file";
 import logger from "../utils/logger";
 import { createSNICallback, defaultContext } from "../utils/certs";
@@ -20,10 +24,19 @@ import { createRegistryState } from "./state";
 import { issueApiToken } from "./token";
 
 export async function startCentralProxy() {
-  const tunnels = new TunnelManager(() => {
+  const origin = () => {
     const host = Constants.server.bind.find((address) => !address.includes(":")) ? "127.0.0.1" : "[::1]";
     return `http://${host}:${Constants.server.httpPort}`;
-  });
+  };
+  const tunnels = new TunnelManager(origin);
+  const hub = new HubTunnel(origin);
+  const reloadHub = () => {
+    try {
+      hub.sync(HubConfigStore.read());
+    } catch (error) {
+      logger.error(error);
+    }
+  };
   const registry = createRegistryState((hosts) => tunnels.sync(hosts));
   registry.reload();
 
@@ -56,6 +69,18 @@ export async function startCentralProxy() {
     stats,
     lookup: (host) => registry.get().hosts[tunnels.hostFor(host) ?? host],
     tunnelFor: (host) => tunnels.hostFor(host),
+    remoteFor,
+    hub: {
+      classify: (req) => classify(req, hub.publicHost(), registry.get().hosts),
+      api: (req, res) => {
+        handleHubApi(req, res, { getRegistry: registry.get, reload: registry.reload, retryTunnels: () => tunnels.sync(registry.get().hosts, true) }).catch((error) => {
+          logger.error(error);
+          if (!res.headersSent) res.writeHead(500);
+          res.end();
+        });
+      },
+      secure: () => hub.state().url?.startsWith("https:") ?? false,
+    },
     dashboard: (req, res) =>
       handleDashboardRequest(req, res, {
         getRegistry: registry.get,
@@ -71,6 +96,11 @@ export async function startCentralProxy() {
         shutdown: (reason) => shutdown(reason),
         tunnel: (host) => tunnels.state(host),
         retryTunnels: () => tunnels.sync(registry.get().hosts, true),
+        hub: () => hub.state(),
+        reloadHub,
+        setupNamedHub: (domain, tunnel) => {
+          hub.setupNamed(domain, tunnel).catch((error) => logger.warn(`hub setup for ${domain}: ${error?.message || error}`));
+        },
       }),
   };
 
@@ -84,13 +114,21 @@ export async function startCentralProxy() {
   }, info);
 
   const watcher = FileModule.watch("REGISTRY_FILE", registry.reload);
+  // After binding, so the hub tunnel points at the port we actually got.
+  reloadHub();
+  const hubWatcher = FileModule.watch("HUB_FILE", reloadHub);
 
   await refreshTrust();
   setInterval(refreshTrust, 5 * 60_000).unref();
 
   locadotFile.writeProxyInfo(info);
 
-  shutdown = installShutdown({ watcher, servers, stopTunnels: () => tunnels.stopAll() });
+  shutdown = installShutdown({ watcher, servers, stopTunnels: () => {
+      tunnels.stopAll();
+      hub.stop();
+      hubWatcher.close();
+    },
+  });
 
   logger.info(`☑️ locadot ${version} ready (pid ${process.pid})`);
 }

@@ -101,6 +101,30 @@ pass-through calls may only go to public addresses: loopback, LAN, link-local an
 on the address actually dialled, so the tunnel can't be used to reach your machine or network. The dashboard can also do this:
 use **Share** / **Unshare** on a row.
 
+### Remote access (locadot to locadot)
+
+One machine (the sender) publishes its whole locadot on a Cloudflare hostname. Other machines (receivers) connect with a
+short-lived pairing string, and the sender's mappings then show up in the receiver's own locadot and dashboard.
+
+| Command | What it does |
+| --- | --- |
+| `locadot hub:setup --domain dev.example.com` | Sender: publish through your own named tunnel on your Cloudflare domain (runs `cloudflared` login, creates the tunnel and routes DNS). The address stays the same. |
+| `locadot hub:quick` | Sender: publish on a trycloudflare URL. No account is needed, but **the URL changes if the tunnel restarts**, so receivers have to run `remote:url`. |
+| `locadot hub` / `hub:off` | Show the hub status and URL, or stop it. |
+| `locadot share --role viewer\|editor\|admin [--hosts a.localhost,b.localhost]` | Sender: print a pairing string. It works once and expires after 5 minutes. `--hosts` limits a viewer to those mappings. |
+| `locadot peers` / `peers:role <id> <role>` / `peers:revoke <id>` | Sender: list the connected machines, change a role, or cut one off. |
+| `locadot connect "<pairing string>" [--name alice]` | Receiver: connect and import the sender's mappings. If a name clashes, `app.localhost` becomes `app.alice.localhost`. |
+| `locadot remotes` / `remote:sync <name>` / `disconnect <name>` | Receiver: list the connections, pull new mappings, or remove the connection and its names. |
+| `locadot remote:alias <name> <remote host> <local host>` | Receiver: give a sender mapping another local name, e.g. `he.localhost`. |
+| `locadot remote:add\|remote:update\|remote:rm <name> …` | Receiver: change mappings on the sender (editor or admin). |
+| `locadot remote:url <name> <url>` | Receiver: point a connection at the sender's new URL. |
+
+Roles: **viewer** can only browse (optionally limited to the mappings picked on the invite). **editor** can also add and change
+mappings on the sender. **admin** can also delete them and change sharing. Traffic goes receiver → Cloudflare → sender →
+target, so an editor can reach anything the sender's machine can reach. Only give that role to people you trust. Only hashes
+of the tokens are stored, and failed attempts are rate limited. The sender's dashboard is never reachable through the hub.
+The dashboard has **Remote access** and **Connected machines** cards for all of this.
+
 ### Certificates
 
 | Command | What it does |

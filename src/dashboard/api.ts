@@ -11,7 +11,10 @@ import logger from "../utils/logger";
 import { invalidateSystemStatus } from "../lib/system";
 import { installCloudflared } from "../proxy/tunnel";
 import { formatUrl } from "../lib/urls";
-import type { DashboardContext } from "../types";
+import Links, { LinkError } from "../lib/links";
+import HubConfigStore from "../lib/hub-config";
+import Remotes, { RemoteError } from "../lib/remotes";
+import type { DashboardContext, HubConfig, Peer, Remote, Role } from "../types";
 
 const MAX_BODY = 64 * 1024;
 
@@ -108,6 +111,110 @@ const privileged = async (action: () => Promise<void>, command: string) => {
 
 const hostUrl = (host: string, ctx: DashboardContext) => formatUrl(host, true, ctx.proxyInfo.httpsPort);
 
+const ROLES: Role[] = ["viewer", "editor", "admin"];
+
+const isRole = (value: unknown): value is Role => typeof value === "string" && (ROLES as string[]).includes(value);
+
+const optionalString = (value: unknown, name: string): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new ApiError(400, `\`${name}\` must be a string.`);
+  return value;
+};
+
+const optionalHosts = (value: unknown): string[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
+    throw new ApiError(400, "`hosts` must be an array of strings.");
+  }
+  return value;
+};
+
+/** Public hostname a Cloudflare named tunnel can route to (not *.localhost, no scheme/path). */
+const isValidPublicDomain = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  const host = value.trim().toLowerCase();
+  if (!host || host.length > 253 || host.includes("/") || host.includes(":")) return false;
+  const labels = host.split(".");
+  if (labels.length < 2 || labels[labels.length - 1] === "localhost") return false;
+  return labels.every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+};
+
+const sanitizeInvite = (invite: { id: string; role: Role; hosts?: string[]; expiresAt: string }) => ({
+  id: invite.id,
+  role: invite.role,
+  hosts: invite.hosts,
+  expiresAt: invite.expiresAt,
+});
+
+const sanitizePeer = (peer: Peer) => ({
+  id: peer.id,
+  name: peer.name,
+  role: peer.role,
+  hosts: peer.hosts,
+  createdAt: peer.createdAt,
+  lastSeen: peer.lastSeen,
+});
+
+const sanitizeRemote = (remote: Remote) => {
+  const { token, ...rest } = remote;
+  return rest;
+};
+
+const REMOTE_SYNC_TIMEOUT_MS = 5000;
+
+async function buildRemoteRows(ctx: DashboardContext) {
+  const remotes = Remotes.list();
+  let changed = false;
+  const rows = await Promise.all(
+    remotes.map(async (remote) => {
+      try {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timed out")), REMOTE_SYNC_TIMEOUT_MS)
+        );
+        const result = await Promise.race([Remotes.sync(remote.name), timeout]);
+        changed = true;
+        return {
+          name: result.remote.name,
+          url: result.remote.url,
+          role: result.remote.role,
+          hosts: result.remote.hosts,
+          sender: result.remote.sender,
+          connectedAt: result.remote.connectedAt,
+          status: "ok" as const,
+          available: result.hosts,
+          mapped: result.mapped,
+        };
+      } catch (error: any) {
+        return {
+          name: remote.name,
+          url: remote.url,
+          role: remote.role,
+          hosts: remote.hosts,
+          sender: remote.sender,
+          connectedAt: remote.connectedAt,
+          status: "error" as const,
+          error: clean(String(error?.message || error)),
+          available: null,
+          mapped: [],
+        };
+      }
+    })
+  );
+  if (changed) ctx.reload();
+  return rows;
+}
+
+function buildHubBody(ctx: DashboardContext) {
+  const config = HubConfigStore.read();
+  const { invites, peers } = Links.list();
+  return {
+    hub: ctx.hub(),
+    config: config ?? null,
+    invites: invites.map(sanitizeInvite),
+    peers: peers.map(sanitizePeer),
+  };
+}
+
 /** Routes under /api/ other than the read-only status/hosts. Returns undefined when nothing matched. */
 export async function route(
   req: http.IncomingMessage,
@@ -122,11 +229,35 @@ export async function route(
     return { status: 200, body: { lines: FileModule.lastLines("LOGS", lines) } };
   }
 
+  if (path === "/api/hub" && (method === "GET" || method === "HEAD")) {
+    return { status: 200, body: buildHubBody(ctx) };
+  }
+
+  if (path === "/api/remotes" && (method === "GET" || method === "HEAD")) {
+    return { status: 200, body: { remotes: await buildRemoteRows(ctx) } };
+  }
+
   const hostMatch = /^\/api\/hosts\/([^/]+)$/.exec(path);
+  const inviteMatch = /^\/api\/invites\/([^/]+)$/.exec(path);
+  const peerMatch = /^\/api\/peers\/([^/]+)$/.exec(path);
+  const remoteMatch = /^\/api\/remotes\/([^/]+)$/.exec(path);
+  const remoteSyncMatch = /^\/api\/remotes\/([^/]+)\/sync$/.exec(path);
+  const remoteAliasMatch = /^\/api\/remotes\/([^/]+)\/aliases$/.exec(path);
+  const remoteHostsMatch = /^\/api\/remotes\/([^/]+)\/hosts$/.exec(path);
+  const remoteHostMatch = /^\/api\/remotes\/([^/]+)\/hosts\/([^/]+)$/.exec(path);
+
   const known =
     (path === "/api/hosts" && method === "POST") ||
     (hostMatch && (method === "PUT" || method === "DELETE")) ||
-    (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/cloudflared/install"].includes(path) && method === "POST");
+    (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/cloudflared/install", "/api/hub", "/api/invites", "/api/remotes"].includes(path) &&
+      method === "POST") ||
+    (inviteMatch && method === "DELETE") ||
+    (peerMatch && (method === "PUT" || method === "DELETE")) ||
+    (remoteMatch && (method === "PUT" || method === "DELETE")) ||
+    (remoteSyncMatch && method === "POST") ||
+    (remoteAliasMatch && method === "POST") ||
+    (remoteHostsMatch && method === "POST") ||
+    (remoteHostMatch && (method === "PUT" || method === "DELETE"));
   if (!known) return undefined;
 
   assertTrusted(req, ctx);
@@ -162,11 +293,139 @@ export async function route(
       const { host: name, entry } = updated!;
       return { status: 200, body: { ok: true, host: name, ...entry, url: hostUrl(name, ctx), tunnel: ctx.tunnel(name) } };
     }
+
+    if (path === "/api/hub" && method === "POST") {
+      const mode = body.mode;
+      if (mode === "named") {
+        if (!isValidPublicDomain(body.domain)) throw new ApiError(400, "`domain` must be a valid public hostname.");
+        const tunnel = body.tunnel === undefined ? undefined : String(body.tunnel);
+        ctx.setupNamedHub(String(body.domain).trim().toLowerCase(), tunnel);
+      } else if (mode === "quick") {
+        HubConfigStore.write({ mode: "quick" });
+        ctx.reloadHub();
+      } else if (mode === "manual") {
+        if (typeof body.url !== "string" || !body.url.trim()) throw new ApiError(400, "`url` is required for manual mode.");
+        let parsed: URL;
+        try {
+          parsed = new URL(body.url.trim());
+        } catch {
+          throw new ApiError(400, "`url` must be a valid http(s) URL.");
+        }
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new ApiError(400, "`url` must be http or https.");
+        const config: HubConfig = { mode: "manual", url: body.url.trim().replace(/\/+$/, "") };
+        HubConfigStore.write(config);
+        ctx.reloadHub();
+      } else if (mode === "off") {
+        HubConfigStore.clear();
+        ctx.reloadHub();
+      } else {
+        throw new ApiError(400, "`mode` must be one of named, quick, manual, off.");
+      }
+      return { status: 200, body: { hub: ctx.hub() } };
+    }
+
+    if (path === "/api/invites" && method === "POST") {
+      if (!isRole(body.role)) throw new ApiError(400, "`role` must be viewer, editor or admin.");
+      const hosts = optionalHosts(body.hosts);
+      if (ctx.hub().status !== "up") {
+        throw new ApiError(409, "The hub isn't up. Start sharing first.", "locadot hub:quick");
+      }
+      const { invite, code } = Links.createInvite({ role: body.role, hosts });
+      const string = Links.inviteString(ctx.hub().url!, code);
+      return { status: 200, body: { id: invite.id, code, string, role: invite.role, hosts: invite.hosts, expiresAt: invite.expiresAt } };
+    }
+
+    if (inviteMatch && method === "DELETE") {
+      Links.revokeInvite(decodeURIComponent(inviteMatch[1]));
+      return { status: 200, body: { ok: true } };
+    }
+
+    if (peerMatch && method === "PUT") {
+      const id = decodeURIComponent(peerMatch[1]);
+      if (!isRole(body.role)) throw new ApiError(400, "`role` must be viewer, editor or admin.");
+      const hosts = optionalHosts(body.hosts);
+      const peer = Links.setRole(id, body.role, hosts);
+      return { status: 200, body: { peer: sanitizePeer(peer) } };
+    }
+
+    if (peerMatch && method === "DELETE") {
+      Links.revoke(decodeURIComponent(peerMatch[1]));
+      return { status: 200, body: { ok: true } };
+    }
+
+    if (path === "/api/remotes" && method === "POST") {
+      if (typeof body.string !== "string" || !body.string.trim()) throw new ApiError(400, "`string` is required.");
+      const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined;
+      const result = await Remotes.connect(body.string.trim(), { name });
+      ctx.reload();
+      return { status: 200, body: { ...result, remote: sanitizeRemote(result.remote) } };
+    }
+
+    if (remoteMatch && method === "PUT") {
+      if (typeof body.url !== "string" || !body.url.trim()) throw new ApiError(400, "`url` is required.");
+      Remotes.setUrl(decodeURIComponent(remoteMatch[1]), body.url.trim());
+      return { status: 200, body: { ok: true } };
+    }
+
+    if (remoteMatch && method === "DELETE") {
+      await Remotes.disconnect(decodeURIComponent(remoteMatch[1]));
+      ctx.reload();
+      return { status: 200, body: { ok: true } };
+    }
+
+    if (remoteSyncMatch && method === "POST") {
+      const result = await Remotes.sync(decodeURIComponent(remoteSyncMatch[1]));
+      ctx.reload();
+      return { status: 200, body: { ...result, remote: sanitizeRemote(result.remote) } };
+    }
+
+    if (remoteAliasMatch && method === "POST") {
+      if (typeof body.host !== "string" || typeof body.local !== "string") {
+        throw new ApiError(400, "`host` and `local` are required.");
+      }
+      await Remotes.alias(decodeURIComponent(remoteAliasMatch[1]), body.host, body.local);
+      ctx.reload();
+      return { status: 200, body: { ok: true } };
+    }
+
+    if (remoteHostsMatch && method === "POST") {
+      if (typeof body.host !== "string" || typeof body.target !== "string") {
+        throw new ApiError(400, "`host` and `target` are required.");
+      }
+      const host = await Remotes.addHost(decodeURIComponent(remoteHostsMatch[1]), {
+        host: body.host,
+        target: body.target,
+        insecure: optionalBool(body.insecure, "insecure"),
+        cors: optionalBool(body.cors, "cors"),
+      });
+      ctx.reload();
+      return { status: 201, body: { host } };
+    }
+
+    if (remoteHostMatch) {
+      const name = decodeURIComponent(remoteHostMatch[1]);
+      const hostName = decodeURIComponent(remoteHostMatch[2]);
+      if (method === "DELETE") {
+        await Remotes.removeHost(name, hostName);
+        ctx.reload();
+        return { status: 200, body: { ok: true } };
+      }
+      const host = await Remotes.updateHost(name, hostName, {
+        target: optionalString(body.target, "target"),
+        insecure: optionalBool(body.insecure, "insecure"),
+        cors: optionalBool(body.cors, "cors"),
+        tunnel: optionalBool(body.tunnel, "tunnel"),
+      });
+      return { status: 200, body: { host } };
+    }
   } catch (error) {
     if (error instanceof NotFoundError) throw new ApiError(404, clean(error.message));
     if (error instanceof ConflictError) throw new ApiError(409, clean(error.message));
     if (error instanceof InputError) throw new ApiError(400, clean(error.message));
     if (error instanceof RegistryError) throw new ApiError(500, clean(error.message));
+    if (error instanceof LinkError) throw new ApiError(error.status, clean(error.message));
+    if (error instanceof RemoteError) throw new ApiError(error.status || 502, clean(error.message));
+    if (error instanceof ApiError) throw error;
     throw error;
   }
 

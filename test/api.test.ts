@@ -49,6 +49,9 @@ function makeCtx() {
     },
     tunnel: () => ({ enabled: false, status: "off" as const }),
     retryTunnels: () => {},
+    hub: () => ({ enabled: false, status: "off" as const }),
+    reloadHub: () => {},
+    setupNamedHub: (_domain: string, _tunnel?: string) => {},
   };
   return { ctx, state };
 }

@@ -4,6 +4,8 @@ import Commands from "./cli/commands";
 import { InputError } from "./lib/localhost";
 import { RegistryError } from "./lib/registry";
 import { ProxyError } from "./lib/proxy-control";
+import { LinkError } from "./lib/links";
+import { RemoteError } from "./lib/remotes";
 import logger from "./utils/logger";
 import { version } from "../package.json";
 
@@ -17,7 +19,12 @@ const run =
       await fn(...args);
       if (exit) process.exit(process.exitCode ?? 0);
     } catch (error: any) {
-      const known = error instanceof InputError || error instanceof ProxyError || error instanceof RegistryError;
+      const known =
+        error instanceof InputError ||
+        error instanceof ProxyError ||
+        error instanceof RegistryError ||
+        error instanceof LinkError ||
+        error instanceof RemoteError;
       logger.error(known ? error.message : `❌ ${error?.stack || error}`);
       process.exit(1);
     }
@@ -125,5 +132,89 @@ program.command("path:hosts").description("Show the registry file path").action(
 program.command("startup:enable").description("Start locadot on boot/logon").action(run(() => Commands.enableStartup()));
 program.command("startup:disable").description("Don't start locadot on boot/logon").action(run(() => Commands.disableStartup()));
 program.command("startup:status").description("Is start on boot enabled?").action(run(() => Commands.statusStartup()));
+
+const roleOption = () => new Option("-r, --role <role>", "viewer, editor or admin").choices(["viewer", "editor", "admin"]).makeOptionMandatory();
+
+program
+  .command("hub")
+  .description("Show remote access status")
+  .option("--json", "Machine-readable output")
+  .action(run((options) => Commands.hub(options)));
+program
+  .command("hub:setup")
+  .description("Share this locadot on your own domain via a named Cloudflare tunnel")
+  .requiredOption("-d, --domain <domain>", "Public domain, e.g. hub.example.com")
+  .option("-t, --tunnel <name>", "Cloudflare tunnel name", "locadot")
+  .action(run((options) => Commands.hubSetup(options)));
+program
+  .command("hub:quick")
+  .description("Share this locadot on a random trycloudflare.com URL (no account, URL changes on restart)")
+  .action(run(() => Commands.hubQuick()));
+program
+  .command("hub:manual")
+  .description("Share this locadot behind a URL something else already forwards (ngrok, a reverse proxy, tests)")
+  .requiredOption("-u, --url <url>", "Public base URL that forwards to this proxy's HTTP port")
+  .action(run((options) => Commands.hubManual(options)));
+program.command("hub:off").description("Turn off remote access").action(run(() => Commands.hubOff()));
+
+program
+  .command("share")
+  .description("Create a one-time pairing code for someone to connect to this locadot")
+  .addOption(roleOption())
+  .option("--hosts <hosts>", "Comma separated hosts the viewer may see (viewer role only)")
+  .action(run((options) => Commands.share(options)));
+
+program
+  .command("peers")
+  .description("List everyone paired with this locadot")
+  .option("--json", "Machine-readable output")
+  .action(run((options) => Commands.peers(options)));
+program
+  .command("peers:role <id> <role>")
+  .description("Change a peer's role")
+  .option("--hosts <hosts>", "Comma separated hosts (viewer role only)")
+  .action(run((id, role, options) => Commands.peersRole(id, role, options)));
+program.command("peers:revoke <id>").description("Revoke a peer").action(run((id) => Commands.peersRevoke(id)));
+
+program
+  .command("connect <string>")
+  .description("Connect to a remote locadot using its pairing string")
+  .option("--name <name>", "Local name for this remote (defaults to the sender's hostname)")
+  .action(run((value, options) => Commands.connect(value, options)));
+program
+  .command("remotes")
+  .description("List remotes this locadot is connected to")
+  .option("--json", "Machine-readable output")
+  .action(run((options) => Commands.remotes(options)));
+program.command("remote:sync <name>").description("Refresh role and available hosts for a remote").action(run((name) => Commands.remoteSync(name)));
+program
+  .command("remote:alias <name> <remoteHost> <localHost>")
+  .description("Map a local .localhost name to a host on a remote")
+  .action(run((name, remoteHost, localHost) => Commands.remoteAlias(name, remoteHost, localHost)));
+program
+  .command("remote:url <name> <url>")
+  .description("Update a remote's URL (e.g. after its quick tunnel changed)")
+  .action(run((name, url) => Commands.remoteUrl(name, url)));
+program
+  .command("remote:add <name>")
+  .description("Add a mapping on a remote")
+  .addOption(hostOption())
+  .requiredOption("-t, --target <url>", "Any upstream: 3000, 127.0.0.1:8080, http://192.168.1.5:8080, https://google.com")
+  .option("-k, --insecure", "Don't verify the TLS certificate of an https target")
+  .option("--cors", "Send Origin/Referer as the target's own and let any origin call this domain")
+  .action(run((name, options) => Commands.remoteAdd(name, options)));
+program
+  .command("remote:update <name>")
+  .description("Update a mapping on a remote")
+  .addOption(hostOption())
+  .option("-t, --target <url>", "New upstream")
+  .option("--cors", "Send Origin/Referer as the target's own and let any origin call this domain")
+  .option("--no-cors", "Turn --cors off again")
+  .action(run((name, options) => Commands.remoteUpdate(name, options)));
+program
+  .command("remote:rm <name> <host>")
+  .description("Remove a mapping on a remote")
+  .action(run((name, host) => Commands.remoteRm(name, host)));
+program.command("disconnect <name>").description("Disconnect from a remote").action(run((name) => Commands.disconnect(name)));
 
 program.parseAsync(process.argv);

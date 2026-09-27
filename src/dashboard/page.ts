@@ -386,6 +386,29 @@ body.offline .switch, body.offline #add-submit { opacity: 0.5; pointer-events: n
 .field input.invalid:focus-visible, .edit-input.invalid:focus-visible { box-shadow: 0 0 0 3px var(--down-bg); }
 .edit-input { height: 30px; min-width: 0; padding: 0 10px; }
 input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+select.input, .field select {
+  height: 36px;
+  width: 100%;
+  padding: 0 30px 0 12px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--fg);
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+select.input:focus-visible, .field select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+select.input-sm { height: 28px; font-size: 12px; padding: 0 24px 0 8px; background-position: calc(100% - 10px) center, calc(100% - 6px) center; }
 
 /* ---------- add host form ---------- */
 .form-grid { display: flex; flex-direction: column; gap: 14px; }
@@ -475,6 +498,8 @@ tr.row-down td:first-child { box-shadow: inset 3px 0 0 var(--down); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .dot.up { background: var(--up); box-shadow: 0 0 0 3px var(--up-bg); }
 .dot.down { background: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg); }
+.dot.accent { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 .edit-hint { font-size: 12px; }
 td.edit-error { color: var(--down); white-space: normal; }
 td .inline-check + .inline-check { margin-top: 4px; }
@@ -546,6 +571,40 @@ pre.code-block {
 .cli-list { display: flex; flex-direction: column; gap: 16px; }
 .cli-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .cli-item-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ---------- remote access ---------- */
+.hub-section { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.hub-section:first-child { border-top: none; }
+.hub-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hub-url { font-family: var(--mono); font-size: 12.5px; word-break: break-all; color: var(--fg-2); }
+.hub-warn { font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: var(--radius-sm); padding: 6px 10px; }
+.hub-actions, .invite-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.hub-form-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.hub-form-row .field { flex: 1; min-width: 140px; }
+.invite-result { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.invite-result-row { display: flex; align-items: center; gap: 8px; }
+.invite-string { font-family: var(--mono); font-size: 11.5px; word-break: break-all; flex: 1; min-width: 0; }
+.invite-countdown { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.host-checks { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
+.host-checks[hidden] { display: none; }
+.host-checks label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-2); cursor: pointer; }
+.peer-list, .invite-list, .remote-list { display: flex; flex-direction: column; }
+.remote-list:not(:empty) { padding: 0 20px 12px; }
+.peer-row, .invite-row, .remote-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.peer-row:last-child, .invite-row:last-child, .remote-item:last-child { border-bottom: none; }
+.peer-main, .remote-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.peer-name { font-weight: 500; font-size: 13px; }
+.peer-controls, .remote-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.remote-item { flex-direction: column; align-items: stretch; }
+.remote-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.remote-hosts-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.remote-host-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--border); }
+.remote-host-row:first-child { border-top: none; }
+.badge-role { text-transform: capitalize; }
+.remote-card-body { display: flex; flex-direction: column; gap: 14px; }
+.mini-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mini-form input { flex: 1; min-width: 90px; }
+.host-cell .badge-via { margin-left: 4px; }
 
 /* ---------- banners ---------- */
 .banner {
@@ -687,8 +746,10 @@ footer a { color: var(--muted); }
   #add-card { order: 2; }
   #system-card { order: 3; }
   #sharing-card { order: 4; }
-  #logs-panel { order: 5; }
-  #cli-card { order: 6; }
+  #hub-card { order: 5; }
+  #remotes-card { order: 6; }
+  #logs-panel { order: 7; }
+  #cli-card { order: 8; }
 }
 @media (min-width: 700px) and (max-width: 1099px) {
   .layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -844,8 +905,46 @@ const clientJs = `
 
   var toastContainer = document.getElementById("toast-container");
 
+  var hubDot = document.getElementById("hub-dot");
+  var hubStatusText = document.getElementById("hub-status-text");
+  var hubUrlRow = document.getElementById("hub-url-row");
+  var hubUrlEl = document.getElementById("hub-url");
+  var hubUrlCopyBtn = document.getElementById("hub-url-copy");
+  var hubLoginRow = document.getElementById("hub-login-row");
+  var hubLoginLink = document.getElementById("hub-login-link");
+  var hubQuickWarning = document.getElementById("hub-quick-warning");
+  var hubErrorRow = document.getElementById("hub-error-row");
+  var hubNamedForm = document.getElementById("hub-named-form");
+  var hubDomainInput = document.getElementById("hub-domain");
+  var hubTunnelNameInput = document.getElementById("hub-tunnel-name");
+  var hubNamedSubmitBtn = document.getElementById("hub-named-submit");
+  var hubQuickBtn = document.getElementById("hub-quick-btn");
+  var hubStopBtn = document.getElementById("hub-stop-btn");
+  var hubShareSection = document.getElementById("hub-share-section");
+  var inviteRoleSelect = document.getElementById("invite-role");
+  var inviteCreateBtn = document.getElementById("invite-create-btn");
+  var inviteHostsWrap = document.getElementById("invite-hosts-wrap");
+  var inviteResultEl = document.getElementById("invite-result");
+  var inviteStringEl = document.getElementById("invite-string");
+  var inviteCopyBtn = document.getElementById("invite-copy-btn");
+  var inviteCountdownEl = document.getElementById("invite-countdown");
+  var peersEmptyEl = document.getElementById("peers-empty");
+  var peersListEl = document.getElementById("peers-list");
+  var invitesEmptyEl = document.getElementById("invites-empty");
+  var invitesListEl = document.getElementById("invites-list");
+
+  var connectForm = document.getElementById("connect-form");
+  var connectStringInput = document.getElementById("connect-string");
+  var connectNameInput = document.getElementById("connect-name");
+  var connectSubmitBtn = document.getElementById("connect-submit");
+  var connectErrorEl = document.getElementById("connect-error");
+  var remotesEmptyEl = document.getElementById("remotes-empty");
+  var remotesListEl = document.getElementById("remotes-list");
+
   var lastStatus = null;
   var lastHosts = [];
+  var lastHub = null;
+  var lastRemotes = [];
   var rowElements = {};
   var editingHost = null;
   var caBusy = false;
@@ -854,6 +953,9 @@ const clientJs = `
   var cloudflaredInstalled = false;
   var proxyStopped = false;
   var pollTimer = null;
+  var remotesPollTimer = null;
+  var inviteTimer = null;
+  var inviteExpiresAt = null;
 
   function clear(el) {
     while (el.firstChild) el.removeChild(el.firstChild);
@@ -1088,6 +1190,476 @@ const clientJs = `
     cliCurlPre.textContent = curl;
   }
 
+  // ---------- remote access: hub (sender) ----------
+
+  function fmtIn(iso) {
+    if (!iso) return "";
+    var ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) return "expired";
+    var s = Math.round(ms / 1000);
+    if (s < 60) return "in " + s + "s";
+    var m = Math.round(s / 60);
+    return "in " + m + "m";
+  }
+
+  function renderPeers(peers) {
+    peersEmptyEl.hidden = peers.length !== 0;
+    clear(peersListEl);
+    peers.forEach(function (peer) {
+      var row = document.createElement("div");
+      row.className = "peer-row";
+
+      var main = document.createElement("div");
+      main.className = "peer-main";
+      var name = document.createElement("div");
+      name.className = "peer-name";
+      name.textContent = peer.name;
+      main.appendChild(name);
+      var sub = document.createElement("div");
+      sub.className = "muted";
+      sub.textContent = "last seen " + fmtRelative(peer.lastSeen);
+      main.appendChild(sub);
+      row.appendChild(main);
+
+      var controls = document.createElement("div");
+      controls.className = "peer-controls";
+      var roleSelect = document.createElement("select");
+      roleSelect.className = "input input-sm";
+      roleSelect.setAttribute("aria-label", "Role for " + peer.name);
+      ["viewer", "editor", "admin"].forEach(function (r) {
+        var opt = document.createElement("option");
+        opt.value = r;
+        opt.textContent = r.charAt(0).toUpperCase() + r.slice(1);
+        if (r === peer.role) opt.selected = true;
+        roleSelect.appendChild(opt);
+      });
+      roleSelect.addEventListener("change", function () {
+        var prev = peer.role;
+        roleSelect.disabled = true;
+        apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "PUT", body: JSON.stringify({ role: roleSelect.value, hosts: peer.hosts }) })
+          .then(function () { showToast("Updated role for " + peer.name, "success"); return loadHub(); })
+          .catch(function (err) { apiError(err, "Couldn't update role"); roleSelect.value = prev; roleSelect.disabled = false; });
+      });
+      controls.appendChild(roleSelect);
+
+      var revokeBtn = document.createElement("button");
+      revokeBtn.type = "button";
+      revokeBtn.className = "btn btn-sm btn-danger";
+      revokeBtn.textContent = "Revoke";
+      revokeBtn.addEventListener("click", function () {
+        if (!window.confirm("Revoke " + peer.name + "?")) return;
+        revokeBtn.disabled = true;
+        apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "DELETE" })
+          .then(function () { showToast("Revoked " + peer.name, "success"); return loadHub(); })
+          .catch(function (err) { apiError(err, "Couldn't revoke peer"); revokeBtn.disabled = false; });
+      });
+      controls.appendChild(revokeBtn);
+      row.appendChild(controls);
+      peersListEl.appendChild(row);
+    });
+  }
+
+  function renderInvites(invites) {
+    invitesEmptyEl.hidden = invites.length !== 0;
+    clear(invitesListEl);
+    invites.forEach(function (invite) {
+      var row = document.createElement("div");
+      row.className = "invite-row";
+      var main = document.createElement("div");
+      main.className = "peer-main";
+      var roleLine = document.createElement("div");
+      roleLine.className = "peer-name";
+      roleLine.textContent = invite.role.charAt(0).toUpperCase() + invite.role.slice(1);
+      main.appendChild(roleLine);
+      var sub = document.createElement("div");
+      sub.className = "muted";
+      sub.textContent = "expires " + fmtIn(invite.expiresAt);
+      main.appendChild(sub);
+      row.appendChild(main);
+
+      var revokeBtn = document.createElement("button");
+      revokeBtn.type = "button";
+      revokeBtn.className = "btn btn-sm btn-ghost-danger";
+      revokeBtn.textContent = "\\u00d7";
+      revokeBtn.setAttribute("aria-label", "Revoke invite");
+      revokeBtn.addEventListener("click", function () {
+        revokeBtn.disabled = true;
+        apiFetch("/api/invites/" + encodeURIComponent(invite.id), { method: "DELETE" })
+          .then(function () { return loadHub(); })
+          .catch(function (err) { apiError(err, "Couldn't revoke invite"); revokeBtn.disabled = false; });
+      });
+      row.appendChild(revokeBtn);
+      invitesListEl.appendChild(row);
+    });
+  }
+
+  // Re-rendered on every poll, so remember what the user unticked.
+  var inviteUnchecked = {};
+  function renderInviteHostChecks() {
+    Array.prototype.forEach.call(inviteHostsWrap.querySelectorAll("input"), function (cb) {
+      if (cb.checked) delete inviteUnchecked[cb.value];
+      else inviteUnchecked[cb.value] = true;
+    });
+    clear(inviteHostsWrap);
+    lastHosts.forEach(function (row) {
+      if (row.remote) return;
+      var label = document.createElement("label");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = row.host;
+      cb.checked = !inviteUnchecked[row.host];
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(row.host));
+      inviteHostsWrap.appendChild(label);
+    });
+  }
+
+  function updateInviteHostsVisibility() {
+    var isViewer = inviteRoleSelect.value === "viewer";
+    inviteHostsWrap.hidden = !isViewer;
+    if (isViewer) renderInviteHostChecks();
+  }
+  inviteRoleSelect.addEventListener("change", updateInviteHostsVisibility);
+
+  function updateInviteCountdown() {
+    if (!inviteExpiresAt) return;
+    var remaining = Math.max(0, Math.round((inviteExpiresAt - Date.now()) / 1000));
+    if (remaining <= 0) {
+      inviteCountdownEl.textContent = "expired";
+      if (inviteTimer) { clearInterval(inviteTimer); inviteTimer = null; }
+      return;
+    }
+    var m = Math.floor(remaining / 60);
+    var s = remaining % 60;
+    inviteCountdownEl.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function showInviteResult(data) {
+    inviteStringEl.textContent = data.string;
+    inviteResultEl.hidden = false;
+    inviteExpiresAt = new Date(data.expiresAt).getTime();
+    if (inviteTimer) clearInterval(inviteTimer);
+    updateInviteCountdown();
+    inviteTimer = setInterval(updateInviteCountdown, 1000);
+  }
+
+  inviteCreateBtn.addEventListener("click", function () {
+    var role = inviteRoleSelect.value;
+    var hosts;
+    if (role === "viewer") {
+      hosts = Array.prototype.slice.call(inviteHostsWrap.querySelectorAll("input:checked")).map(function (cb) { return cb.value; });
+    }
+    inviteCreateBtn.disabled = true;
+    inviteCreateBtn.classList.add("busy");
+    apiFetch("/api/invites", { method: "POST", body: JSON.stringify({ role: role, hosts: hosts }) })
+      .then(function (data) {
+        showInviteResult(data);
+        return loadHub();
+      })
+      .catch(function (err) { apiError(err, "Couldn't create pairing link"); })
+      .then(function () { inviteCreateBtn.disabled = false; inviteCreateBtn.classList.remove("busy"); });
+  });
+
+  inviteCopyBtn.addEventListener("click", function () { copyText(inviteStringEl.textContent, inviteCopyBtn); });
+
+  function renderHub(data) {
+    lastHub = data.hub;
+    var hub = data.hub;
+    var status = hub.status;
+
+    var dotClass = status === "up" ? "up" : status === "starting" ? "warn" : status === "login" ? "accent" : status === "error" ? "down" : "";
+    hubDot.className = "dot" + (dotClass ? " " + dotClass : "");
+    var labels = { off: "Off", starting: "Starting\\u2026", login: "Login required", up: "Up", error: "Error" };
+    hubStatusText.textContent = labels[status] || status;
+
+    hubUrlRow.hidden = !(status === "up" && hub.url);
+    if (status === "up" && hub.url) hubUrlEl.textContent = hub.url;
+
+    hubLoginRow.hidden = !(status === "login" && hub.loginUrl);
+    if (status === "login" && hub.loginUrl) hubLoginLink.href = hub.loginUrl;
+
+    hubQuickWarning.hidden = !(status === "up" && hub.mode === "quick");
+
+    hubErrorRow.hidden = !(status === "error" && hub.error);
+    if (status === "error" && hub.error) hubErrorRow.textContent = hub.error;
+
+    var running = status === "starting" || status === "login" || status === "up";
+    hubNamedForm.hidden = status === "up";
+    hubQuickBtn.hidden = status === "up";
+    hubStopBtn.hidden = !running;
+
+    if (data.config && data.config.mode === "named" && data.config.domain && !hubDomainInput.value) {
+      hubDomainInput.value = data.config.domain;
+    }
+
+    hubShareSection.hidden = status !== "up";
+    if (status === "up") updateInviteHostsVisibility();
+
+    renderPeers(data.peers);
+    renderInvites(data.invites);
+  }
+
+  function loadHub() {
+    return fetch("/api/hub").then(parseJsonOrThrow).then(renderHub).catch(function (err) { apiError(err, "Couldn't load remote access"); });
+  }
+
+  hubUrlCopyBtn.addEventListener("click", function () { copyText(hubUrlEl.textContent, hubUrlCopyBtn); });
+
+  hubNamedForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var domain = hubDomainInput.value.trim();
+    if (!domain) { hubDomainInput.focus(); return; }
+    var tunnel = hubTunnelNameInput.value.trim();
+    hubNamedSubmitBtn.disabled = true;
+    hubNamedSubmitBtn.classList.add("busy");
+    apiFetch("/api/hub", { method: "POST", body: JSON.stringify({ mode: "named", domain: domain, tunnel: tunnel || undefined }) })
+      .then(function () { showToast("Setting up your domain\\u2026", "success"); return loadHub(); })
+      .catch(function (err) { apiError(err, "Couldn't start setup"); })
+      .then(function () { hubNamedSubmitBtn.disabled = false; hubNamedSubmitBtn.classList.remove("busy"); });
+  });
+
+  hubQuickBtn.addEventListener("click", function () {
+    hubQuickBtn.disabled = true;
+    hubQuickBtn.classList.add("busy");
+    apiFetch("/api/hub", { method: "POST", body: JSON.stringify({ mode: "quick" }) })
+      .then(function () { showToast("Starting quick tunnel\\u2026", "success"); return loadHub(); })
+      .catch(function (err) { apiError(err, "Couldn't start quick tunnel"); })
+      .then(function () { hubQuickBtn.disabled = false; hubQuickBtn.classList.remove("busy"); });
+  });
+
+  hubStopBtn.addEventListener("click", function () {
+    if (!window.confirm("Stop remote access? Connected peers will be disconnected.")) return;
+    hubStopBtn.disabled = true;
+    hubStopBtn.classList.add("busy");
+    apiFetch("/api/hub", { method: "POST", body: JSON.stringify({ mode: "off" }) })
+      .then(function () { showToast("Remote access stopped", "success"); return loadHub(); })
+      .catch(function (err) { apiError(err, "Couldn't stop remote access"); })
+      .then(function () { hubStopBtn.disabled = false; hubStopBtn.classList.remove("busy"); });
+  });
+
+  // ---------- remote access: connected machines (receiver) ----------
+
+  function showConnectError(message) {
+    connectErrorEl.textContent = message;
+    connectErrorEl.hidden = false;
+  }
+  function hideConnectError() {
+    connectErrorEl.hidden = true;
+  }
+
+  function renderRemotes(remotes) {
+    lastRemotes = remotes;
+    remotesEmptyEl.hidden = remotes.length !== 0;
+    clear(remotesListEl);
+    remotes.forEach(function (remote) {
+      var item = document.createElement("div");
+      item.className = "remote-item";
+
+      var head = document.createElement("div");
+      head.className = "remote-head";
+      var main = document.createElement("div");
+      main.className = "remote-main";
+      var nameLine = document.createElement("div");
+      nameLine.className = "peer-name";
+      nameLine.textContent = remote.name;
+      main.appendChild(nameLine);
+      var sub = document.createElement("div");
+      sub.className = "muted";
+      sub.textContent = (remote.sender && remote.sender.hostname) || "";
+      main.appendChild(sub);
+      head.appendChild(main);
+
+      var badges = document.createElement("div");
+      badges.className = "badges";
+      var roleBadge = document.createElement("span");
+      roleBadge.className = "badge badge-role badge-accent";
+      roleBadge.textContent = remote.role;
+      badges.appendChild(roleBadge);
+      var statusBadge = document.createElement("span");
+      statusBadge.className = "badge " + (remote.status === "ok" ? "badge-up" : "badge-down");
+      statusBadge.textContent = remote.status === "ok" ? "connected" : "error";
+      if (remote.status !== "ok" && remote.error) statusBadge.title = remote.error;
+      badges.appendChild(statusBadge);
+      head.appendChild(badges);
+      item.appendChild(head);
+
+      var urlRow = document.createElement("div");
+      urlRow.className = "hub-row";
+      var urlText = document.createElement("span");
+      urlText.className = "hub-url";
+      urlText.textContent = remote.url;
+      urlRow.appendChild(urlText);
+      var urlEditBtn = document.createElement("button");
+      urlEditBtn.type = "button";
+      urlEditBtn.className = "btn btn-sm btn-ghost";
+      urlEditBtn.textContent = "Update URL";
+      urlEditBtn.addEventListener("click", function () {
+        var next = window.prompt("New URL for " + remote.name, remote.url);
+        if (!next || !next.trim() || next.trim() === remote.url) return;
+        apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "PUT", body: JSON.stringify({ url: next.trim() }) })
+          .then(function () { showToast("Updated URL for " + remote.name, "success"); return loadRemotes(); })
+          .catch(function (err) { apiError(err, "Couldn't update URL"); });
+      });
+      urlRow.appendChild(urlEditBtn);
+      item.appendChild(urlRow);
+
+      var actions = document.createElement("div");
+      actions.className = "remote-controls";
+      var syncBtn = document.createElement("button");
+      syncBtn.type = "button";
+      syncBtn.className = "btn btn-sm";
+      syncBtn.textContent = "Sync";
+      syncBtn.addEventListener("click", function () {
+        syncBtn.disabled = true;
+        syncBtn.classList.add("busy");
+        apiFetch("/api/remotes/" + encodeURIComponent(remote.name) + "/sync", { method: "POST" })
+          .then(function () { showToast("Synced " + remote.name, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+          .catch(function (err) { apiError(err, "Couldn't sync " + remote.name); })
+          .then(function () { syncBtn.disabled = false; syncBtn.classList.remove("busy"); });
+      });
+      actions.appendChild(syncBtn);
+      var disconnectBtn = document.createElement("button");
+      disconnectBtn.type = "button";
+      disconnectBtn.className = "btn btn-sm btn-danger";
+      disconnectBtn.textContent = "Disconnect";
+      disconnectBtn.addEventListener("click", function () {
+        if (!window.confirm("Disconnect from " + remote.name + "? This removes its hosts too.")) return;
+        disconnectBtn.disabled = true;
+        apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "DELETE" })
+          .then(function () { showToast("Disconnected " + remote.name, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+          .catch(function (err) { apiError(err, "Couldn't disconnect"); disconnectBtn.disabled = false; });
+      });
+      actions.appendChild(disconnectBtn);
+      item.appendChild(actions);
+
+      var hostsWrap = document.createElement("div");
+      hostsWrap.className = "remote-hosts-list";
+      if (remote.available === null) {
+        var errLine = document.createElement("div");
+        errLine.className = "dim";
+        errLine.textContent = "Couldn't load hosts: " + (remote.error || "unknown error");
+        hostsWrap.appendChild(errLine);
+      } else {
+        (remote.available || []).forEach(function (h) {
+          var hostRow = document.createElement("div");
+          hostRow.className = "remote-host-row";
+          var hostMain = document.createElement("div");
+          hostMain.className = "mono";
+          var aliases = (remote.mapped || []).filter(function (m) { return m.host === h.host; }).map(function (m) { return m.local; });
+          hostMain.textContent = h.host + (aliases.length ? " \\u2192 " + aliases.join(", ") : "");
+          hostRow.appendChild(hostMain);
+
+          if (!aliases.length) {
+            var aliasForm = document.createElement("div");
+            aliasForm.className = "mini-form";
+            var aliasInput = document.createElement("input");
+            aliasInput.type = "text";
+            aliasInput.className = "input input-sm";
+            aliasInput.placeholder = h.host;
+            aliasInput.setAttribute("aria-label", "Local alias for " + h.host);
+            var aliasBtn = document.createElement("button");
+            aliasBtn.type = "button";
+            aliasBtn.className = "btn btn-sm";
+            aliasBtn.textContent = "Add alias";
+            aliasBtn.addEventListener("click", function () {
+              var local = aliasInput.value.trim();
+              if (!local) { aliasInput.focus(); return; }
+              aliasBtn.disabled = true;
+              apiFetch("/api/remotes/" + encodeURIComponent(remote.name) + "/aliases", { method: "POST", body: JSON.stringify({ host: h.host, local: local }) })
+                .then(function () { showToast("Added alias " + local, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+                .catch(function (err) { apiError(err, "Couldn't add alias"); aliasBtn.disabled = false; });
+            });
+            aliasForm.appendChild(aliasInput);
+            aliasForm.appendChild(aliasBtn);
+            hostRow.appendChild(aliasForm);
+          } else if (remote.role === "admin") {
+            var delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "btn btn-sm btn-danger";
+            delBtn.textContent = "Delete";
+            delBtn.addEventListener("click", function () {
+              if (!window.confirm("Delete " + h.host + " on " + remote.name + "?")) return;
+              delBtn.disabled = true;
+              apiFetch("/api/remotes/" + encodeURIComponent(remote.name) + "/hosts/" + encodeURIComponent(h.host), { method: "DELETE" })
+                .then(function () { showToast("Deleted " + h.host, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+                .catch(function (err) { apiError(err, "Couldn't delete host"); delBtn.disabled = false; });
+            });
+            hostRow.appendChild(delBtn);
+          }
+          hostsWrap.appendChild(hostRow);
+        });
+      }
+      item.appendChild(hostsWrap);
+
+      if (remote.role === "editor" || remote.role === "admin") {
+        var addHostForm = document.createElement("div");
+        addHostForm.className = "mini-form";
+        var addHostIn = document.createElement("input");
+        addHostIn.type = "text";
+        addHostIn.className = "input input-sm";
+        addHostIn.placeholder = "host";
+        addHostIn.setAttribute("aria-label", "New host on " + remote.name);
+        var addTargetIn = document.createElement("input");
+        addTargetIn.type = "text";
+        addTargetIn.className = "input input-sm";
+        addTargetIn.placeholder = "target";
+        addTargetIn.setAttribute("aria-label", "Target for new host on " + remote.name);
+        var addHostBtn = document.createElement("button");
+        addHostBtn.type = "button";
+        addHostBtn.className = "btn btn-sm";
+        addHostBtn.textContent = "Add host on " + remote.name;
+        addHostBtn.addEventListener("click", function () {
+          var h = addHostIn.value.trim();
+          var t = addTargetIn.value.trim();
+          if (!h || !t) return;
+          addHostBtn.disabled = true;
+          apiFetch("/api/remotes/" + encodeURIComponent(remote.name) + "/hosts", { method: "POST", body: JSON.stringify({ host: h, target: t }) })
+            .then(function () {
+              showToast("Added " + h + " on " + remote.name, "success");
+              addHostIn.value = "";
+              addTargetIn.value = "";
+              return Promise.all([loadRemotes(), loadHosts()]);
+            })
+            .catch(function (err) { apiError(err, "Couldn't add host"); })
+            .then(function () { addHostBtn.disabled = false; });
+        });
+        addHostForm.appendChild(addHostIn);
+        addHostForm.appendChild(addTargetIn);
+        addHostForm.appendChild(addHostBtn);
+        item.appendChild(addHostForm);
+      }
+
+      remotesListEl.appendChild(item);
+    });
+  }
+
+  function loadRemotes() {
+    return fetch("/api/remotes").then(parseJsonOrThrow).then(function (data) { renderRemotes(data.remotes || []); }).catch(function (err) { apiError(err, "Couldn't load remotes"); });
+  }
+
+  connectForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    hideConnectError();
+    var value = connectStringInput.value.trim();
+    if (!value) { showConnectError("Paste a pairing link first."); return; }
+    var name = connectNameInput.value.trim();
+    connectSubmitBtn.disabled = true;
+    connectSubmitBtn.classList.add("busy");
+    apiFetch("/api/remotes", { method: "POST", body: JSON.stringify({ string: value, name: name || undefined }) })
+      .then(function (data) {
+        showToast("Connected to " + data.remote.name, "success");
+        connectForm.reset();
+        return Promise.all([loadRemotes(), loadHosts()]);
+      })
+      .catch(function (err) { showConnectError(err.message); })
+      .then(function () { connectSubmitBtn.disabled = false; connectSubmitBtn.classList.remove("busy"); });
+  });
+
+  function refreshHubAndRemotes() {
+    if (proxyStopped) return Promise.resolve();
+    return Promise.all([loadHub(), loadRemotes()]);
+  }
+
   caToggle.addEventListener("click", function () {
     if (caBusy || !lastStatus) return;
     var next = !(lastStatus.system.caTrusted === true);
@@ -1143,6 +1715,7 @@ const clientJs = `
         stoppedBanner.appendChild(document.createTextNode(" to bring it back."));
         stoppedBanner.hidden = false;
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (remotesPollTimer) { clearInterval(remotesPollTimer); remotesPollTimer = null; }
         showToast("Proxy stopped", "warn");
       })
       .catch(function (err) {
@@ -1373,11 +1946,19 @@ const clientJs = `
     a.textContent = row.host;
     hostWrap.appendChild(a);
     hostWrap.appendChild(makeCopyButton(function () { return href || row.host; }));
+    if (row.remote) {
+      var viaBadge = document.createElement("span");
+      viaBadge.className = "badge badge-via";
+      viaBadge.textContent = "via " + row.remote.name;
+      viaBadge.title = "Imported from remote \\"" + row.remote.name + "\\"";
+      hostWrap.appendChild(viaBadge);
+    }
     hostTd.appendChild(hostWrap);
     var targetLine = document.createElement("div");
     targetLine.className = "host-target mono";
-    targetLine.textContent = row.target;
-    targetLine.title = row.target;
+    var targetText = row.remote ? (row.remote.name + ": " + row.remote.host) : row.target;
+    targetLine.textContent = targetText;
+    targetLine.title = targetText;
     hostTd.appendChild(targetLine);
     tr.appendChild(hostTd);
 
@@ -1444,8 +2025,10 @@ const clientJs = `
           removeBtn.disabled = false;
         });
     });
-    actionsWrap.appendChild(shareButton(row));
-    actionsWrap.appendChild(editBtn);
+    if (!row.remote) {
+      actionsWrap.appendChild(shareButton(row));
+      actionsWrap.appendChild(editBtn);
+    }
     actionsWrap.appendChild(removeBtn);
     tr.appendChild(actionsTd);
     labelCells(tr, ["", "", "Options", "Status", "Public URL", ""]);
@@ -1559,6 +2142,7 @@ const clientJs = `
     try { localStorage.setItem("locadot.hostCount", String(hosts.length || 1)); } catch (e) {}
     hideHostsSkeleton();
     lastHosts = hosts;
+    if (inviteRoleSelect.value === "viewer" && !inviteHostsWrap.hidden) renderInviteHostChecks();
     emptyEl.hidden = hosts.length !== 0;
     tableWrap.hidden = hosts.length === 0;
 
@@ -1653,14 +2237,22 @@ const clientJs = `
   }
 
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden && !proxyStopped) refreshAll();
+    if (!document.hidden && !proxyStopped) {
+      refreshAll();
+      refreshHubAndRemotes();
+    }
   });
 
   pollTimer = setInterval(function () {
     if (!document.hidden && !proxyStopped) refreshAll();
   }, 5000);
 
+  remotesPollTimer = setInterval(function () {
+    if (!document.hidden && !proxyStopped) refreshHubAndRemotes();
+  }, 15000);
+
   refreshAll();
+  refreshHubAndRemotes();
 })();
 `;
 
@@ -1760,6 +2352,101 @@ export function renderPage(nonce: string, token: string): string {
             <tbody id="tbody"></tbody>
           </table>
         </div>
+      </section>
+
+      <section id="hub-card" class="card" aria-label="Remote access">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Remote access</h3></div>
+        </div>
+        <div class="hub-section">
+          <div class="hub-row">
+            <span class="pill"><span id="hub-dot" class="dot"></span><span id="hub-status-text">Off</span></span>
+          </div>
+          <div id="hub-url-row" class="hub-row" hidden>
+            <span id="hub-url" class="hub-url"></span>
+            <button type="button" id="hub-url-copy" class="copy-btn">Copy</button>
+          </div>
+          <div id="hub-login-row" class="hub-row" hidden>
+            <a id="hub-login-link" href="#" target="_blank" rel="noopener noreferrer">Log in to Cloudflare</a>
+          </div>
+          <div id="hub-quick-warning" class="hub-warn" hidden>URL changes when locadot restarts &mdash; receivers must update it.</div>
+          <div id="hub-error-row" class="hub-warn" hidden></div>
+
+          <form id="hub-named-form" class="hub-form-row" novalidate>
+            <div class="field">
+              <label for="hub-domain">Domain</label>
+              <input type="text" id="hub-domain" placeholder="hub.example.com" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="hub-tunnel-name">Tunnel name</label>
+              <input type="text" id="hub-tunnel-name" placeholder="locadot (optional)" autocomplete="off">
+            </div>
+            <button type="submit" id="hub-named-submit" class="btn btn-sm btn-primary">Use my domain</button>
+          </form>
+          <div class="hub-actions">
+            <button type="button" id="hub-quick-btn" class="btn btn-sm">Use quick tunnel</button>
+            <button type="button" id="hub-stop-btn" class="btn btn-sm btn-danger" hidden>Stop</button>
+          </div>
+        </div>
+
+        <div id="hub-share-section" class="hub-section" hidden>
+          <div class="label">Create pairing link</div>
+          <div class="hub-form-row">
+            <div class="field">
+              <label for="invite-role">Role</label>
+              <select id="invite-role" class="input input-sm">
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button type="button" id="invite-create-btn" class="btn btn-sm btn-primary">Create pairing link</button>
+          </div>
+          <div id="invite-hosts-wrap" class="host-checks" hidden></div>
+          <div id="invite-result" class="invite-result" hidden>
+            <div class="invite-result-row">
+              <span id="invite-string" class="invite-string mono"></span>
+              <button type="button" id="invite-copy-btn" class="copy-btn">Copy</button>
+            </div>
+            <div id="invite-countdown" class="invite-countdown"></div>
+          </div>
+        </div>
+
+        <div class="hub-section">
+          <div class="label">Peers</div>
+          <div id="peers-empty" class="dim" hidden>No peers yet.</div>
+          <div id="peers-list" class="peer-list"></div>
+        </div>
+        <div class="hub-section">
+          <div class="label">Pending invites</div>
+          <div id="invites-empty" class="dim" hidden>No pending invites.</div>
+          <div id="invites-list" class="invite-list"></div>
+        </div>
+      </section>
+
+      <section id="remotes-card" class="card" aria-label="Connected machines">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Connected machines</h3></div>
+        </div>
+        <div class="hub-section">
+          <form id="connect-form" class="hub-form-row" novalidate>
+            <div class="field">
+              <label for="connect-string">Pairing link</label>
+              <input type="text" id="connect-string" placeholder="https://hub.example.com/#lnk_..." autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="connect-name">Name (optional)</label>
+              <input type="text" id="connect-name" placeholder="my-mac" autocomplete="off">
+            </div>
+            <button type="submit" id="connect-submit" class="btn btn-sm btn-primary">Connect</button>
+          </form>
+          <div id="connect-error" class="field-error" role="alert" hidden></div>
+        </div>
+        <div id="remotes-empty" class="empty" hidden>
+          <span class="empty-icon" aria-hidden="true">~</span>
+          <p>Not connected to anything yet. Paste a pairing link above.</p>
+        </div>
+        <div id="remotes-list" class="remote-list"></div>
       </section>
 
       <details id="logs-panel" class="card">

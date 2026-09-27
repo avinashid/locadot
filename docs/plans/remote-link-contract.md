@@ -61,10 +61,10 @@ All bodies are JSON. Errors are `{ "error": string }` with the right status (400
 
 ### App traffic (anything not under `/_locadot/`)
 
-The receiver sends `Authorization: Bearer lpt_…` and `X-Locadot-Host: <mapping on sender>`.
+The receiver sends `X-Locadot-Peer: lpt_…` and `X-Locadot-Host: <mapping on sender>`. It uses its own header, not `Authorization`, because the sender's apps may need `Authorization` from the visitor.
 - If the peer is valid and the mapping exists, is visible to the peer, and has no `remote` field
-  itself, the request is routed like a local request for that mapping. Before routing, the
-  `Authorization` header and every `x-locadot-*` header are deleted.
+  itself, the request is routed like a local request for that mapping. Before routing, every
+  `x-locadot-*` header is deleted. `Authorization` passes through untouched.
 - Otherwise the response is 401, 403 or 404 with a plain-text body. Hub traffic **never** reaches
   the dashboard.
 
@@ -155,7 +155,7 @@ export const remoteFor: (name: string) => Remote | undefined;  // REMOTES_FILE, 
 export const remoteOptions: (req: http.IncomingMessage, entry: HostEntry, remote: Remote) => httpProxy.ServerOptions;
 // target remote.url, changeOrigin, ws, secure: true, autoRewrite, hostRewrite = req.headers.host,
 // protocolRewrite by isTls(req), cookieDomainRewrite {"*": ""},
-// headers { Authorization: `Bearer ${remote.token}`, "X-Locadot-Host": entry.remote!.host }
+// headers { "X-Locadot-Peer": remote.token, "X-Locadot-Host": entry.remote!.host }
 ```
 
 ## Local dashboard API (`src/dashboard/api.ts`, on localhost)

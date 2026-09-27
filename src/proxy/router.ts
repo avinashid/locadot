@@ -5,7 +5,9 @@ import { proxyNotFound, upstreamDown } from "../constants/template";
 import Constants from "../constants";
 import logger from "../utils/logger";
 import { urlFor } from "../lib/urls";
-import type { HostEntry, HostStats } from "../types";
+import type { HostEntry, HostStats, Remote } from "../types";
+import type { HubDecision } from "./hub";
+import { remoteOptions } from "./remote";
 import { allowOrigin, isPreflight, preflightHeaders, type Lookup } from "./cors";
 import { proxyOptions, viaOptions, viaOrigin } from "./options";
 import { isPublicHost } from "./guard";
@@ -20,10 +22,22 @@ export interface RouterContext {
   dashboard(req: http.IncomingMessage, res: http.ServerResponse): void;
   /** The mapping behind a public tunnel host (xyz.trycloudflare.com), if any. */
   tunnelFor?(host: string): string | undefined;
+  /** Sender side: traffic on the hub's public hostname (see hub.ts). */
+  hub?: {
+    classify(req: http.IncomingMessage): HubDecision;
+    api(req: http.IncomingMessage, res: http.ServerResponse): void;
+    secure(): boolean;
+  };
+  /** Receiver side: the sender a `remote` mapping forwards to. */
+  remoteFor?(name: string): Remote | undefined;
 }
 
 /** Resolves a tunnel's public host to its mapping and tags the request, before any routing. */
-const resolveHost = (req: http.IncomingMessage, ctx: RouterContext) => {
+const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDecision | undefined) => {
+  if (hub?.kind === "app") {
+    tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure() });
+    return hub.host;
+  }
   const host = hostOf(req);
   const local = ctx.tunnelFor?.(host);
   if (local) tag(req, { host: local, tunnel: true });
@@ -39,8 +53,20 @@ const viaAllowed = (req: http.IncomingMessage, via: Via) => isSameOrigin(req) &&
 
 const reason = (err: NodeJS.ErrnoException | undefined) => err?.code || err?.message;
 
+const remoteGone = (entry: HostEntry) => `the connection to ${entry.remote!.name} was removed`;
+
 export function handleRequest(req: http.IncomingMessage, res: http.ServerResponse, ctx: RouterContext) {
-  const host = resolveHost(req, ctx);
+  const hub = ctx.hub?.classify(req);
+  if (hub?.kind === "api") {
+    ctx.hub!.api(req, res);
+    return;
+  }
+  if (hub?.kind === "deny") {
+    res.writeHead(hub.status, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(`locadot: ${hub.message}\n`);
+    return;
+  }
+  const host = resolveHost(req, ctx, hub);
   try {
     if (Constants.dashboardHosts.includes(host)) {
       ctx.dashboard(req, res);
@@ -51,6 +77,11 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
     if (!entry) {
       res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
       res.end(proxyNotFound(host, dashboardUrl(req)));
+      return;
+    }
+
+    if (entry.remote) {
+      forwardRemote(req, res, ctx, host, entry);
       return;
     }
 
@@ -102,13 +133,52 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
   }
 }
 
+/** Receiver side: the sender does the routing, cors and rewriting; we only add the credentials. */
+function forwardRemote(req: http.IncomingMessage, res: http.ServerResponse, ctx: RouterContext, host: string, entry: HostEntry) {
+  const remote = ctx.remoteFor?.(entry.remote!.name);
+  if (!remote) {
+    res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(upstreamDown(host, entry.target, remoteGone(entry), dashboardUrl(req)));
+    return;
+  }
+  const started = Date.now();
+  res.once("finish", () => record(ctx.stats, host, res.statusCode, Date.now() - started, res.statusCode >= 500));
+  ctx.proxy.web(req, res, remoteOptions(req, entry, remote), (err: NodeJS.ErrnoException) => {
+    logger.warn(`${host} → ${remote.name} (${remote.url}): ${reason(err)}`);
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    res.writeHead(502, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(upstreamDown(host, `${remote.name}: ${entry.remote!.host}`, reason(err) || "error", dashboardUrl(req)));
+  });
+}
+
 export function handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer, ctx: RouterContext) {
-  const host = resolveHost(req, ctx);
   socket.on("error", () => socket.destroy());
+  const hub = ctx.hub?.classify(req);
+  if (hub?.kind === "api" || hub?.kind === "deny") {
+    const status = hub.kind === "deny" ? hub.status : 400;
+    socket.end(`HTTP/1.1 ${status} ${http.STATUS_CODES[status] || "Error"}\r\nConnection: close\r\n\r\n`);
+    return;
+  }
+  const host = resolveHost(req, ctx, hub);
   try {
     const entry = ctx.lookup(host);
     if (!entry) {
       socket.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+      return;
+    }
+    if (entry.remote) {
+      const remote = ctx.remoteFor?.(entry.remote.name);
+      if (!remote) {
+        socket.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+        return;
+      }
+      ctx.proxy.ws(req, socket, head, remoteOptions(req, entry, remote), (err: NodeJS.ErrnoException) => {
+        logger.warn(`${host} WebSocket → ${remote.name}: ${reason(err)}`);
+        socket.destroy();
+      });
       return;
     }
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;

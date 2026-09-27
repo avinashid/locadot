@@ -6,6 +6,10 @@ interface RequestTag {
   /** The mapping behind a tunnel's public host (xyz.trycloudflare.com). */
   host?: string;
   tunnel?: boolean;
+  /** Sender side: an authenticated peer's request through the hub's public hostname. */
+  remote?: boolean;
+  /** The public side of a remote request was https. */
+  secure?: boolean;
   via?: Via;
 }
 
@@ -27,7 +31,10 @@ export const mappedHost = (req: http.IncomingMessage) => tags.get(req)?.host ?? 
 
 export const fromTunnel = (req: http.IncomingMessage) => Boolean(tags.get(req)?.tunnel);
 
+export const fromRemote = (req: http.IncomingMessage) => Boolean(tags.get(req)?.remote);
+
 export const viaOf = (req: http.IncomingMessage) => tags.get(req)?.via;
 
 /** Tunnel visitors are on https even though cloudflared talks plain http to us. */
-export const isTls = (req: http.IncomingMessage) => Boolean((req.socket as TLSSocket).encrypted) || fromTunnel(req);
+export const isTls = (req: http.IncomingMessage) =>
+  Boolean((req.socket as TLSSocket).encrypted) || fromTunnel(req) || Boolean(tags.get(req)?.secure);
