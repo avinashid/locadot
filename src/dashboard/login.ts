@@ -5,6 +5,8 @@ import logger from "../utils/logger";
 import { escapeHtml } from "./escape";
 import { isDashboardOrigin } from "./api";
 import UiAuth, { SESSION_COOKIE, SESSION_TTL_SEC, cookieOf } from "../lib/ui-auth";
+import { isPanel, isTls } from "../proxy/request";
+import { clientIp } from "../proxy/hub";
 
 const MAX_LOGIN_BODY = 4096;
 
@@ -56,7 +58,8 @@ const safeEqual = (a: string, b: string) => {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 };
 
-const isTls = (req: http.IncomingMessage) => Boolean((req.socket as TLSSocket).encrypted);
+/** Through the shared dashboard every visitor arrives from cloudflared on loopback, so limit by the visitor's IP. */
+export const loginIp = (req: http.IncomingMessage) => (isPanel(req) ? clientIp(req) : req.socket.remoteAddress || "");
 
 const sameOrigin = (req: http.IncomingMessage) => {
   // Browsers send `Origin: null` on form posts under Referrer-Policy: no-referrer, so trust Sec-Fetch-Site when present.
@@ -68,8 +71,11 @@ const sameOrigin = (req: http.IncomingMessage) => {
   return isDashboardOrigin(req, origin);
 };
 
+// The shared dashboard's public URL is https even though cloudflared talks plain http to us.
+const secure = (req: http.IncomingMessage) => (isPanel(req) ? isTls(req) : Boolean((req.socket as TLSSocket).encrypted));
+
 const cookie = (req: http.IncomingMessage, value: string, maxAge: number) =>
-  `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${isTls(req) ? "; Secure" : ""}`;
+  `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure(req) ? "; Secure" : ""}`;
 
 const sendLogin = (res: http.ServerResponse, method: string, nonce: string, status: number, error?: string) => {
   // The dashboard's CSP forbids form posts; the login form needs one.
@@ -118,7 +124,12 @@ export const sessionCookie = (req: http.IncomingMessage) => cookie(req, UiAuth.i
  * are let through untouched. Returns true when it answered the request itself.
  */
 export function gate(req: http.IncomingMessage, res: http.ServerResponse, url: URL, token: string, nonce: string): boolean {
-  if (!UiAuth.enabled()) return false;
+  if (!UiAuth.enabled()) {
+    if (!isPanel(req)) return false;
+    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("locadot: set a dashboard password to share the dashboard.\n");
+    return true;
+  }
   const method = req.method || "GET";
   const path = url.pathname;
 
@@ -129,7 +140,7 @@ export function gate(req: http.IncomingMessage, res: http.ServerResponse, url: U
       return true;
     }
     if (method !== "POST") return false;
-    const ip = req.socket.remoteAddress || "";
+    const ip = loginIp(req);
     if (!sameOrigin(req)) {
       sendLogin(res, method, nonce, 403, "Cross-site sign-in is not allowed.");
       return true;

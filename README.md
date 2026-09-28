@@ -20,6 +20,11 @@ HTTPS custom domains for local development. Point `https://app.localhost` at you
   (`--target https://google.com`). Redirects and cookies are rewritten so the browser stays on the `.localhost` name.
 - 🌍 **Share on a public URL.** `locadot tunnel --host app.localhost` (or **Share** in the dashboard) puts a mapping on
   `https://<random>.trycloudflare.com` through a Cloudflare quick tunnel. No account needed.
+- 🔗 **Remote access, locadot to locadot.** Publish your whole locadot on a Cloudflare hostname and let other machines pair
+  with it as viewer, editor or admin. Your mappings show up in their locadot. Admins can also open your dashboard and any
+  port on your localhost.
+- 🖥️ **Share the dashboard in a browser.** `locadot hub:panel on` serves the control panel at the hub's public URL, behind the
+  dashboard password, so you can manage this machine from anywhere without installing locadot there.
 - 🧩 **`--cors` for sites that call other domains.** Preflights are answered locally and cross-origin calls are routed
   through the page's own origin, so a production frontend works against its real APIs from `.localhost`.
 - 📋 **Control panel at `https://localhost`.** Add, edit, filter and remove mappings, see health and traffic, share them,
@@ -110,8 +115,10 @@ short-lived pairing string, and the sender's mappings then show up in the receiv
 | --- | --- |
 | `locadot hub:setup --domain dev.example.com` | Sender: publish through your own named tunnel on your Cloudflare domain (runs `cloudflared` login, creates the tunnel and routes DNS). The address stays the same. |
 | `locadot hub:quick` | Sender: publish on a trycloudflare URL. No account is needed, but **the URL changes if the tunnel restarts**, so receivers have to run `remote:url`. |
+| `locadot hub:manual --url <url>` | Sender: publish behind a URL something else already forwards to the proxy's HTTP port (ngrok, a reverse proxy). |
 | `locadot hub` / `hub:off` | Show the hub status and URL, or stop it. |
 | `locadot hub:localhost <on\|off>` | Sender: allow or block admin peers from opening this machine's dashboard and any port on its localhost. |
+| `locadot hub:panel <on\|off>` | Sender: serve this dashboard to any browser at the hub's public URL, behind the [dashboard password](#dashboard-password). Off by default. See [Sharing the dashboard](#sharing-the-dashboard-in-a-browser). |
 | `locadot share --role viewer\|editor\|admin [--hosts a.localhost,b.localhost]` | Sender: print a pairing string. It works once and expires after 5 minutes. `--hosts` limits a viewer to those mappings. |
 | `locadot peers` / `peers:role <id> <role>` / `peers:revoke <id>` | Sender: list the connected machines, change a role, or cut one off. |
 | `locadot connect "<pairing string>" [--name alice] [--domain dev]` | Receiver: connect and import the sender's mappings. If a name clashes, `app.localhost` becomes `app.alice.localhost`. Admins get a local domain that opens the sender's dashboard and localhost (see below); `--domain` picks it, otherwise it's a random `adjective-noun`. |
@@ -136,6 +143,31 @@ headers work as they do locally, and origins in the sender's pages are rewritten
 `http://localhost:8000` in a page becomes `http://api.alice.localhost` if that's the receiver's name for `api.localhost`).
 An admin's `<port>.<domain>.localhost` gets the same treatment when a `--cors` mapping points at that port.
 `remote:sync` picks up a sender turning `--cors` on or off.
+
+When a target is down, requests through the hub or a public share get a **503** with locadot's "upstream unreachable" page.
+Cloudflare replaces an origin's 502 with its own generic "bad gateway" error, which would hide the real cause.
+
+#### Sharing the dashboard in a browser
+
+Remote access above needs locadot on both machines. To manage this machine from a browser anywhere (a laptop, a phone),
+share the dashboard itself on the hub's public URL:
+
+```sh
+locadot ui:password     # required: visitors sign in with it
+locadot hub:panel on    # or the "Share this dashboard" switch under Remote access
+locadot hub             # shows the URL, e.g. https://dev.example.com
+```
+
+Opening the hub URL in a browser then shows the sign-in page, and after that the full dashboard. Paired machines keep
+working on the same URL, since they authenticate with their own tokens. Some details:
+
+- It can't be turned on without a dashboard password, and removing the password turns sharing off.
+- The session cookie is `HttpOnly`, `SameSite=Strict` and `Secure` on https. Wrong passwords are rate limited per visitor IP.
+- The browser never gets this machine's API token. Changes are only accepted from the page's own origin.
+- Only the dashboard is shared. Your mappings stay reachable only by paired machines, and links in the dashboard still point
+  at `*.localhost` names, which open on the visitor's own machine.
+- Anyone with the password controls this locadot, including remote access and stopping the proxy. Use a strong one, or
+  prefer a named tunnel (`hub:setup`) behind Cloudflare Access if you need more.
 
 ### Certificates
 
@@ -196,6 +228,7 @@ echo "$PW" | locadot ui:password --stdin
 ```
 
 You can also set, change or remove it under **Settings → Dashboard password** (changing or removing it there needs the current one).
+It's also what [sharing the dashboard in a browser](#sharing-the-dashboard-in-a-browser) signs visitors in with.
 Only the dashboard is protected. Your mapped hosts work as before, and so do scripts and the CLI that send `X-Locadot-Token`.
 Sessions last 7 days, and changing the password signs everyone out. If you forget it, run `locadot ui:password` again in a terminal.
 
@@ -221,8 +254,9 @@ each time the proxy starts.
 | `PUT /api/settings` | `{ "httpPort": 8080, "httpsPort": 8443 }` | Save new ports to the config file (400 if invalid or equal). Takes effect after a restart. |
 | `POST /api/proxy/restart` | | Restart the proxy (e.g. to pick up saved ports). |
 | `PUT /api/settings/ui-password` | `{ "password": "…", "current": "…" }` or `{ "enabled": false, "current": "…" }` | Set, change or remove the dashboard password (`current` is required once one is set). |
-| `GET /api/hub` | | Hub status/config, plus `localhost` (sender: is localhost access on). |
+| `GET /api/hub` | | Hub status/config, plus `localhost` (sender: is localhost access on) and `panel` (is the dashboard shared). |
 | `PUT /api/hub/localhost` | `{ "enabled": true }` | Sender: turn localhost access for admin peers on/off (400 if the hub isn't configured). |
+| `PUT /api/hub/panel` | `{ "enabled": true }` | Sender: share the dashboard at the hub's public URL on/off (400 if the hub isn't configured, or no dashboard password is set). |
 | `GET /api/remotes` | | Every remote (never the token), including `domain` and `localhost`. |
 | `POST /api/remotes` | `{ "string": "<pairing string>", "name": "alice", "domain": "dev" }` | Receiver: connect using a pairing string; `domain` is optional (admin only, random if omitted). |
 | `PUT /api/remotes/:name` | `{ "domain": "dev" }` or `{ "domain": "random" }` or `{ "domain": null }` | Receiver: set, randomize or remove a remote's local domain (400 invalid, 409 clash, 404 unknown). |

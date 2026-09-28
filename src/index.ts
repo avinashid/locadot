@@ -160,6 +160,10 @@ program
   .command("hub:localhost <onOrOff>")
   .description("Sender: let admin peers reach any port on this machine's localhost (on/off)")
   .action(run((value) => Commands.hubLocalhost(value)));
+program
+  .command("hub:panel <onOrOff>")
+  .description("Sender: open this dashboard to browsers at the hub's public URL, behind the dashboard password (on/off)")
+  .action(run((value) => Commands.hubPanel(value)));
 
 program
   .command("ui:password")

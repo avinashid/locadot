@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- Share the dashboard in a browser: `locadot hub:panel on` (or **Share this dashboard** under Remote access) serves the
+  control panel at the hub's public URL, behind the dashboard password. It can't be turned on without a password, and
+  removing the password turns it off. The visitor's browser never gets the API token; sign-in is rate limited per visitor IP.
+  `GET /api/hub` reports `panel`; `PUT /api/hub/panel` turns it on or off.
+
 ### Fixed
 - Through a tunnel or remote access, a stopped or unmapped upstream is now a 503 with locadot's "upstream unreachable"
   page. With 502, Cloudflare replaced the page with its own "origin bad gateway" error, which hid the real cause.

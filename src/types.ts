@@ -106,6 +106,8 @@ export interface HubConfig {
   url?: string;
   /** Admin peers may reach any port on this machine's localhost. Default true; false turns it off. */
   localhost?: boolean;
+  /** Browsers get this dashboard at the public URL, behind the dashboard password. Default off. */
+  panel?: boolean;
 }
 
 export interface HubState {

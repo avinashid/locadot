@@ -1061,6 +1061,10 @@ const clientJs = `
   var connectDomainInput = document.getElementById("connect-domain");
   var hubLocalhostRow = document.getElementById("hub-localhost-row");
   var hubLocalhostSwitch = document.getElementById("hub-localhost");
+  var hubPanelRow = document.getElementById("hub-panel-row");
+  var hubPanelSwitch = document.getElementById("hub-panel");
+  var hubPanelSub = document.getElementById("hub-panel-sub");
+  var hubPanelUrl = "";
   var connectSubmitBtn = document.getElementById("connect-submit");
   var connectErrorEl = document.getElementById("connect-error");
   var remotesEmptyEl = document.getElementById("remotes-empty");
@@ -1509,6 +1513,9 @@ const clientJs = `
 
     hubLocalhostRow.hidden = !data.config;
     setSwitch(hubLocalhostSwitch, data.localhost !== false);
+    hubPanelUrl = status === "up" && hub.url ? hub.url : "";
+    hubPanelRow.hidden = !data.config;
+    renderHubPanel(data.panel === true);
 
     hubErrorRow.hidden = !(status === "error" && hub.error);
     if (status === "error" && hub.error) hubErrorRow.textContent = hub.error;
@@ -1873,6 +1880,29 @@ const clientJs = `
     row.appendChild(form);
     return row;
   }
+
+  function renderHubPanel(on) {
+    setSwitch(hubPanelSwitch, on);
+    // Turning it on needs a password; turning it off never does.
+    hubPanelSwitch.disabled = !on && !UI_AUTH;
+    if (!UI_AUTH && !on) hubPanelSub.textContent = "Set a dashboard password in Settings first. Visitors sign in with it.";
+    else if (on) hubPanelSub.textContent = "Open " + (hubPanelUrl || "the public URL") + " in any browser and sign in with the dashboard password.";
+    else hubPanelSub.textContent = "Open this dashboard from any browser at the public URL, after signing in with the dashboard password.";
+  }
+
+  hubPanelSwitch.addEventListener("click", function () {
+    var next = hubPanelSwitch.getAttribute("aria-checked") !== "true";
+    hubPanelSwitch.disabled = true;
+    apiFetch("/api/hub/panel", { method: "PUT", body: JSON.stringify({ enabled: next }) })
+      .then(function () {
+        renderHubPanel(next);
+        showToast(next ? "The dashboard is shared at the public URL" : "The dashboard is no longer shared", "success");
+      })
+      .catch(function (err) {
+        apiError(err, "Couldn't change dashboard sharing");
+        renderHubPanel(!next);
+      });
+  });
 
   hubLocalhostSwitch.addEventListener("click", function () {
     var next = hubLocalhostSwitch.getAttribute("aria-checked") !== "true";
@@ -2962,6 +2992,7 @@ const clientJs = `
     uiAuthSave.textContent = enabled ? "Change password" : "Set password";
     uiAuthRemove.hidden = !enabled;
     signOutBtn.hidden = !enabled;
+    renderHubPanel(enabled && hubPanelSwitch.getAttribute("aria-checked") === "true");
   }
   renderUiAuth(UI_AUTH);
 
@@ -3314,6 +3345,13 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
               <div class="tile-sub">Admin peers get this dashboard at <span class="mono">&lt;domain&gt;.localhost</span> and this machine's localhost at <span class="mono">&lt;port&gt;.&lt;domain&gt;.localhost</span> on their side.</div>
             </div>
             <button type="button" id="hub-localhost" class="switch" role="switch" aria-checked="true" aria-label="Let admins open this dashboard and any port on this machine"><span class="switch-knob"></span></button>
+          </div>
+          <div id="hub-panel-row" class="toggle-row" hidden>
+            <div>
+              <div class="label">Share this dashboard</div>
+              <div id="hub-panel-sub" class="tile-sub"></div>
+            </div>
+            <button type="button" id="hub-panel" class="switch" role="switch" aria-checked="false" aria-label="Share this dashboard at the public URL, behind the dashboard password"><span class="switch-knob"></span></button>
           </div>
         </div>
 

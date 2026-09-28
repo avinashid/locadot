@@ -287,6 +287,7 @@ function buildHubBody(ctx: DashboardContext) {
     hub: ctx.hub(),
     config: config ?? null,
     localhost: config?.localhost !== false,
+    panel: config?.panel === true,
     invites: invites.map(sanitizeInvite),
     peers: peers.map(sanitizePeer),
   };
@@ -333,6 +334,7 @@ export async function route(
     (["/api/startup", "/api/trust", "/api/logs/clear", "/api/proxy/stop", "/api/proxy/restart", "/api/cloudflared/install", "/api/hub", "/api/invites", "/api/remotes"].includes(path) &&
       method === "POST") ||
     (path === "/api/hub/localhost" && method === "PUT") ||
+    (path === "/api/hub/panel" && method === "PUT") ||
     (path === "/api/settings" && method === "PUT") ||
     (inviteMatch && method === "DELETE") ||
     (peerMatch && (method === "PUT" || method === "DELETE")) ||
@@ -438,6 +440,16 @@ export async function route(
       HubConfigStore.write({ ...config, localhost: enabled });
       ctx.reloadHub();
       return { status: 200, body: { localhost: enabled } };
+    }
+
+    if (path === "/api/hub/panel" && method === "PUT") {
+      const enabled = requiredBool(body.enabled, "enabled");
+      const config = HubConfigStore.read();
+      if (!config) throw new ApiError(400, "The hub isn't configured yet. Set it up first: locadot hub:setup / hub:quick / hub:manual.");
+      if (enabled && !UiAuth.enabled()) throw new ApiError(400, "Set a dashboard password first.", "Settings → Dashboard password, or `locadot ui:password`.");
+      HubConfigStore.write({ ...config, panel: enabled });
+      ctx.reloadHub();
+      return { status: 200, body: { panel: enabled } };
     }
 
     if (path === "/api/invites" && method === "POST") {

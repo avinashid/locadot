@@ -5,6 +5,7 @@ import logger from "../utils/logger";
 import Links, { LinkError } from "../lib/links";
 import HostOps, { ConflictError, NotFoundError } from "../lib/hosts";
 import HubConfigStore from "../lib/hub-config";
+import UiAuth from "../lib/ui-auth";
 import Localhost, { InputError } from "../lib/localhost";
 import { RegistryError } from "../lib/registry";
 import { hostOf } from "./request";
@@ -22,6 +23,7 @@ export type HubDecision =
   | { kind: "app"; host: string; peer: Peer; names?: Record<string, string>; loopback?: number[] }
   | { kind: "local"; port: number; peer: Peer; names?: Record<string, string>; host?: string; loopback?: number[] }
   | { kind: "dashboard"; peer: Peer; origin: string }
+  | { kind: "panel" }
   | { kind: "deny"; status: number; message: string };
 
 export interface HubApiContext {
@@ -57,7 +59,7 @@ const recordFailure = (ip: string) => {
 /** Test-only: forget every recorded failure. */
 export const resetRateLimiter = () => failures.clear();
 
-const clientIp = (req: http.IncomingMessage) => {
+export const clientIp = (req: http.IncomingMessage) => {
   const header = req.headers["cf-connecting-ip"];
   const value = Array.isArray(header) ? header[0] : header;
   return value || req.socket.remoteAddress || "unknown";
@@ -122,12 +124,18 @@ export function classify(
   req: http.IncomingMessage,
   publicHost: string | undefined,
   hosts: Record<string, HostEntry>,
-  opts?: { localhost?: boolean; blockedPorts?: number[] }
+  opts?: { localhost?: boolean; blockedPorts?: number[]; panel?: boolean }
 ): HubDecision {
   if (!publicHost || hostOf(req) !== publicHost) return { kind: "none" };
 
   const pathname = (req.url || "/").split("?")[0];
   if (pathname === "/_locadot" || pathname.startsWith("/_locadot/")) return { kind: "api" };
+
+  // Peers always send X-Locadot-Peer; a plain browser gets the shared dashboard, which has its own sign-in limiter.
+  if (opts?.panel && req.headers["x-locadot-peer"] === undefined) {
+    if (!UiAuth.enabled()) return { kind: "deny", status: 403, message: "Set a dashboard password to share the dashboard." };
+    return { kind: "panel" };
+  }
 
   const ip = clientIp(req);
   if (isLimited(ip)) return { kind: "deny", status: 429, message: "Too many failed attempts. Try again later." };

@@ -77,7 +77,7 @@ const dashboardRequest = (method: string, path: string, options: { headers?: Rec
     req.end();
   });
 
-const getHub = async (): Promise<{ hub: HubState; config: HubConfig | null; invites: unknown[]; peers: unknown[] }> => {
+const getHub = async (): Promise<{ hub: HubState; config: HubConfig | null; panel?: boolean; invites: unknown[]; peers: unknown[] }> => {
   requireRunning();
   const { status, json } = await dashboardRequest("GET", "/api/hub");
   if (status !== 200) throw new InputError("❌ Couldn't read hub status. Try `locadot status`.");
@@ -87,7 +87,7 @@ const getHub = async (): Promise<{ hub: HubState; config: HubConfig | null; invi
 const HUB_EMOJI: Record<HubState["status"], string> = { off: "🔒", starting: "⏳", up: "🌍", error: "❌", login: "🔑" };
 
 export async function hub(options: { json?: boolean }) {
-  const { hub } = await getHub();
+  const { hub, panel } = await getHub();
   if (options.json) {
     console.log(JSON.stringify(hub, null, 2));
     return;
@@ -99,6 +99,7 @@ export async function hub(options: { json?: boolean }) {
   print(`${HUB_EMOJI[hub.status] ?? "❔"} ${hub.mode} — ${hub.status}${hub.url ? `: ${hub.url}` : ""}`);
   if (hub.loginUrl) print(`   Open to finish login: ${hub.loginUrl}`);
   if (hub.error) print(`   ${hub.error}`);
+  if (panel) print(`   Dashboard shared${hub.url ? ` at ${hub.url}` : ""} (password sign-in). Turn off: locadot hub:panel off`);
 }
 
 export async function hubSetup(options: { domain?: string; tunnel?: string }) {
@@ -153,6 +154,20 @@ export async function hubLocalhost(value: string) {
   if (status === 400) throw new InputError(`❌ ${json?.error || "Set up the hub first: locadot hub:setup / hub:quick / hub:manual."}`);
   if (status !== 200) throw new InputError(`❌ Couldn't update (${status})${json?.error ? `: ${json.error}` : ""}.`);
   print(json.localhost ? "🖥️  Admin peers can now reach this machine's localhost." : "🔒 Admin peers can no longer reach this machine's localhost.");
+}
+
+export async function hubPanel(value: string) {
+  if (value !== "on" && value !== "off") throw new InputError('❌ Use "on" or "off".');
+  requireRunning();
+  const { status, json } = await dashboardRequest("PUT", "/api/hub/panel", {
+    headers: { "X-Locadot-Token": apiToken() },
+    body: { enabled: value === "on" },
+  });
+  if (status === 400) throw new InputError(`❌ ${json?.error || "Set up the hub first: locadot hub:setup / hub:quick / hub:manual."}${json?.hint ? ` ${json.hint}` : ""}`);
+  if (status !== 200) throw new InputError(`❌ Couldn't update (${status})${json?.error ? `: ${json.error}` : ""}.`);
+  if (!json.panel) return print("🔒 The dashboard is no longer shared.");
+  const { hub } = await getHub();
+  print(`🌍 The dashboard is shared${hub.url ? ` at ${hub.url}` : ""}. Visitors sign in with the dashboard password.`);
 }
 
 export async function share(options: { role?: string; hosts?: string }) {

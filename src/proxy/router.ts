@@ -45,6 +45,10 @@ const resolveHost = (req: http.IncomingMessage, ctx: RouterContext, hub: HubDeci
     tag(req, { host: hub.host, remote: true, secure: ctx.hub!.secure(), peerNames: hub.names, loopback: hub.loopback });
     return hub.host;
   }
+  if (hub?.kind === "panel") {
+    tag(req, { host: "localhost", remote: true, secure: ctx.hub!.secure(), peerOrigin: (req.headers.host || "").toLowerCase(), panel: true });
+    return "localhost";
+  }
   if (hub?.kind === "dashboard") {
     tag(req, { host: "localhost", remote: true, secure: ctx.hub!.secure(), peerOrigin: hub.origin });
     return "localhost";
@@ -253,7 +257,7 @@ function forwardLocal(req: http.IncomingMessage, res: http.ServerResponse, ctx: 
 export function handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer, ctx: RouterContext) {
   socket.on("error", () => socket.destroy());
   const hub = ctx.hub?.classify(req);
-  if (hub?.kind === "api" || hub?.kind === "deny") {
+  if (hub?.kind === "api" || hub?.kind === "deny" || hub?.kind === "panel") {
     const status = hub.kind === "deny" ? hub.status : 400;
     socket.end(`HTTP/1.1 ${status} ${http.STATUS_CODES[status] || "Error"}\r\nConnection: close\r\n\r\n`);
     return;

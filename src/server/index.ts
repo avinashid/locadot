@@ -80,6 +80,7 @@ export async function startCentralProxy() {
       classify: (req) =>
         classify(req, hub.publicHost(), registry.get().hosts, {
           localhost: HubConfigStore.readCached()?.localhost !== false,
+          panel: HubConfigStore.readCached()?.panel === true,
           blockedPorts: [info.httpPort, info.httpsPort],
         }),
       api: (req, res) => {

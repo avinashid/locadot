@@ -13,6 +13,8 @@ interface RequestTag {
   via?: Via;
   /** Sender side: an admin peer's browser viewing this dashboard; the receiver's `host[:port]` it runs on. */
   peerOrigin?: string;
+  /** Sender side: a browser on the hub's public URL using the shared dashboard; always signs in with the password. */
+  panel?: boolean;
   /** Sender side: the receiver's URL for each of our hosts it maps, from `X-Locadot-Names`. */
   peerNames?: Record<string, string>;
   /** Sender side: the peer's pass-through may reach this machine's loopback, except these ports. Absent: not at all. */
@@ -38,6 +40,8 @@ export const mappedHost = (req: http.IncomingMessage) => tags.get(req)?.host ?? 
 export const fromTunnel = (req: http.IncomingMessage) => Boolean(tags.get(req)?.tunnel);
 
 export const fromRemote = (req: http.IncomingMessage) => Boolean(tags.get(req)?.remote);
+
+export const isPanel = (req: http.IncomingMessage) => Boolean(tags.get(req)?.panel);
 
 export const peerOriginOf = (req: http.IncomingMessage) => tags.get(req)?.peerOrigin;
 

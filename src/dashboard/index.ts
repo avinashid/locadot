@@ -4,7 +4,7 @@ import { DashboardContext, HostEntry, HostStats, ProbeResult, Role, TunnelState 
 import { renderPage } from "./page";
 import { ApiError, PEER_TOKEN, assertTrusted, readJson, route } from "./api";
 import { peerOriginOf } from "../proxy/request";
-import { gate, sessionCookie } from "./login";
+import { gate, loginIp, sessionCookie } from "./login";
 import UiAuth, { SESSION_COOKIE } from "../lib/ui-auth";
 import { systemStatus } from "../lib/system";
 import { cloudflaredInfo as cloudflared } from "../proxy/tunnel";
@@ -172,7 +172,7 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
 async function uiPassword(req: http.IncomingMessage, res: http.ServerResponse, ctx: DashboardContext): Promise<void> {
   assertTrusted(req, ctx);
   const body = await readJson(req);
-  const ip = req.socket.remoteAddress || "";
+  const ip = loginIp(req);
   if (UiAuth.enabled()) {
     if (UiAuth.limited(ip)) throw new ApiError(429, "Too many wrong passwords. Wait a few minutes and try again.");
     if (!UiAuth.verify(body.current)) {

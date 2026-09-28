@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import Constants from "../constants";
 import FileModule from "../utils/file";
+import HubConfigStore from "./hub-config";
 
 interface UiAuthFile {
   salt: string;
@@ -78,6 +79,9 @@ export default class UiAuth {
   static clear(): void {
     FileModule.remove("UI_AUTH_FILE");
     cache = undefined;
+    // The shared dashboard needs the password, so it doesn't come back on its own when a new one is set.
+    const hub = HubConfigStore.read();
+    if (hub?.panel) HubConfigStore.write({ ...hub, panel: false });
   }
 
   static verify(password: unknown): boolean {
