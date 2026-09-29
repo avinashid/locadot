@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.5.0 (2026-09-29)
 
 ### Changed
 - Dashboard redesign. Pages are grouped: Hosts has All/Shared tabs (Public sharing moved in), Remote has This
