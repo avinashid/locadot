@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.3.0 (2026-09-29)
 
 ### Added
 - Share on your own hostname: `locadot tunnel --host app.localhost --domain app.example.com`, or **Share** in the
