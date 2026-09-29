@@ -65,6 +65,7 @@ npx locadot open                                    # opens the dashboard at htt
 | `locadot add --host <name>.localhost --target <url>` | Map a domain to any upstream: `3000`, `127.0.0.1:8080`, `http://10.0.0.5:8080/app`, `https://google.com`. |
 | `locadot update --host <name>.localhost --port/--target …` | Change the destination of an existing domain. |
 | `locadot remove --host <name>.localhost` (`rm`) | Remove a domain. |
+| `locadot protect --host <name>.localhost [--shared] [--remote] [--local] [--stdin] [--off]` | Ask for a password on the shared link, for connected machines and/or locally (none by default). Prompts for the password, or reads it with `--stdin`. |
 | `locadot allow --host <name>.localhost [addresses…] [--rm] [--clear]` | Let people on a tunnel or remote access reach internal addresses (`localhost:3000`) through a `--cors` domain. With no addresses, shows the list. Also `add … --allow a,b`. |
 | `locadot list` (`ls`, `host`) `[--json]` | Show all mappings. |
 | `locadot clear:hosts` | Remove all mappings. |
@@ -119,6 +120,20 @@ locadot allow --host app.localhost localhost:3000      # add; `--rm` removes, `-
 In the dashboard, click **Access** on the row. An entry is `host:port`, or a host alone for any of its ports. `127.0.0.1`
 and `0.0.0.0` count as `localhost`. Only the page's own requests can use it, and locadot's own ports stay blocked even
 when all of `localhost` is allowed. Allow only what the app needs: anyone who can open the mapping can reach these addresses.
+
+**Password protection.** Ask for a password before a mapping opens, only where you choose: on the shared link, for
+machines connected through remote access, and/or locally (this machine and your network). Nothing is picked by default.
+
+```sh
+locadot protect --host app.localhost --shared           # prompts for the password; --stdin reads it from a pipe
+locadot protect --host app.localhost --shared --local   # change where it asks, keeping the password
+locadot protect --host app.localhost                     # set a new password (signs everyone out)
+locadot protect --host app.localhost --off
+```
+
+In the dashboard, click the lock on the row. Visitors get a sign-in page and stay signed in for 7 days through a cookie
+for that host, which is never passed on to your app. Ten wrong passwords in five minutes lock that visitor out for a
+while. Passwords are stored as scrypt hashes in `.locadot-host-passwords.json` (0600), not in the registry.
 
 ### Remote access (locadot to locadot)
 
@@ -262,6 +277,7 @@ each time the proxy starts.
 | `POST /api/hosts` | `{ "host": "app.localhost", "target": "3000", "insecure": false, "cors": false }` | Add a mapping (201; 409 if it exists). |
 | `PUT /api/hosts/:host` | `{ "target": "https://example.com", "insecure": false, "cors": true }` | Change a mapping (404 if unknown). |
 | `PUT /api/hosts/:host` | `{ "allow": ["localhost:3000"] }` | Replace the internal addresses shared visitors may reach (normalized; `[]` clears; 400 if one is invalid). |
+| `PUT /api/hosts/:host` | `{ "protect": { "password": "…", "scopes": ["shared", "remote", "local"] } }` | Ask for a password on those paths in (at least one; `password` may be left out to keep the current one). `{ "protect": null }` removes it. Rows show `protect: { scopes, updatedAt }`, never the password. |
 | `PUT /api/hosts/:host` | `{ "tunnel": true, "domain": "app.example.com" }` | Share on a public URL: with `domain`, on that hostname through a named Cloudflare tunnel, without it on a random trycloudflare.com URL. `{ "tunnel": false }` stops sharing (400 for a bad hostname, 409 if another mapping uses it). |
 | `DELETE /api/hosts/:host` | | Remove a mapping. |
 | `POST /api/startup` | `{ "enabled": true }` | Start at boot on/off. |

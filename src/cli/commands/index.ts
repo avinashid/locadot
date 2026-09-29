@@ -5,11 +5,12 @@ import * as system from "./system";
 import * as tunnel from "./tunnel";
 import * as remote from "./remote";
 import * as ui from "./ui";
+import { protect } from "./protect";
 import { doctor } from "./doctor";
 
 export type { TargetOptions } from "./hosts";
 export type { PortOptions } from "./proxy";
 
-const Commands = { ...hosts, ...proxy, ...files, ...system, ...tunnel, ...remote, ...ui, doctor };
+const Commands = { ...hosts, ...proxy, ...files, ...system, ...tunnel, ...remote, ...ui, protect, doctor };
 
 export default Commands;

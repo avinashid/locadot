@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- Password protection per mapping: `locadot protect --host app.localhost --shared --remote --local` (or the lock on a
+  row in the dashboard) asks for a password on the shared link, for connected machines and/or locally, whichever you
+  pick; none by default. Visitors sign in on a locadot page and get a cookie for that host that isn't sent upstream.
+  `PUT /api/hosts/:host {"protect": {"password": "…", "scopes": [...]}}`, `{"protect": null}` to remove.
+
 ### Fixed
 - Sharing on a custom domain used whatever Cloudflare login was on the machine, so a hostname outside that login's zone
   showed as live while cloudflared had created `<hostname>.<other zone>` instead. locadot now keeps one login per zone,

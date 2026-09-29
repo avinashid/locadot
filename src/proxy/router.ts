@@ -16,6 +16,7 @@ import { allowMatches, splitHost } from "../lib/allow";
 import { SHIM_PATH, isSameOrigin, parseVia, shimScript, type Via } from "./passthrough";
 import { fromRemote, fromTunnel, hostOf, isTls, loopbackOf, tag } from "./request";
 import { record } from "./stats";
+import { guard, guardUpgrade } from "./protect";
 
 export interface RouterContext {
   proxy: httpProxy;
@@ -188,6 +189,7 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
       res.end(shimScript);
       return;
     }
+    if (guard(req, res, host, entry)) return;
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;
     const allowed = via && listed(req, ctx, entry, via);
     if (via && !viaAllowed(req, via, allowed)) {
@@ -311,6 +313,7 @@ export function handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: B
       });
       return;
     }
+    if (guardUpgrade(req, socket, host, entry)) return;
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;
     const allowed = via && listed(req, ctx, entry, via);
     if (via && !viaAllowed(req, via, allowed)) {

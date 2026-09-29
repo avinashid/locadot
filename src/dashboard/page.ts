@@ -811,8 +811,8 @@ details.card[open] summary { border-bottom: 1px solid var(--border); border-bott
   border-top: 1px solid var(--border);
 }
 
-/* ---------- confirm / prompt / share dialogs ---------- */
-#confirm-dialog, #prompt-dialog, #share-dialog {
+/* ---------- confirm / prompt / share / protect dialogs ---------- */
+#confirm-dialog, #prompt-dialog, #share-dialog, #protect-dialog {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -820,10 +820,54 @@ details.card[open] summary { border-bottom: 1px solid var(--border); border-bott
   color: var(--fg);
   box-shadow: var(--shadow-md);
 }
-#confirm-dialog::backdrop, #prompt-dialog::backdrop, #share-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+#confirm-dialog::backdrop, #prompt-dialog::backdrop, #share-dialog::backdrop, #protect-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 #confirm-dialog { width: min(420px, calc(100vw - 32px)); }
 #prompt-dialog { width: min(420px, calc(100vw - 32px)); }
 #share-dialog { width: min(480px, calc(100vw - 32px)); }
+#protect-dialog { width: min(480px, calc(100vw - 32px)); }
+.field-password { position: relative; }
+.field-password .input { width: 100%; padding-right: 40px; }
+.field-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.field-toggle:hover { background: var(--surface-2); color: var(--fg); }
+.field-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.option-check {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  position: relative;
+}
+.option-card[aria-checked="true"] .option-check { border-color: var(--accent); background: var(--accent); }
+.option-card[aria-checked="true"] .option-check::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--accent-fg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+#protect-remove { margin-right: auto; }
 .share-options { display: flex; flex-direction: column; gap: 10px; }
 .option-card {
   display: flex;
@@ -2766,6 +2810,167 @@ const clientJs = `
       });
   });
 
+  // ---------- protect dialog ----------
+
+  var PROTECT_SCOPES = ["shared", "remote", "local"];
+  var PROTECT_SCOPE_LABELS = { shared: "Shared link", remote: "Remote access", local: "This machine & network" };
+
+  function protectScopeNames(scopes) {
+    return scopes.map(function (s) { return PROTECT_SCOPE_LABELS[s] || s; }).join(", ");
+  }
+
+  var protectDialogEl = document.getElementById("protect-dialog");
+  var protectHostEl = document.getElementById("protect-host");
+  var protectCloseBtn = document.getElementById("protect-close");
+  var protectCancelBtn = document.getElementById("protect-cancel");
+  var protectSubmitBtn = document.getElementById("protect-submit");
+  var protectRemoveBtn = document.getElementById("protect-remove");
+  var protectPasswordInput = document.getElementById("protect-password");
+  var protectToggleBtn = document.getElementById("protect-toggle");
+  var protectErrorEl = document.getElementById("protect-error");
+  var protectHintEl = document.getElementById("protect-hint");
+  var protectScopeErrorEl = document.getElementById("protect-scope-error");
+  var protectOptionEls = PROTECT_SCOPES.map(function (s) { return document.getElementById("protect-option-" + s); });
+  var protectRow = null;
+  var protectScopes = [];
+
+  function protectRenderScopes() {
+    protectOptionEls.forEach(function (el) {
+      el.setAttribute("aria-checked", String(protectScopes.indexOf(el.getAttribute("data-scope")) !== -1));
+    });
+  }
+
+  function protectToggleScope(el) {
+    var scope = el.getAttribute("data-scope");
+    var on = protectScopes.indexOf(scope) === -1;
+    if (on) protectScopes.push(scope);
+    else protectScopes = protectScopes.filter(function (s) { return s !== scope; });
+    protectRenderScopes();
+    protectScopeErrorEl.hidden = true;
+    protectScopeErrorEl.textContent = "";
+  }
+
+  protectOptionEls.forEach(function (el) {
+    el.addEventListener("click", function () { protectToggleScope(el); });
+  });
+
+  protectToggleBtn.addEventListener("click", function () {
+    var showing = protectPasswordInput.type === "text";
+    protectPasswordInput.type = showing ? "password" : "text";
+    protectToggleBtn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+  });
+
+  function closeProtectDialog() {
+    protectRow = null;
+    protectDialogEl.close();
+  }
+
+  function openProtectDialog(row) {
+    protectRow = row;
+    protectHostEl.textContent = row.host;
+    protectPasswordInput.value = "";
+    protectPasswordInput.type = "password";
+    protectToggleBtn.setAttribute("aria-label", "Show password");
+    protectErrorEl.hidden = true;
+    protectErrorEl.textContent = "";
+    protectScopeErrorEl.hidden = true;
+    protectScopeErrorEl.textContent = "";
+    protectScopes = row.protect ? row.protect.scopes.slice() : [];
+    protectRenderScopes();
+    if (row.protect) {
+      protectPasswordInput.placeholder = "Leave blank to keep the current password";
+      protectHintEl.textContent = "Set " + fmtRelative(row.protect.updatedAt);
+      protectHintEl.hidden = false;
+      protectRemoveBtn.hidden = false;
+      protectSubmitBtn.textContent = "Save";
+    } else {
+      protectPasswordInput.placeholder = "";
+      protectHintEl.hidden = true;
+      protectRemoveBtn.hidden = true;
+      protectSubmitBtn.textContent = "Protect host";
+    }
+    protectSubmitBtn.disabled = false;
+    protectSubmitBtn.classList.remove("busy");
+    protectCancelBtn.disabled = false;
+    protectRemoveBtn.disabled = false;
+    protectDialogEl.showModal();
+    setTimeout(function () { protectPasswordInput.focus(); }, 0);
+  }
+
+  protectCancelBtn.addEventListener("click", closeProtectDialog);
+  protectCloseBtn.addEventListener("click", closeProtectDialog);
+  protectDialogEl.addEventListener("click", function (e) {
+    if (e.target === protectDialogEl) closeProtectDialog();
+  });
+  protectDialogEl.addEventListener("close", function () { protectRow = null; });
+
+  protectRemoveBtn.addEventListener("click", function () {
+    if (!protectRow) return;
+    var row = protectRow;
+    confirmDialog({ title: "Remove password protection?", message: "Anyone will be able to reach " + row.host + " without a password.", confirmLabel: "Remove protection", danger: true }).then(function (ok) {
+      if (!ok) return;
+      protectRemoveBtn.disabled = true;
+      protectSubmitBtn.disabled = true;
+      protectCancelBtn.disabled = true;
+      apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ protect: null }) })
+        .then(function () {
+          showToast("Removed password protection for " + row.host, "success");
+          closeProtectDialog();
+          return loadHosts();
+        })
+        .catch(function (err) {
+          protectErrorEl.textContent = err && err.message ? err.message : String(err);
+          protectErrorEl.hidden = false;
+          protectRemoveBtn.disabled = false;
+          protectSubmitBtn.disabled = false;
+          protectCancelBtn.disabled = false;
+        });
+    });
+  });
+
+  protectSubmitBtn.addEventListener("click", function () {
+    if (!protectRow) return;
+    var row = protectRow;
+    var password = protectPasswordInput.value;
+    protectErrorEl.hidden = true;
+    protectErrorEl.textContent = "";
+    protectScopeErrorEl.hidden = true;
+    protectScopeErrorEl.textContent = "";
+    var required = !row.protect;
+    if ((required || password) && password.length < 8) {
+      protectErrorEl.textContent = "Use at least 8 characters.";
+      protectErrorEl.hidden = false;
+      return;
+    }
+    if (!protectScopes.length) {
+      protectScopeErrorEl.textContent = "Pick at least one place to ask for the password.";
+      protectScopeErrorEl.hidden = false;
+      return;
+    }
+    var protectBody = { scopes: protectScopes.slice() };
+    if (password) protectBody.password = password;
+    protectSubmitBtn.disabled = true;
+    protectSubmitBtn.classList.add("busy");
+    protectCancelBtn.disabled = true;
+    protectRemoveBtn.disabled = true;
+    apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ protect: protectBody }) })
+      .then(function () {
+        showToast("Password protection saved for " + row.host, "success");
+        closeProtectDialog();
+        return loadHosts();
+      })
+      .catch(function (err) {
+        protectErrorEl.textContent = err && err.message ? err.message : String(err);
+        protectErrorEl.hidden = false;
+      })
+      .then(function () {
+        protectSubmitBtn.disabled = false;
+        protectSubmitBtn.classList.remove("busy");
+        protectCancelBtn.disabled = false;
+        protectRemoveBtn.disabled = false;
+      });
+  });
+
   // ---------- confirm / prompt dialogs ----------
 
   var confirmDialogEl = document.getElementById("confirm-dialog");
@@ -2915,6 +3120,7 @@ const clientJs = `
     if (row.insecure) flags.push(["insecure", "Upstream TLS certificate is not verified", "badge-warn"]);
     if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host", "badge-cors"]);
     if (row.allow && row.allow.length) flags.push(["allow " + row.allow.length, row.allow.join(", "), "badge-accent"]);
+    if (row.protect) flags.push(["password", "Password protected on: " + protectScopeNames(row.protect.scopes), "badge-accent"]);
     if (flags.length) {
       optionsTd.className = "badges";
       flags.forEach(function (flag) {
@@ -2964,6 +3170,20 @@ const clientJs = `
     accessSvg.appendChild(accessPath);
     accessBtn.appendChild(accessSvg);
     accessBtn.addEventListener("click", function () { openAllowDialog(row); });
+    var protectBtn = document.createElement("button");
+    protectBtn.type = "button";
+    var protectScopesSet = row.protect ? row.protect.scopes : [];
+    protectBtn.className = "btn btn-sm btn-icon" + (protectScopesSet.length ? " is-set" : "");
+    protectBtn.title = protectScopesSet.length ? "Password protected on: " + protectScopeNames(protectScopesSet) : "Password protection: require a password before visitors reach this host";
+    protectBtn.setAttribute("aria-label", "Password protection for " + row.host);
+    var protectSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    protectSvg.setAttribute("viewBox", "0 0 24 24");
+    protectSvg.setAttribute("aria-hidden", "true");
+    var protectPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    protectPath.setAttribute("d", "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z");
+    protectSvg.appendChild(protectPath);
+    protectBtn.appendChild(protectSvg);
+    protectBtn.addEventListener("click", function () { openProtectDialog(row); });
     var editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn btn-sm";
@@ -2991,6 +3211,7 @@ const clientJs = `
     if (!row.remote) {
       actionsWrap.appendChild(shareButton(row));
       actionsWrap.appendChild(accessBtn);
+      actionsWrap.appendChild(protectBtn);
       actionsWrap.appendChild(editBtn);
     }
     actionsWrap.appendChild(removeBtn);
@@ -4465,6 +4686,61 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
   <div class="modal-foot">
     <button type="button" id="share-cancel" class="btn">Cancel</button>
     <button type="button" id="share-submit" class="btn btn-primary">Start sharing</button>
+  </div>
+</dialog>
+<dialog id="protect-dialog">
+  <div class="modal-head">
+    <div>
+      <h3 class="modal-title">Password protection</h3>
+      <p id="protect-host" class="modal-sub mono"></p>
+    </div>
+    <button type="button" id="protect-close" class="btn btn-ghost modal-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <p class="modal-desc">Visitors see a sign-in page and need this password before they reach the app.</p>
+    <div class="field">
+      <label for="protect-password">Password</label>
+      <div class="field-password">
+        <input type="password" id="protect-password" class="input" autocomplete="new-password">
+        <button type="button" id="protect-toggle" class="field-toggle" aria-label="Show password">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <p id="protect-hint" class="modal-hint" hidden></p>
+      <div id="protect-error" class="field-error" role="alert" hidden></div>
+    </div>
+    <div class="field">
+      <label>Ask for it on</label>
+      <div id="protect-options" class="share-options" role="group" aria-label="Ask for the password on">
+        <button type="button" id="protect-option-shared" class="option-card" role="checkbox" aria-checked="false" data-scope="shared">
+          <span class="option-check" aria-hidden="true"></span>
+          <span class="option-body">
+            <span class="option-title">Shared link</span>
+            <span class="option-desc">Visitors on the public tunnel URL (Share).</span>
+          </span>
+        </button>
+        <button type="button" id="protect-option-remote" class="option-card" role="checkbox" aria-checked="false" data-scope="remote">
+          <span class="option-check" aria-hidden="true"></span>
+          <span class="option-body">
+            <span class="option-title">Remote access</span>
+            <span class="option-desc">Machines connected to this one through remote access.</span>
+          </span>
+        </button>
+        <button type="button" id="protect-option-local" class="option-card" role="checkbox" aria-checked="false" data-scope="local">
+          <span class="option-check" aria-hidden="true"></span>
+          <span class="option-body">
+            <span class="option-title">This machine &amp; network</span>
+            <span class="option-desc">Browsers on this computer or your local network.</span>
+          </span>
+        </button>
+      </div>
+      <div id="protect-scope-error" class="field-error" role="alert" hidden></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" id="protect-remove" class="btn btn-danger" hidden>Remove protection</button>
+    <button type="button" id="protect-cancel" class="btn">Cancel</button>
+    <button type="button" id="protect-submit" class="btn btn-primary">Protect host</button>
   </div>
 </dialog>
 <div id="toast-container" class="toast-container" aria-live="polite"></div>

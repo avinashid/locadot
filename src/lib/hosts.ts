@@ -3,6 +3,7 @@ import Localhost, { InputError } from "./localhost";
 import RegistryStore from "./registry";
 import { parseAllowList } from "./allow";
 import HubConfigStore from "./hub-config";
+import HostAuth, { parseScopes } from "./host-auth";
 
 export class NotFoundError extends InputError {}
 export class ConflictError extends InputError {}
@@ -102,12 +103,57 @@ export default class HostOps {
     return { host, entry };
   }
 
+  /**
+   * Password protection: `scopes` picks where it's asked for (at least one). `password` is needed the first time;
+   * leaving it out keeps the current one. `off` removes the protection and the password.
+   */
+  static async setProtect(input: { host: unknown; password?: unknown; scopes?: unknown; off?: boolean }) {
+    const host = Localhost.requireHost(input.host);
+    const existing = RegistryStore.read().hosts[host];
+    if (!existing) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+    if (existing.remote) throw new InputError(`❌ ${host} is a remote's mapping; protect it on that machine.`);
+    if (input.off) {
+      const entry = await RegistryStore.mutate((registry) => {
+        const current = registry.hosts[host];
+        if (!current) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+        registry.hosts[host] = { ...current, protect: undefined, updatedAt: new Date().toISOString() };
+        return registry.hosts[host];
+      });
+      HostAuth.clear(host);
+      return { host, entry };
+    }
+    let scopes;
+    try {
+      scopes = parseScopes(input.scopes);
+    } catch (error: any) {
+      throw new InputError(`❌ ${error.message}`);
+    }
+    if (!scopes.length) throw new InputError("❌ Pick at least one place to ask for the password: shared, remote or local.");
+    const password = input.password === undefined || input.password === null || input.password === "" ? undefined : input.password;
+    if (password === undefined && !HostAuth.has(host)) throw new InputError(`❌ Set a password to protect ${host}.`);
+    if (password !== undefined) {
+      try {
+        HostAuth.set(host, String(password));
+      } catch (error: any) {
+        throw new InputError(`❌ ${error.message}`);
+      }
+    }
+    const entry = await RegistryStore.mutate((registry) => {
+      const current = registry.hosts[host];
+      if (!current) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+      registry.hosts[host] = { ...current, protect: { scopes }, updatedAt: new Date().toISOString() };
+      return registry.hosts[host];
+    });
+    return { host, entry };
+  }
+
   static async remove(input: { host: unknown }) {
     const host = Localhost.requireHost(input.host);
     await RegistryStore.mutate((registry) => {
       if (!registry.hosts[host]) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
       delete registry.hosts[host];
     });
+    HostAuth.clear(host);
     return { host };
   }
 }

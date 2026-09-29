@@ -399,7 +399,16 @@ export async function route(
         updated = await HostOps.setAllow({ host, allow: body.allow });
         logger.info(`✏️ dashboard: ${updated.host} allows ${updated.entry.allow?.join(", ") || "no internal addresses"}`);
       }
-      if (body.target !== undefined || (tunnel === undefined && body.allow === undefined)) {
+      if (body.protect !== undefined) {
+        const protect = body.protect as { password?: unknown; scopes?: unknown } | null;
+        if (protect !== null && (typeof protect !== "object" || Array.isArray(protect))) throw new ApiError(400, "protect must be an object or null.");
+        updated = protect === null
+          ? await HostOps.setProtect({ host, off: true })
+          : await HostOps.setProtect({ host, password: protect.password, scopes: protect.scopes });
+        const scopes = updated.entry.protect?.scopes;
+        logger.info(`🔒 dashboard: ${scopes ? `${updated.host} asks for a password on ${scopes.join(", ")}${protect?.password ? " (new password)" : ""}` : `${updated.host} is no longer password protected`}`);
+      }
+      if (body.target !== undefined || (tunnel === undefined && body.allow === undefined && body.protect === undefined)) {
         updated = await HostOps.update({
           host,
           target: body.target,

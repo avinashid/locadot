@@ -3,7 +3,7 @@ import { InputError } from "../../lib/localhost";
 import UiAuth, { MIN_PASSWORD } from "../../lib/ui-auth";
 import { print } from "../shared";
 
-const readStdin = (): Promise<string> =>
+export const readStdin = (): Promise<string> =>
   new Promise((resolve, reject) => {
     let data = "";
     process.stdin.setEncoding("utf8");
@@ -13,7 +13,7 @@ const readStdin = (): Promise<string> =>
   });
 
 /** Reads a line without echoing it. */
-const askHidden = (question: string): Promise<string> =>
+export const askHidden = (question: string): Promise<string> =>
   new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
     const write = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput.bind(rl);

@@ -1,3 +1,6 @@
+/** shared: the mapping's public tunnel URL; remote: machines connected through remote access; local: everyone else. */
+export type ProtectScope = "shared" | "remote" | "local";
+
 export interface HostEntry {
   /** Absolute upstream URL, e.g. http://localhost:3000 or https://google.com */
   target: string;
@@ -11,6 +14,8 @@ export interface HostEntry {
   tunnel?: boolean;
   /** Share on this hostname through a named Cloudflare tunnel in the user's account; kept after unsharing. */
   tunnelDomain?: string;
+  /** Ask for a password on these paths in; the password itself is in HOST_PASSWORDS_FILE (see lib/host-auth.ts). */
+  protect?: { scopes: ProtectScope[] };
   /** Receiver side: this name forwards to a mapping on a connected sender (see lib/remotes.ts). */
   remote?: { name: string; host: string };
   createdAt: string;

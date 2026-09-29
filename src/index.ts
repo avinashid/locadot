@@ -65,6 +65,18 @@ program
   .action(run((addresses, options) => Commands.allow(addresses, options)));
 
 program
+  .command("protect")
+  .description("Ask for a password before a domain opens: on the shared link, for connected machines and/or on this machine")
+  .addOption(hostOption())
+  .option("--shared", "Ask visitors of the shared (tunnel) link")
+  .option("--remote", "Ask machines connected through remote access")
+  .option("--local", "Ask on this machine and your network")
+  .option("--password <password>", "The password (prompted for when left out)")
+  .option("--stdin", "Read the password from stdin")
+  .option("--off", "Stop asking for a password and forget it")
+  .action(run((options) => Commands.protect(options)));
+
+program
   .command("remove")
   .alias("rm")
   .description("Remove a domain")

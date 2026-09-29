@@ -55,6 +55,7 @@ export default class Constants {
     CONFIG_FILE,
     // Optional dashboard password: scrypt hash + session signing secret (0600).
     UI_AUTH_FILE: path.join(PACKAGE_PATH, ".locadot-ui-auth.json"),
+    HOST_PASSWORDS_FILE: path.join(PACKAGE_PATH, ".locadot-host-passwords.json"),
     // Remote access. Sender: public hostname config, invites + peers (0600). Receiver: remotes (0600).
     HUB_FILE: path.join(PACKAGE_PATH, ".locadot-hub.json"),
     LINKS_FILE: path.join(PACKAGE_PATH, ".locadot-links.json"),

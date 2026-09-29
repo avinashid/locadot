@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import http from "http";
-import { DashboardContext, HostEntry, HostStats, ProbeResult, Role, TunnelState } from "../types";
+import { DashboardContext, HostEntry, HostStats, ProbeResult, ProtectScope, Role, TunnelState } from "../types";
+import HostAuth from "../lib/host-auth";
 import { renderPage } from "./page";
 import { ApiError, PEER_TOKEN, assertTrusted, readJson, route } from "./api";
 import { peerOriginOf } from "../proxy/request";
@@ -20,6 +21,7 @@ interface HostRow {
   cors: boolean;
   allow: string[];
   tunnelDomain: string | null;
+  protect: { scopes: ProtectScope[]; updatedAt: string | null } | null;
   createdAt: string;
   updatedAt: string;
   urls: { https: string; http: string };
@@ -81,6 +83,7 @@ async function buildHosts(ctx: DashboardContext): Promise<HostRow[]> {
         cors: !!entry.cors,
         allow: entry.allow ?? [],
         tunnelDomain: entry.tunnelDomain ?? null,
+        protect: entry.protect ? { scopes: entry.protect.scopes, updatedAt: HostAuth.updatedAt(host) ?? null } : null,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
         urls: hostUrls(host, httpPort, httpsPort),

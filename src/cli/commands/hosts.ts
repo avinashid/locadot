@@ -93,7 +93,7 @@ export async function list(options: { json?: boolean }) {
   }
   const width = Math.max(...hosts.map(([host]) => urlFor(host).length));
   for (const [host, entry] of hosts) {
-    print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}${entry.allow?.length ? `  (allow ${entry.allow.join(", ")})` : ""}`);
+    print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}${entry.allow?.length ? `  (allow ${entry.allow.join(", ")})` : ""}${entry.protect ? `  (password: ${entry.protect.scopes.join(", ")})` : ""}`);
   }
   print(`☑️ Total: ${hosts.length}.`);
 }
