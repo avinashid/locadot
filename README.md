@@ -216,6 +216,8 @@ hosts become cards:
 Trust and start-at-boot may need elevation. locadot asks the OS for it (polkit on Linux, the password dialog on macOS, UAC on Windows).
 If that isn't possible, for example on a headless Linux box, the panel shows the exact command to run instead: `sudo locadot trust`,
 `locadot startup:enable`, and so on.
+On macOS, run `locadot trust` without `sudo`: it asks for your password itself, and macOS then confirms the trust change in a
+dialog, which only works in Terminal on the Mac, not over SSH. Under `sudo` it would trust root's own CA instead of yours.
 
 ### Dashboard password
 

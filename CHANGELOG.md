@@ -9,6 +9,10 @@
   `GET /api/hub` reports `panel`; `PUT /api/hub/panel` turns it on or off.
 
 ### Fixed
+- `locadot trust` on macOS failed with "The authorization was denied since no user interaction was possible". It ran
+  `security` through an osascript admin prompt, which can't show the trust-settings dialog macOS requires; it now runs
+  `sudo security` in the terminal (or `security` directly from the dashboard). `sudo locadot trust` is refused on macOS,
+  since it trusted root's CA rather than the one the proxy serves.
 - Through a tunnel or remote access, a stopped or unmapped upstream is now a 503 with locadot's "upstream unreachable"
   page. With 502, Cloudflare replaced the page with its own "origin bad gateway" error, which hid the real cause.
 

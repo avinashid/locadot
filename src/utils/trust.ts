@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import sudo from "@expo/sudo-prompt";
 import Constants from "../constants";
 import { caCertPath, ensureCA } from "./certs";
@@ -126,14 +126,65 @@ function isTrustedLinux(certPath: string): boolean {
   }
 }
 
-async function trustMac(certPath: string): Promise<void> {
-  await execSudo(
-    `security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "${certPath}"`
+const MAC_KEYCHAIN = "/Library/Keychains/System.keychain";
+
+const macRootError = () =>
+  new Error(
+    `Run \`locadot trust\` without sudo; it asks for your password itself. Under sudo it would trust root's own CA ` +
+      `(${caCertPath()}), not the one your proxy serves.`
   );
+
+// Plain `sudo` sets HOME to /var/root; `sudo -E` or LOCADOT_HOME keep the user's state dir, so those are fine.
+const sudoAsRoot = () => {
+  const user = process.env.SUDO_USER;
+  return process.getuid?.() === 0 && Boolean(user) && !process.env.LOCADOT_HOME && !path.resolve(Constants.paths.HOME).startsWith(`/Users/${user}/`);
+};
+
+// Changing admin trust settings needs macOS to show a password dialog. sudo-prompt elevates through
+// `osascript ... with administrator privileges`, which can't, so it fails with "no user interaction was possible".
+// A Terminal's sudo or the user's own session can.
+// Async: from the dashboard the dialog can stay open for a while, and the proxy has to keep serving meanwhile.
+export async function macSecurity(args: string[]): Promise<void> {
+  const viaSudo = process.getuid?.() !== 0 && Boolean(process.stdin.isTTY);
+  const detail = await new Promise<string | undefined>((resolve) => {
+    const child = viaSudo
+      ? spawn("sudo", ["security", ...args], { stdio: ["inherit", "inherit", "pipe"], windowsHide: true })
+      : spawn("security", args, { stdio: ["ignore", "inherit", "pipe"], windowsHide: true });
+    let stderr = "";
+    child.stderr!.on("data", (chunk) => {
+      stderr += chunk;
+      if (viaSudo) process.stderr.write(chunk);
+    });
+    child.on("error", (error) => resolve(error.message));
+    child.on("close", (code) => resolve(code === 0 ? undefined : stderr.trim() || `security exited with ${code}`));
+  });
+  if (detail === undefined) return;
+  if (/no user interaction was possible/i.test(detail)) {
+    throw new Error(
+      "macOS needs to show a password dialog to change certificate trust, and couldn't from here. " +
+        "Run `locadot trust` in Terminal on the Mac itself (not over SSH), or run:\n  " +
+        `sudo security ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`
+    );
+  }
+  throw new Error(detail);
+}
+
+async function trustMac(certPath: string): Promise<void> {
+  if (sudoAsRoot()) throw macRootError();
+  await macSecurity(["add-trusted-cert", "-d", "-r", "trustRoot", "-k", MAC_KEYCHAIN, certPath]);
 }
 
 async function untrustMac(): Promise<void> {
-  await execSudo(`security delete-certificate -c "${CA_NAME}"`);
+  if (sudoAsRoot()) throw macRootError();
+  const certPath = caCertPath();
+  if (fs.existsSync(certPath)) {
+    try {
+      await macSecurity(["remove-trusted-cert", "-d", certPath]);
+    } catch {
+      // No trust settings left for it; deleting the certificate below is what matters.
+    }
+  }
+  await macSecurity(["delete-certificate", "-c", CA_NAME, MAC_KEYCHAIN]);
 }
 
 function isTrustedMac(certPath: string): boolean {
