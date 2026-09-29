@@ -2,6 +2,32 @@
 
 export const jsLogs = `  // ---------- logs ----------
 
+  var LEVELS = { error: 0, warn: 1, info: 2 };
+
+  function lineLevel(line) {
+    var m = /\\[(error|warn|info|debug|verbose|silly)\\]/i.exec(line);
+    return m ? m[1].toLowerCase() : "info";
+  }
+
+  // Renders lines as individual, level-coloured rows instead of one big <pre>
+  // blob, so long lines wrap nicely and errors/warnings stand out.
+  function renderLogLines(container, lines, emptyText) {
+    clear(container);
+    if (!lines.length) {
+      var empty = document.createElement("div");
+      empty.className = "log-line log-line-empty";
+      empty.textContent = emptyText;
+      container.appendChild(empty);
+      return;
+    }
+    lines.forEach(function (line) {
+      var row = document.createElement("div");
+      row.className = "log-line log-line-" + lineLevel(line);
+      row.textContent = line;
+      container.appendChild(row);
+    });
+  }
+
   logsRefreshBtn.addEventListener("click", loadLogs);
   logsClearBtn.addEventListener("click", function () {
     confirmDialog({ title: "Clear logs?", message: "This can't be undone.", confirmLabel: "Clear logs", danger: true }).then(function (ok) {
@@ -40,6 +66,10 @@ export const jsOverview = `  // ---------- overview ----------
   var ovLogs = document.getElementById("ov-logs");
   var sbSharesCountEl = document.getElementById("sb-shares-count");
   var sbHubDot = document.getElementById("sb-hub-dot");
+
+  // Plays once on load; the tiles themselves are static, so later polls just
+  // update their text and don't need to re-animate.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-view="overview"] .tile'), function (el, i) { animateIn(el, i); });
 
   function isShared(row) {
     var t = tunnelInfo(row);
@@ -118,13 +148,15 @@ export const jsOverview = `  // ---------- overview ----------
       var au = a.probe && a.probe.up ? 1 : 0, bu = b.probe && b.probe.up ? 1 : 0;
       return au - bu || a.host.localeCompare(b.host);
     });
-    sorted.slice(0, 8).forEach(function (h) {
+    sorted.slice(0, 6).forEach(function (h, i) {
       var p = h.probe || {};
       var side = p.up ? ((p.status || "") + (p.ms !== undefined ? " · " + p.ms + "ms" : "")) : (p.error || "down");
       var sub = h.remote ? "via " + h.remote.name : h.target;
-      ovHostList.appendChild(ovRow(h.host, sub, side, p.up ? "up" : "down", "#/hosts"));
+      var row = ovRow(h.host, sub, side, p.up ? "up" : "down", "#/hosts");
+      ovHostList.appendChild(row);
+      animateIn(row, i);
     });
-    if (sorted.length > 8) {
+    if (sorted.length > 6) {
       var more = document.createElement("a");
       more.className = "ov-more";
       more.href = "#/hosts";
@@ -135,18 +167,21 @@ export const jsOverview = `  // ---------- overview ----------
     clear(ovChecks);
     if (lastStatus) {
       var sys = lastStatus.system, proxy = lastStatus.proxy;
-      ovChecks.appendChild(ovRow("Running", "pid " + proxy.pid + " · uptime " + fmtUptime(lastStatus.uptimeSec), "http :" + proxy.httpPort + " · https :" + proxy.httpsPort, "up"));
-      ovChecks.appendChild(ovRow("HTTPS certificates", sys.caTrusted === true ? "local CA is trusted" : "browsers will warn until the CA is trusted", sys.caTrusted === true ? "Trusted" : "Not trusted", sys.caTrusted === true ? "up" : "warn", "#/settings"));
-      ovChecks.appendChild(ovRow("Start at boot", sys.startup.method ? "via " + sys.startup.method : "", sys.startup.enabled ? "Enabled" : "Disabled", sys.startup.enabled ? "up" : "", "#/settings"));
+      var checkRows = [
+        ovRow("Running", "pid " + proxy.pid + " · uptime " + fmtUptime(lastStatus.uptimeSec), "http :" + proxy.httpPort + " · https :" + proxy.httpsPort, "up"),
+        ovRow("HTTPS certificates", sys.caTrusted === true ? "local CA is trusted" : "browsers will warn until the CA is trusted", sys.caTrusted === true ? "Trusted" : "Trust CA", sys.caTrusted === true ? "up" : "warn", "#/settings/security"),
+        ovRow("Start at boot", sys.startup.method ? "via " + sys.startup.method : "", sys.startup.enabled ? "Enabled" : "Enable", sys.startup.enabled ? "up" : "", "#/settings/general")
+      ];
       var cf = sys.cloudflared || {};
-      ovChecks.appendChild(ovRow("cloudflared", cf.installed ? (cf.version || cf.path || "") : "needed for public sharing and remote access", cf.installed ? "Installed" : "Missing", cf.installed ? "up" : "warn", "#/sharing"));
+      checkRows.push(ovRow("cloudflared", cf.installed ? (cf.version || cf.path || "") : "needed for public sharing and remote access", cf.installed ? "Installed" : "Install", cf.installed ? "up" : "warn", "#/sharing"));
+      checkRows.forEach(function (row, i) { ovChecks.appendChild(row); animateIn(row, i); });
     }
   }
 
   function loadOverviewLogs() {
-    return fetch("/api/logs?lines=12").then(parseJsonOrThrow).then(function (data) {
+    return fetch("/api/logs?lines=8").then(parseJsonOrThrow).then(function (data) {
       var lines = (data && data.lines) || [];
-      ovLogs.textContent = lines.length ? lines.join("\\n") : "No log lines yet.";
+      renderLogLines(ovLogs, lines, "No log lines yet.");
       ovLogs.scrollTop = ovLogs.scrollHeight;
     }).catch(function () {});
   }
@@ -159,20 +194,15 @@ export const jsLogsPage = `  // ---------- logs page ----------
   var logsLevel = document.getElementById("logs-level");
   var logsLines = document.getElementById("logs-lines");
   var logsAuto = document.getElementById("logs-auto");
+  var logsCopy = document.getElementById("logs-copy");
   var logsDownload = document.getElementById("logs-download");
   var logsMeta = document.getElementById("logs-meta");
   var lastLogLines = [];
-  var LEVELS = { error: 0, warn: 1, info: 2 };
 
-  function lineLevel(line) {
-    var m = /\\[(error|warn|info|debug|verbose|silly)\\]/i.exec(line);
-    return m ? m[1].toLowerCase() : "info";
-  }
-
-  function renderLogs() {
+  function filteredLogLines() {
     var q = (logsFilter.value || "").trim().toLowerCase();
     var lvl = logsLevel.value;
-    var shown = lastLogLines.filter(function (line) {
+    return lastLogLines.filter(function (line) {
       if (q && line.toLowerCase().indexOf(q) === -1) return false;
       if (lvl) {
         var l = LEVELS[lineLevel(line)];
@@ -180,8 +210,12 @@ export const jsLogsPage = `  // ---------- logs page ----------
       }
       return true;
     });
+  }
+
+  function renderLogs() {
+    var shown = filteredLogLines();
     var atBottom = logsBox.scrollHeight - logsBox.scrollTop - logsBox.clientHeight < 40;
-    logsBox.textContent = shown.length ? shown.join("\\n") : (lastLogLines.length ? "No lines match." : "No log lines yet.");
+    renderLogLines(logsBox, shown, lastLogLines.length ? "No lines match." : "No log lines yet.");
     if (atBottom) logsBox.scrollTop = logsBox.scrollHeight;
     logsMeta.textContent = (shown.length === lastLogLines.length ? lastLogLines.length + " lines" : shown.length + " of " + lastLogLines.length + " lines") + " · updated " + new Date().toLocaleTimeString();
   }
@@ -196,6 +230,7 @@ export const jsLogsPage = `  // ---------- logs page ----------
   logsFilter.addEventListener("input", renderLogs);
   logsLevel.addEventListener("change", renderLogs);
   logsLines.addEventListener("change", loadLogs);
+  logsCopy.addEventListener("click", function () { copyText(filteredLogLines().join("\\n"), logsCopy); });
   logsDownload.addEventListener("click", function () {
     var blob = new Blob([lastLogLines.join("\\n") + "\\n"], { type: "text/plain" });
     var a = document.createElement("a");
@@ -209,6 +244,8 @@ export const jsLogsPage = `  // ---------- logs page ----------
 `;
 
 export const jsSettings = `  // ---------- settings page ----------
+
+  initTabs(document.getElementById("settings-tabs"));
 
   var portsForm = document.getElementById("ports-form");
   var httpPortInput = document.getElementById("set-http-port");
@@ -438,9 +475,9 @@ export const overviewView = `  <section class="view" data-view="overview" aria-l
       <a class="tile" href="#/hosts"><span class="label">Hosts</span><span id="ov-hosts" class="tile-big">—</span><span id="ov-hosts-sub" class="tile-sub"></span></a>
       <a class="tile" href="#/hosts"><span class="label">Down</span><span id="ov-down" class="tile-big">—</span><span class="tile-sub">targets not answering</span></a>
       <a class="tile" href="#/hosts"><span class="label">Requests</span><span id="ov-hits" class="tile-big">—</span><span id="ov-hits-sub" class="tile-sub">since the proxy started</span></a>
-      <a class="tile" href="#/sharing"><span class="label">Public shares</span><span id="ov-shares" class="tile-big">—</span><span id="ov-shares-sub" class="tile-sub"></span></a>
+      <a class="tile" href="#/hosts/shared"><span class="label">Public shares</span><span id="ov-shares" class="tile-big">—</span><span id="ov-shares-sub" class="tile-sub"></span></a>
       <a class="tile" href="#/remote"><span class="label">Remote access</span><span id="ov-hub" class="tile-big tile-word">—</span><span id="ov-hub-sub" class="tile-sub"></span></a>
-      <a class="tile" href="#/machines"><span class="label">Connected machines</span><span id="ov-remotes" class="tile-big">—</span><span id="ov-remotes-sub" class="tile-sub"></span></a>
+      <a class="tile" href="#/remote/machines"><span class="label">Connected machines</span><span id="ov-remotes" class="tile-big">—</span><span id="ov-remotes-sub" class="tile-sub"></span></a>
     </div>
     <div class="grid-2">
       <section class="card" aria-label="Host health">
@@ -468,7 +505,7 @@ export const overviewView = `  <section class="view" data-view="overview" aria-l
         <div class="card-title-wrap"><h3 class="card-title">Recent activity</h3></div>
         <div class="card-tools"><a class="btn btn-sm" href="#/logs">All logs</a></div>
       </div>
-      <pre id="ov-logs" class="logs-box logs-short" aria-live="off"></pre>
+      <div id="ov-logs" class="logs-box logs-short" aria-live="off"></div>
     </section>
   </section>
 
@@ -494,15 +531,16 @@ export const logsView = `  <section class="view" data-view="logs" aria-label="Lo
             <option value="500">Last 500</option>
             <option value="1000">Last 1000</option>
           </select>
-          <label class="check-inline"><input type="checkbox" id="logs-auto" checked> Live</label>
+          <label class="check-inline"><input type="checkbox" id="logs-auto" checked> Follow</label>
         </div>
         <div class="card-tools">
           <button type="button" id="logs-refresh" class="btn btn-sm">Refresh</button>
+          <button type="button" id="logs-copy" class="btn btn-sm">Copy</button>
           <button type="button" id="logs-download" class="btn btn-sm">Download</button>
           <button type="button" id="logs-clear" class="btn btn-sm btn-danger">Clear</button>
         </div>
       </div>
-      <pre id="logs-box" class="logs-box logs-full" aria-live="off"></pre>
+      <div id="logs-box" class="logs-box logs-full" aria-live="off"></div>
       <div id="logs-meta" class="logs-meta dim"></div>
     </section>
   </section>
@@ -514,30 +552,138 @@ export const settingsView = `  <section class="view" data-view="settings" aria-l
       <h2 class="page-title">Settings</h2>
       <p class="page-sub">Proxy, security and dashboard preferences.</p>
     </div>
-    <div class="layout">
-      <div class="col-primary">
-        <section id="proxy-settings-card" class="card" aria-label="Proxy settings">
-          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Proxy</h3></div></div>
-          <form id="ports-form" class="card-body" novalidate>
-            <div class="form-row-2">
-              <div class="field"><label for="set-http-port">HTTP port</label><input type="number" id="set-http-port" class="input" min="1" max="65535" required></div>
-              <div class="field"><label for="set-https-port">HTTPS port</label><input type="number" id="set-https-port" class="input" min="1" max="65535" required></div>
-            </div>
-            <div id="ports-note" class="tile-sub"></div>
-            <div id="ports-error" class="field-error" role="alert" hidden></div>
-            <div class="form-actions">
-              <button type="submit" id="ports-save" class="btn btn-sm btn-primary">Save ports</button>
-              <button type="button" id="restart-proxy-btn" class="btn btn-sm">Restart proxy</button>
-            </div>
-            <div id="restart-note" class="hub-warn" hidden>Saved. Restart the proxy to use the new ports.</div>
-          </form>
-          <div class="stat-list">
-            <div class="stat-row"><div class="stat-main"><div class="label">Listening on</div><div id="set-bind" class="tile-value mono">—</div><div id="set-bind-note" class="tile-sub"></div></div></div>
-            <div class="stat-row"><div class="stat-main"><div class="label">State directory</div><div id="set-home" class="tile-value mono">—</div></div><div class="stat-side"><button type="button" id="set-home-copy" class="copy-btn">Copy</button></div></div>
-            <div class="stat-row"><div class="stat-main"><div class="label">Log level</div><div id="set-loglevel" class="tile-value mono">—</div><div class="tile-sub">Set LOCADOT_LOG_LEVEL before starting to change it.</div></div></div>
-          </div>
-        </section>
+    <div id="settings-tabs" class="tabs" role="tablist" data-tabs="settings" aria-label="Settings sections">
+      <button type="button" role="tab" data-tab="general">General</button>
+      <button type="button" role="tab" data-tab="security">Security</button>
+      <button type="button" role="tab" data-tab="preferences">Preferences</button>
+      <button type="button" role="tab" data-tab="developer">Developer</button>
+    </div>
+    <div class="tab-panels">
+      <div data-tab-panel="general">
+        <div class="layout">
+          <div class="col-primary">
+            <section id="proxy-settings-card" class="card" aria-label="Proxy settings">
+              <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Proxy</h3></div></div>
+              <form id="ports-form" class="card-body" novalidate>
+                <div class="form-row-2">
+                  <div class="field"><label for="set-http-port">HTTP port</label><input type="number" id="set-http-port" class="input" min="1" max="65535" required></div>
+                  <div class="field"><label for="set-https-port">HTTPS port</label><input type="number" id="set-https-port" class="input" min="1" max="65535" required></div>
+                </div>
+                <div id="ports-note" class="tile-sub"></div>
+                <div id="ports-error" class="field-error" role="alert" hidden></div>
+                <div class="form-actions">
+                  <button type="submit" id="ports-save" class="btn btn-sm btn-primary">Save ports</button>
+                  <button type="button" id="restart-proxy-btn" class="btn btn-sm">Restart proxy</button>
+                </div>
+                <div id="restart-note" class="hub-warn" hidden>Saved. Restart the proxy to use the new ports.</div>
+              </form>
+              <div class="stat-list">
+                <div class="stat-row"><div class="stat-main"><div class="label">Listening on</div><div id="set-bind" class="tile-value mono">—</div><div id="set-bind-note" class="tile-sub"></div></div></div>
+                <div class="stat-row"><div class="stat-main"><div class="label">State directory</div><div id="set-home" class="tile-value mono">—</div></div><div class="stat-side"><button type="button" id="set-home-copy" class="copy-btn">Copy</button></div></div>
+                <div class="stat-row"><div class="stat-main"><div class="label">Log level</div><div id="set-loglevel" class="tile-value mono">—</div><div class="tile-sub">Set LOCADOT_LOG_LEVEL before starting to change it.</div></div></div>
+              </div>
+            </section>
 
+            <section class="card danger-card" aria-label="Danger zone">
+              <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Danger zone</h3></div></div>
+              <div class="stat-list">
+                <div class="stat-row"><div class="stat-main"><div class="label">Clear logs</div><div class="tile-sub">Empty the log file.</div></div><div class="stat-side"><button type="button" id="danger-clear-logs" class="btn btn-sm btn-danger">Clear</button></div></div>
+                <div class="stat-row"><div class="stat-main"><div class="label">Stop proxy</div><div class="tile-sub">All hosts stop working until <code class="mono">locadot start</code>.</div></div><div class="stat-side"><button type="button" id="stop-proxy-btn" class="btn btn-sm btn-danger">Stop</button></div></div>
+              </div>
+            </section>
+          </div>
+          <aside class="col-secondary">
+            <section id="system-card" class="card" aria-label="System and access">
+              <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">System &amp; access</h3></div></div>
+              <div class="stat-list">
+                <div class="stat-row" hidden>
+                  <div class="stat-main">
+                    <div class="label">Proxy</div>
+                    <div id="tile-proxy-ports" class="tile-value mono">—</div>
+                    <div id="tile-proxy-bind" class="tile-sub mono"></div>
+                    <div id="tile-proxy-statedir" class="tile-sub mono"></div>
+                    <div id="tile-proxy-platform" class="tile-sub"></div>
+                  </div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-main">
+                    <div class="label">Access</div>
+                    <div id="tile-root-value" class="tile-value">—</div>
+                    <div id="tile-ports-value" class="tile-sub"></div>
+                    <div id="tile-ports-hint" class="tile-hint" hidden></div>
+                  </div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-main">
+                    <div class="label">Start at boot</div>
+                    <div id="tile-startup-value" class="tile-value">—</div>
+                    <div id="tile-startup-method" class="tile-sub"></div>
+                  </div>
+                  <div class="stat-side">
+                    <button type="button" id="startup-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle start at boot">
+                      <span class="switch-knob"></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+
+      <div data-tab-panel="security">
+        <div class="layout">
+          <div class="col-primary">
+            <section class="card" aria-label="HTTPS certificate">
+              <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">HTTPS certificate</h3></div></div>
+              <div class="stat-list">
+                <div class="stat-row">
+                  <div class="stat-main">
+                    <div class="label">CA trust</div>
+                    <div id="tile-ca-value" class="tile-value">—</div>
+                    <div class="tile-sub">Trust the local CA so browsers stop warning on https hosts.</div>
+                  </div>
+                  <div class="stat-side">
+                    <button type="button" id="ca-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle local CA trust">
+                      <span class="switch-knob"></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="ui-auth-card" class="card" aria-label="Dashboard password">
+              <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Dashboard password</h3><span id="ui-auth-badge" class="badge">Off</span></div></div>
+              <form id="ui-auth-form" class="card-body token-body" novalidate>
+                <div id="ui-auth-note" class="tile-sub">Ask for a password before the dashboard opens. Only the dashboard is protected: your hosts and scripts using the API token work as before. Forgot it? Run <code class="mono">locadot ui:password</code> in a terminal.</div>
+                <div id="ui-auth-current-field" class="field" hidden><label for="ui-auth-current">Current password</label><input type="password" id="ui-auth-current" class="input" autocomplete="current-password"></div>
+                <div class="form-row-2">
+                  <div class="field"><label for="ui-auth-new">New password</label><input type="password" id="ui-auth-new" class="input" autocomplete="new-password" minlength="8" placeholder="8+ characters"></div>
+                  <div class="field"><label for="ui-auth-repeat">Repeat it</label><input type="password" id="ui-auth-repeat" class="input" autocomplete="new-password"></div>
+                </div>
+                <div id="ui-auth-error" class="field-error" role="alert" hidden></div>
+                <div class="form-actions">
+                  <button type="submit" id="ui-auth-save" class="btn btn-sm btn-primary">Set password</button>
+                  <button type="button" id="ui-auth-remove" class="btn btn-sm btn-danger" hidden>Remove password</button>
+                </div>
+              </form>
+            </section>
+          </div>
+          <aside class="col-secondary">
+            <section class="card" aria-label="API token">
+              <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">API token</h3></div></div>
+              <div class="card-body token-body">
+                <div class="tile-sub">Scripts send it as <code class="mono">X-Locadot-Token</code>. It changes every time the proxy starts.</div>
+                <div class="token-row"><code id="token-value" class="mono token-value">••••••••••••••••</code>
+                  <button type="button" id="token-reveal" class="copy-btn">Show</button>
+                  <button type="button" id="token-copy" class="copy-btn">Copy</button></div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </div>
+
+      <div data-tab-panel="preferences">
         <section class="card" aria-label="Dashboard preferences">
           <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Dashboard</h3></div></div>
           <div class="stat-list">
@@ -569,111 +715,56 @@ export const settingsView = `  <section class="view" data-view="settings" aria-l
               <div class="stat-side"><button type="button" id="pref-cors" class="switch" role="switch" aria-checked="false" aria-label="Bypass CORS by default"><span class="switch-knob"></span></button></div></div>
           </div>
         </section>
-
-      <section id="cli-card" class="card" aria-label="Use from CLI or scripts">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">CLI &amp; API</h3></div>
-        </div>
-        <div class="card-body cli-list">
-          <div class="cli-item">
-            <div class="cli-item-head"><span class="label">Add a host</span><button type="button" id="cli-add-copy" class="copy-btn">Copy</button></div>
-            <pre id="cli-add-pre" class="code-block mono">locadot add --host app.localhost --port 3000</pre>
-          </div>
-          <div class="cli-item">
-            <div class="cli-item-head"><span class="label">HTTP API (scripts, AI agents)</span><button type="button" id="cli-curl-copy" class="copy-btn">Copy</button></div>
-            <pre id="cli-curl-pre" class="code-block mono">curl -X POST http://localhost/api/hosts -H "X-Locadot-Token: $(locadot token)" -H 'Content-Type: application/json' -d '{"host":"app.localhost","target":"3000"}'</pre>
-          </div>
-          <div class="cli-item">
-            <div class="cli-item-head"><span class="label">Share publicly</span><button type="button" id="cli-tunnel-copy" class="copy-btn">Copy</button></div>
-            <pre id="cli-tunnel-pre" class="code-block mono">locadot tunnel --host app.localhost</pre>
-          </div>
-        </div>
-      </section>
       </div>
-      <aside class="col-secondary">
-      <section id="system-card" class="card" aria-label="System status">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">System &amp; security</h3></div>
-        </div>
-        <div class="stat-list">
-          <div class="stat-row" hidden>
-            <div class="stat-main">
-              <div class="label">Proxy</div>
-              <div id="tile-proxy-ports" class="tile-value mono">—</div>
-              <div id="tile-proxy-bind" class="tile-sub mono"></div>
-              <div id="tile-proxy-statedir" class="tile-sub mono"></div>
-              <div id="tile-proxy-platform" class="tile-sub"></div>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat-main">
-              <div class="label">Access</div>
-              <div id="tile-root-value" class="tile-value">—</div>
-              <div id="tile-ports-value" class="tile-sub"></div>
-              <div id="tile-ports-hint" class="tile-hint" hidden></div>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat-main">
-              <div class="label">CA trust</div>
-              <div id="tile-ca-value" class="tile-value">—</div>
-            </div>
-            <div class="stat-side">
-              <button type="button" id="ca-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle local CA trust">
-                <span class="switch-knob"></span>
-              </button>
-            </div>
-          </div>
-          <div class="stat-row">
-            <div class="stat-main">
-              <div class="label">Start at boot</div>
-              <div id="tile-startup-value" class="tile-value">—</div>
-              <div id="tile-startup-method" class="tile-sub"></div>
-            </div>
-            <div class="stat-side">
-              <button type="button" id="startup-toggle" class="switch" role="switch" aria-checked="false" aria-label="Toggle start at boot">
-                <span class="switch-knob"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
 
-        <section id="ui-auth-card" class="card" aria-label="Dashboard password">
-          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Dashboard password</h3><span id="ui-auth-badge" class="badge">Off</span></div></div>
-          <form id="ui-auth-form" class="card-body token-body" novalidate>
-            <div id="ui-auth-note" class="tile-sub">Ask for a password before the dashboard opens. Only the dashboard is protected: your hosts and scripts using the API token work as before. Forgot it? Run <code class="mono">locadot ui:password</code> in a terminal.</div>
-            <div id="ui-auth-current-field" class="field" hidden><label for="ui-auth-current">Current password</label><input type="password" id="ui-auth-current" class="input" autocomplete="current-password"></div>
-            <div class="form-row-2">
-              <div class="field"><label for="ui-auth-new">New password</label><input type="password" id="ui-auth-new" class="input" autocomplete="new-password" minlength="8" placeholder="8+ characters"></div>
-              <div class="field"><label for="ui-auth-repeat">Repeat it</label><input type="password" id="ui-auth-repeat" class="input" autocomplete="new-password"></div>
+      <div data-tab-panel="developer">
+        <section id="cli-card" class="card" aria-label="Use from CLI or scripts">
+          <div class="card-head">
+            <div class="card-title-wrap"><h3 class="card-title">CLI &amp; API</h3></div>
+          </div>
+          <div class="card-body cli-list">
+            <div class="cli-item">
+              <div class="cli-item-head"><span class="label">Add a host</span><button type="button" id="cli-add-copy" class="copy-btn">Copy</button></div>
+              <pre id="cli-add-pre" class="code-block mono">locadot add --host app.localhost --port 3000</pre>
             </div>
-            <div id="ui-auth-error" class="field-error" role="alert" hidden></div>
-            <div class="form-actions">
-              <button type="submit" id="ui-auth-save" class="btn btn-sm btn-primary">Set password</button>
-              <button type="button" id="ui-auth-remove" class="btn btn-sm btn-danger" hidden>Remove password</button>
+            <div class="cli-item">
+              <div class="cli-item-head"><span class="label">HTTP API (scripts, AI agents)</span><button type="button" id="cli-curl-copy" class="copy-btn">Copy</button></div>
+              <pre id="cli-curl-pre" class="code-block mono">curl -X POST http://localhost/api/hosts -H "X-Locadot-Token: $(locadot token)" -H 'Content-Type: application/json' -d '{"host":"app.localhost","target":"3000"}'</pre>
             </div>
-          </form>
-        </section>
-
-        <section class="card" aria-label="API token">
-          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">API token</h3></div></div>
-          <div class="card-body token-body">
-            <div class="tile-sub">Scripts send it as <code class="mono">X-Locadot-Token</code>. It changes every time the proxy starts.</div>
-            <div class="token-row"><code id="token-value" class="mono token-value">••••••••••••••••</code>
-              <button type="button" id="token-reveal" class="copy-btn">Show</button>
-              <button type="button" id="token-copy" class="copy-btn">Copy</button></div>
+            <div class="cli-item">
+              <div class="cli-item-head"><span class="label">Share publicly</span><button type="button" id="cli-tunnel-copy" class="copy-btn">Copy</button></div>
+              <pre id="cli-tunnel-pre" class="code-block mono">locadot tunnel --host app.localhost</pre>
+            </div>
           </div>
         </section>
-
-        <section class="card danger-card" aria-label="Danger zone">
-          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">Danger zone</h3></div></div>
-          <div class="stat-list">
-            <div class="stat-row"><div class="stat-main"><div class="label">Clear logs</div><div class="tile-sub">Empty the log file.</div></div><div class="stat-side"><button type="button" id="danger-clear-logs" class="btn btn-sm btn-danger">Clear</button></div></div>
-            <div class="stat-row"><div class="stat-main"><div class="label">Stop proxy</div><div class="tile-sub">All hosts stop working until <code class="mono">locadot start</code>.</div></div><div class="stat-side"><button type="button" id="stop-proxy-btn" class="btn btn-sm btn-danger">Stop</button></div></div>
-          </div>
-        </section>
-      </aside>
+      </div>
     </div>
   </section>
+`;
+
+/** Styles for these pages, appended after theme.ts. */
+export const css = `
+/* Keep card headers on one line on the overview page: short
+   title + a single action button shouldn't wrap onto its own row. */
+[data-view="overview"] .card-head { flex-wrap: nowrap; }
+[data-view="overview"] .card-title-wrap { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+[data-view="overview"] .card-title-wrap .card-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-view="overview"] .card-head .card-tools { flex: 0 0 auto; width: auto; }
+
+/* Level-coloured log lines (replaces one big <pre> blob). */
+.log-line { font-family: var(--mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
+.log-line + .log-line { margin-top: 1px; }
+.log-line-error { color: var(--down); }
+.log-line-warn { color: var(--warn); }
+.log-line-info { color: var(--fg-2); }
+.log-line-debug, .log-line-verbose, .log-line-silly { color: var(--muted); }
+.log-line-empty { color: var(--muted); }
+
+/* The logs toolbar stays visible while the log list scrolls underneath it. */
+#logs-panel .logs-head {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 3;
+  background: var(--surface);
+}
 `;

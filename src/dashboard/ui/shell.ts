@@ -120,6 +120,30 @@ export const jsHeader = `  // ---------- header + system tiles ----------
     cliCurlPre.textContent = curl;
   }
 
+  // ---------- status pill (details + quick actions) ----------
+
+  var statusBtn = document.getElementById("status-btn");
+  function stripPrefix(text, prefix) {
+    text = text || "";
+    return text.indexOf(prefix) === 0 ? text.slice(prefix.length) : text;
+  }
+  statusBtn.addEventListener("click", function () {
+    var items = [
+      { info: true, label: "Proxy", hint: isDown ? "offline" : "live" },
+      { info: true, label: "Version", hint: versionEl.textContent || "\u2014" },
+      { info: true, label: "Uptime", hint: stripPrefix(uptimeEl.textContent, "uptime ") || "\u2014" },
+      { info: true, label: "PID", hint: stripPrefix(pidEl.textContent, "pid ") || "\u2014" },
+      { info: true, label: "Last update", hint: stripPrefix(updatedEl.textContent, "Updated ") || "\u2014" },
+      "-",
+      { label: "Refresh now", icon: ICONS.refresh, onSelect: function () { refreshAll().then(tickViews); refreshHubAndRemotes(); } },
+      { label: "View logs", icon: ICONS.logs, onSelect: function () { location.hash = "#/logs"; } },
+      { label: "Settings", icon: ICONS.settings, onSelect: function () { location.hash = "#/settings"; } }
+    ];
+    var signOut = document.getElementById("sb-signout");
+    if (signOut && !signOut.hidden) items.push("-", { label: "Sign out", icon: ICONS.signOut, danger: true, onSelect: function () { signOut.click(); } });
+    openMenu(statusBtn, items, { label: "Proxy status", title: "Proxy status", align: "end" });
+  });
+
 `;
 
 export const jsDialogs = `  // ---------- confirm / prompt dialogs ----------
@@ -258,18 +282,23 @@ export const jsPrefs = `  // ---------- preferences (per browser) ----------
 `;
 
 export const jsRouting = `  // ---------- sidebar + routing ----------
+  // Routes are #/<view> or #/<view>/<tab>. A view with a tab group registered via
+  // initTabs() (core) gets the tab selected from the second segment; an unknown or
+  // missing tab falls back to the group's first tab. Legacy routes redirect.
 
   var VIEWS = ["overview", "hosts", "sharing", "remote", "machines", "logs", "settings"];
-  var TITLES = { overview: "Overview", hosts: "Hosts", sharing: "Public sharing", remote: "Remote access", machines: "Connected machines", logs: "Logs", settings: "Settings" };
+  var ROUTE_REDIRECTS = { sharing: ["hosts", "shared"], machines: ["remote", "machines"] };
+  var TITLES = { overview: "Overview", hosts: "Hosts", sharing: "Hosts", remote: "Remote", machines: "Remote", logs: "Logs", settings: "Settings" };
   var rootEl = document.documentElement;
   var sidebarEl = document.getElementById("sidebar");
   var collapseBtn = document.getElementById("sb-collapse");
   var menuBtn = document.getElementById("sb-menu");
   var backdropEl = document.getElementById("sb-backdrop");
+  var tbTitleEl = document.getElementById("tb-title");
   var navLinks = Array.prototype.slice.call(sidebarEl.querySelectorAll("a.sb-link"));
   var viewEls = {};
   Array.prototype.forEach.call(document.querySelectorAll("section.view"), function (el) { viewEls[el.getAttribute("data-view")] = el; });
-  var drawerMq = window.matchMedia("(max-width: 899px)");
+  var drawerMq = window.matchMedia("(max-width: 640px)");
   var currentView = null;
 
   function isCollapsed() { return rootEl.getAttribute("data-sidebar") === "collapsed"; }
@@ -277,13 +306,17 @@ export const jsRouting = `  // ---------- sidebar + routing ----------
     if (collapsed) rootEl.setAttribute("data-sidebar", "collapsed");
     else rootEl.removeAttribute("data-sidebar");
     if (persist) { try { localStorage.setItem("locadot.sidebar", collapsed ? "collapsed" : "expanded"); } catch (e) {} }
+    var label = collapsed ? "Expand sidebar" : "Collapse sidebar";
     collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-    collapseBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+    collapseBtn.setAttribute("aria-label", label);
+    collapseBtn.setAttribute("data-tip", label);
     collapseBtn.querySelector(".sb-label").textContent = collapsed ? "Expand" : "Collapse";
     setSwitch(prefSidebar, collapsed);
+    hideTooltip();
   }
   collapseBtn.addEventListener("click", function () { setCollapsed(!isCollapsed(), true); });
 
+  // Legacy slide-in drawer; the menu button is hidden now that phones get a bottom tab bar.
   function setDrawer(open) {
     document.body.classList.toggle("sb-open", open);
     backdropEl.hidden = !open;
@@ -298,77 +331,123 @@ export const jsRouting = `  // ---------- sidebar + routing ----------
   });
   if (drawerMq.addEventListener) drawerMq.addEventListener("change", function () { if (!drawerMq.matches) setDrawer(false); });
 
-  function viewFromHash() {
-    var name = (location.hash || "").replace(/^#\\/?/, "");
-    return VIEWS.indexOf(name) !== -1 ? name : null;
+  // Sidebar tooltips only make sense on the icon rail.
+  tooltipGuards.push(function (el) {
+    if (!sidebarEl.contains(el)) return true;
+    return isCollapsed() && !drawerMq.matches;
+  });
+
+  function resolveRoute(view, tab) {
+    var redirected = false;
+    if (ROUTE_REDIRECTS[view]) { tab = tab || ROUTE_REDIRECTS[view][1]; view = ROUTE_REDIRECTS[view][0]; redirected = true; }
+    if (VIEWS.indexOf(view) === -1) return null;
+    return { view: view, tab: tab || null, redirected: redirected };
   }
 
-  function showView(name) {
-    if (VIEWS.indexOf(name) === -1) name = "overview";
+  function routeFromHash() {
+    var parts = (location.hash || "").replace(/^#\\/?/, "").split("/");
+    return resolveRoute(decodeURIComponent(parts[0] || ""), parts[1] ? decodeURIComponent(parts[1]) : null);
+  }
+
+  function viewFromHash() {
+    var r = routeFromHash();
+    return r ? r.view : null;
+  }
+
+  function showView(name, tab) {
+    var r = resolveRoute(name, tab) || { view: "overview", tab: null };
+    name = r.view;
+    tab = r.tab;
     var changed = currentView !== name;
     currentView = name;
+    closeMenu(false);
     VIEWS.forEach(function (v) { if (viewEls[v]) viewEls[v].hidden = v !== name; });
     navLinks.forEach(function (a) {
       if (a.getAttribute("data-view") === name) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
     document.title = TITLES[name] + " · locadot";
+    if (tbTitleEl) tbTitleEl.textContent = TITLES[name];
     try { localStorage.setItem("locadot.lastView", name); } catch (e) {}
     if (drawerMq.matches) setDrawer(false);
+    var group = tabGroups[name];
+    if (group) {
+      var picked = group.select(tab, { silent: changed });
+      if (tab && picked !== tab) replaceHash(name, picked);
+    }
+    if (r.redirected) replaceHash(name, group ? group.current() : tab);
     if (changed) {
       window.scrollTo(0, 0);
       onViewEnter(name);
+      if (group && group.opts.onChange) group.opts.onChange(group.current(), null);
     }
+  }
+
+  function replaceHash(view, tab) {
+    var h = "#/" + view + (tab ? "/" + encodeURIComponent(tab) : "");
+    if (location.hash !== h) { try { history.replaceState(null, "", h); } catch (e) {} }
+  }
+
+  function showRoute() {
+    var r = routeFromHash();
+    if (r && r.redirected) replaceHash(r.view, r.tab);
+    if (r) showView(r.view, r.tab);
+    else showView("overview");
   }
 
   function onViewEnter(name) {
     if (name === "logs") loadLogs();
     if (name === "overview") { renderOverview(); loadOverviewLogs(); }
-    if (name === "sharing") renderShareList();
+    if (name === "hosts" || name === "sharing") renderShareList();
     if (name === "settings") loadSettings();
     if (name === "remote" || name === "machines") refreshHubAndRemotes();
   }
 
-  window.addEventListener("hashchange", function () { showView(viewFromHash() || "overview"); });
+  window.addEventListener("hashchange", showRoute);
 
 `;
 
 export const shellTop = `<body class="boot">
-<nav id="sidebar" class="sidebar" aria-label="Sections">
+<nav id="sidebar" class="sidebar" aria-label="Main">
   <div class="sb-head">
-    <span class="logo" aria-hidden="true"></span>
-    <h1 class="wordmark sb-label">locadot</h1>
-    <span id="version" class="muted mono sb-label"></span>
+    <a class="sb-brand" href="#/overview" aria-label="locadot overview"><span class="logo" aria-hidden="true"></span><h1 class="wordmark sb-label">locadot</h1></a>
+    <span id="version" class="sb-version sb-label"></span>
   </div>
   <div class="sb-links">
-    <a class="sb-link" href="#/overview" data-view="overview" title="Overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span class="sb-label">Overview</span></a>
-    <a class="sb-link" href="#/hosts" data-view="hosts" title="Hosts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg><span class="sb-label">Hosts</span><span id="sb-hosts-count" class="sb-count sb-label" hidden></span></a>
-    <a class="sb-link" href="#/sharing" data-view="sharing" title="Public sharing"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="sb-label">Public sharing</span><span id="sb-shares-count" class="sb-count sb-label" hidden></span></a>
-    <div class="sb-section sb-label">Remote</div>
-    <a class="sb-link" href="#/remote" data-view="remote" title="Remote access"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/></svg><span class="sb-label">Remote access</span><span id="sb-hub-dot" class="dot sb-dot" hidden></span></a>
-    <a class="sb-link" href="#/machines" data-view="machines" title="Connected machines"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="9" height="7" rx="1.5"/><rect x="13" y="13" width="9" height="7" rx="1.5"/><path d="M6.5 11v4.5h6.5M17.5 13V8.5H11"/></svg><span class="sb-label">Connected machines</span><span id="sb-remotes-count" class="sb-count sb-label" hidden></span></a>
-    <div class="sb-section sb-label">System</div>
-    <a class="sb-link" href="#/logs" data-view="logs" title="Logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sb-label">Logs</span></a>
-    <a class="sb-link" href="#/settings" data-view="settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="sb-label">Settings</span></a>
+    <div class="sb-group">
+      <a class="sb-link" href="#/overview" data-view="overview" aria-label="Overview" data-tip="Overview" data-tip-pos="right"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span class="sb-label">Overview</span></a>
+      <a class="sb-link" href="#/hosts" data-view="hosts" aria-label="Hosts" data-tip="Hosts" data-tip-pos="right"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg><span class="sb-label">Hosts</span><span class="sb-badges"><span id="sb-shares-count" class="sb-count sb-count-accent" title="Shared publicly" hidden></span><span id="sb-hosts-count" class="sb-count" hidden></span></span></a>
+      <a class="sb-link" href="#/remote" data-view="remote" aria-label="Remote" data-tip="Remote" data-tip-pos="right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/></svg><span class="sb-label">Remote</span><span class="sb-badges"><span id="sb-remotes-count" class="sb-count" title="Connected machines" hidden></span><span id="sb-hub-dot" class="dot sb-dot" hidden></span></span></a>
+    </div>
+    <div class="sb-section sb-label" role="presentation">System</div>
+    <div class="sb-group">
+      <a class="sb-link" href="#/logs" data-view="logs" aria-label="Logs" data-tip="Logs" data-tip-pos="right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="sb-label">Logs</span></a>
+      <a class="sb-link" href="#/settings" data-view="settings" aria-label="Settings" data-tip="Settings" data-tip-pos="right"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="sb-label">Settings</span></a>
+    </div>
   </div>
-  <button type="button" id="sb-signout" class="sb-link sb-collapse sb-signout" title="Sign out" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="sb-label">Sign out</span></button>
-  <button type="button" id="sb-collapse" class="sb-link sb-collapse" aria-controls="sidebar" aria-expanded="true" title="Collapse sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg><span class="sb-label">Collapse</span></button>
+  <div class="sb-foot">
+    <button type="button" id="sb-signout" class="sb-link sb-signout" aria-label="Sign out" data-tip="Sign out" data-tip-pos="right" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="sb-label">Sign out</span></button>
+    <button type="button" id="sb-collapse" class="sb-link sb-collapse" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse sidebar" data-tip="Expand sidebar" data-tip-pos="right"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 10l-2 2 2 2"/></svg><span class="sb-label">Collapse</span></button>
+  </div>
 </nav>
 <div id="sb-backdrop" class="sb-backdrop" hidden></div>
 <div class="shell">
 <header>
   <div class="topbar">
     <div class="brand">
-      <button type="button" id="sb-menu" class="btn sb-menu" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-      <span class="logo brand-mobile" aria-hidden="true"></span>
+      <button type="button" id="sb-menu" class="btn btn-ghost btn-icon sb-menu" aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <a class="brand-mobile logo" href="#/overview" aria-label="locadot overview"></a>
       <span class="wordmark brand-mobile">locadot</span>
+      <div class="crumbs"><span class="crumb-root">locadot</span><span class="crumb-sep" aria-hidden="true">/</span><span id="tb-title" class="crumb-current">Overview</span></div>
     </div>
     <div class="header-meta">
-      <span class="chip chip-live"><span id="live-dot" class="live-dot"></span> <span id="live-label" class="live-label">live</span></span>
-      <span id="uptime" class="chip"></span>
-      <span id="pid" class="chip"></span>
       <span id="updated"></span>
-      <button type="button" id="theme-toggle" class="btn theme-toggle" data-mode="system" title="Theme: system" aria-label="Theme: system (click to change)">
+      <button type="button" id="status-btn" class="status-pill" aria-haspopup="menu" aria-expanded="false" aria-label="Proxy status and details">
+        <span id="live-dot" class="live-dot"></span><span id="live-label" class="live-label">live</span>
+        <span class="status-extra"><span class="status-sep" aria-hidden="true"></span><span id="uptime"></span><span class="status-sep status-pid-sep" aria-hidden="true"></span><span id="pid"></span></span>
+        <svg class="status-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <button type="button" id="theme-toggle" class="btn btn-ghost theme-toggle" data-mode="system" title="Theme: system" aria-label="Theme: system (click to change)">
         <svg class="i-system" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
         <svg class="i-light" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         <svg class="i-dark" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>

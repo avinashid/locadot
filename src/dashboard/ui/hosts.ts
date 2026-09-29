@@ -1,6 +1,6 @@
-/** Hosts and public sharing: the add form, the hosts table, the share, access and password dialogs. */
+/** Hosts: one page (All / Shared tabs), the add-host dialog, the hosts table, and the share/access/password dialogs. */
 
-export const jsAddHost = `  // ---------- add host form ----------
+export const jsAddHost = `  // ---------- add host dialog ----------
 
   function showAddError(message, hint) {
     clear(addErrorEl);
@@ -26,6 +26,30 @@ export const jsAddHost = `  // ---------- add host form ----------
     el.classList.toggle("invalid", !!invalid);
     el.setAttribute("aria-invalid", invalid ? "true" : "false");
   }
+
+  var addHostDialogEl = document.getElementById("add-host-dialog");
+  var addHostCloseBtn = document.getElementById("add-host-close");
+  var addHostCancelBtn = document.getElementById("add-host-cancel");
+  var addHostOpenBtns = [document.getElementById("add-host-btn"), document.getElementById("empty-add-host-btn")].filter(function (b) { return !!b; });
+
+  function openAddHostDialog() {
+    hideAddError();
+    markFieldInvalid(addHostInput, false);
+    markFieldInvalid(addTargetInput, false);
+    addHostDialogEl.showModal();
+    setTimeout(function () { addHostInput.focus(); }, 0);
+  }
+
+  function closeAddHostDialog() {
+    addHostDialogEl.close();
+  }
+
+  addHostOpenBtns.forEach(function (b) { b.addEventListener("click", openAddHostDialog); });
+  addHostCloseBtn.addEventListener("click", closeAddHostDialog);
+  addHostCancelBtn.addEventListener("click", closeAddHostDialog);
+  addHostDialogEl.addEventListener("click", function (e) {
+    if (e.target === addHostDialogEl) closeAddHostDialog();
+  });
 
   addHostInput.addEventListener("input", function () {
     if (addHostInput.value.trim()) markFieldInvalid(addHostInput, false);
@@ -66,6 +90,8 @@ export const jsAddHost = `  // ---------- add host form ----------
       .then(function () {
         addForm.reset();
         applyHostDefaults();
+        pendingHighlightHost = hostVal;
+        closeAddHostDialog();
         showToast("Added " + hostVal, "success");
         return loadHosts();
       })
@@ -153,7 +179,7 @@ export const jsHostsTable = `  // ---------- hosts table ----------
         loginLink.href = t.loginUrl;
         loginLink.target = "_blank";
         loginLink.rel = "noopener noreferrer";
-        loginLink.textContent = "Log in to Cloudflare \u2197";
+        loginLink.textContent = "Log in to Cloudflare ↗";
         loginText.appendChild(loginLink);
       }
       statusWrap.appendChild(loginText);
@@ -176,41 +202,128 @@ export const jsHostsTable = `  // ---------- hosts table ----------
     return td;
   }
 
-  function shareButton(row) {
+  function optionsCell(row) {
+    var td = document.createElement("td");
+    var flags = [];
+    if (row.insecure) flags.push(["insecure", "Upstream TLS certificate is not verified", "badge-warn"]);
+    if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host", "badge-cors"]);
+    if (row.allow && row.allow.length) flags.push(["internal access", "Internal access: " + row.allow.join(", "), "badge-accent"]);
+    if (row.protect) flags.push(["password", "Password protected on: " + protectScopeNames(row.protect.scopes), "badge-accent"]);
+    if (flags.length) {
+      td.className = "badges";
+      flags.forEach(function (flag) {
+        var badge = document.createElement("span");
+        badge.className = "badge " + flag[2];
+        badge.textContent = flag[0];
+        badge.title = flag[1];
+        td.appendChild(badge);
+      });
+    } else {
+      td.className = "dim";
+      td.textContent = "\\u2014";
+    }
+    return td;
+  }
+
+  function copyValue(text, label) {
+    function ok() { showToast(label || "Copied", "success"); }
+    function fail() { showToast("Couldn't copy", "error"); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, fail);
+      return;
+    }
+    try {
+      var ta = document.createElement("textarea");
+      ta.className = "clip-helper";
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      ok();
+    } catch (e) {
+      fail();
+    }
+  }
+
+  function stopSharing(row) {
+    confirmDialog({ title: "Stop sharing " + row.host + "?", message: "The public URL for " + row.host + " stops working.", confirmLabel: "Stop sharing", danger: true }).then(function (ok) {
+      if (!ok) return;
+      apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ tunnel: false }) })
+        .then(function () {
+          showToast("Stopping tunnel for " + row.host, "success");
+          return loadHosts();
+        })
+        .catch(function (err) {
+          apiError(err, "Couldn't change sharing for " + row.host);
+        });
+    });
+  }
+
+  function removeHost(row) {
+    (prefs.confirm ? confirmDialog({ title: "Remove host " + row.host + "?", message: "This can't be undone.", confirmLabel: "Remove host", danger: true }) : Promise.resolve(true)).then(function (ok) {
+      if (!ok) return;
+      apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "DELETE" })
+        .then(function () {
+          showToast("Removed " + row.host, "success");
+          return loadHosts();
+        })
+        .catch(function (err) {
+          apiError(err, "Couldn't remove " + row.host);
+        });
+    });
+  }
+
+  function primaryShareAction(row) {
+    var t = tunnelInfo(row);
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-sm";
+    if (t.status === "up" && t.url) {
+      btn.classList.add("btn-secondary");
+      btn.textContent = "Copy link";
+      btn.title = "Copy the public URL";
+      btn.addEventListener("click", function () { copyText(t.url, btn); });
+    } else if (t.enabled || t.status === "starting" || t.status === "login") {
+      btn.classList.add("btn-secondary");
+      btn.textContent = t.status === "login" ? "Sign in\\u2026" : "Sharing\\u2026";
+      btn.title = "View sharing progress";
+      btn.addEventListener("click", function () { openShareDialog(row); });
+    } else if (t.status === "error") {
+      btn.classList.add("btn-primary");
+      btn.textContent = "Retry";
+      btn.title = "Try sharing again";
+      btn.addEventListener("click", function () { openShareDialog(row); });
+    } else {
+      btn.classList.add("btn-primary");
+      btn.textContent = "Share";
+      btn.title = "Share on a public URL";
+      if (!cloudflaredInstalled) {
+        btn.disabled = true;
+        btn.title = "Install cloudflared first";
+      }
+      btn.addEventListener("click", function () { openShareDialog(row); });
+    }
+    return btn;
+  }
+
+  function hostMenuItems(row) {
     var t = tunnelInfo(row);
     var isOn = t.enabled || t.status === "up" || t.status === "starting" || t.status === "login";
-    var isRetry = !isOn && t.status === "error";
-    var shareBtn = document.createElement("button");
-    shareBtn.type = "button";
-    shareBtn.className = "btn btn-sm" + (isOn ? " btn-danger" : "");
-    shareBtn.textContent = isOn ? "Unshare" : (isRetry ? "Retry" : "Share");
-    shareBtn.title = isOn ? "Stop the public tunnel" : "Share on a public URL";
-    if (!cloudflaredInstalled && !isOn) {
-      shareBtn.disabled = true;
-      shareBtn.title = "Install cloudflared first";
+    var items = [];
+    items.push({ label: "Edit", icon: ICONS.edit, onSelect: function () { enterEditMode(row); } });
+    if (isOn) {
+      items.push({ label: "Share settings\\u2026", icon: ICONS.settings, onSelect: function () { openShareDialog(row); } });
+      items.push({ label: "Stop sharing", icon: ICONS.stop, danger: true, onSelect: function () { stopSharing(row); } });
+    } else {
+      items.push({ label: "Share\\u2026", icon: ICONS.globe, disabled: !cloudflaredInstalled, hint: cloudflaredInstalled ? undefined : "needs cloudflared", onSelect: function () { openShareDialog(row); } });
     }
-    shareBtn.addEventListener("click", function () {
-      if (isOn) {
-        confirmDialog({ title: "Stop sharing " + row.host + "?", message: "The public URL for " + row.host + " stops working.", confirmLabel: "Stop sharing", danger: true }).then(function (ok) {
-          if (!ok) return;
-          shareBtn.disabled = true;
-          shareBtn.classList.add("busy");
-          apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ tunnel: false }) })
-            .then(function () {
-              showToast("Stopping tunnel for " + row.host, "success");
-              return loadHosts();
-            })
-            .catch(function (err) {
-              apiError(err, "Couldn't change sharing for " + row.host);
-              shareBtn.disabled = false;
-              shareBtn.classList.remove("busy");
-            });
-        });
-      } else {
-        openShareDialog(row);
-      }
-    });
-    return shareBtn;
+    items.push({ label: "Internal access\\u2026", icon: ICONS.shield, hint: (row.allow && row.allow.length) ? String(row.allow.length) : undefined, onSelect: function () { openAllowDialog(row); } });
+    items.push({ label: row.protect ? "Change password\\u2026" : "Password protection\\u2026", icon: row.protect ? ICONS.lock : ICONS.unlock, hint: row.protect ? "on" : undefined, onSelect: function () { openProtectDialog(row); } });
+    items.push({ label: "Copy local URL", icon: ICONS.copy, onSelect: function () { copyValue((row.urls && (row.urls.https || row.urls.http)) || row.host, "Copied " + row.host); } });
+    items.push("-");
+    items.push({ label: "Remove", icon: ICONS.trash, danger: true, onSelect: function () { removeHost(row); } });
+    return items;
   }
 
 `;
@@ -322,8 +435,8 @@ export const jsShare = `  // ---------- share dialog ----------
       shareProgressIcon.innerHTML = '<span class="spinner"></span>';
       shareProgressTitle.textContent = "Setting up " + domain;
       shareProgressText.textContent = t.loginUrl === undefined && shareAuthOpened
-        ? "Authorized. Creating the tunnel and the DNS record\u2026"
-        : "Checking your Cloudflare login, then creating the tunnel and the DNS record\u2026";
+        ? "Authorized. Creating the tunnel and the DNS record…"
+        : "Checking your Cloudflare login, then creating the tunnel and the DNS record…";
     }
     shareStepsEl.hidden = !login;
     shareStepsDomain.textContent = domain;
@@ -385,14 +498,20 @@ export const jsShare = `  // ---------- share dialog ----------
     shareDomainError.textContent = "";
     var hasDomain = typeof row.tunnelDomain === "string" && !!row.tunnelDomain;
     shareDomainInput.value = hasDomain ? row.tunnelDomain : "";
-    showShareOptions();
-    shareSubmitBtn.textContent = "Start sharing";
     shareAuthOpened = false;
     setShareMode(hasDomain ? "custom" : "random");
     shareSubmitBtn.disabled = false;
     shareSubmitBtn.classList.remove("busy");
     shareCancelBtn.disabled = false;
     shareDialogEl.showModal();
+    // Already mid-flight: jump straight to the live progress view instead of the picker.
+    var t = tunnelInfo(row);
+    if (t.status === "starting" || t.status === "login") {
+      watchShare(row.host, row.tunnelDomain || row.host);
+    } else {
+      showShareOptions();
+      shareSubmitBtn.textContent = "Start sharing";
+    }
   }
 
   shareOptionRandom.addEventListener("click", function () { setShareMode("random"); });
@@ -442,9 +561,9 @@ export const jsShare = `  // ---------- share dialog ----------
       shareAuthWin = window.open("", "_blank");
       if (shareAuthWin) {
         try {
-          shareAuthWin.document.title = "Connecting to Cloudflare\u2026";
+          shareAuthWin.document.title = "Connecting to Cloudflare…";
           shareAuthWin.document.body.style.cssText = "font:14px system-ui,sans-serif;color:#666;display:grid;place-items:center;height:100vh;margin:0";
-          shareAuthWin.document.body.textContent = "Connecting to Cloudflare\u2026";
+          shareAuthWin.document.body.textContent = "Connecting to Cloudflare…";
         } catch (e) {}
       }
     }
@@ -768,6 +887,8 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     for (var i = 0; i < tr.children.length; i++) tr.children[i].setAttribute("data-label", labels[i] || "");
   }
 
+  var pendingHighlightHost = null;
+
   function buildDisplayRow(tr, row) {
     clear(tr);
     tr.classList.toggle("row-down", !row.probe.up);
@@ -800,36 +921,15 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     hostTd.appendChild(targetLine);
     tr.appendChild(hostTd);
 
-    tr.appendChild(makeCell("\\u2192", "arrow"));
-
-    var optionsTd = document.createElement("td");
-    var flags = [];
-    if (row.insecure) flags.push(["insecure", "Upstream TLS certificate is not verified", "badge-warn"]);
-    if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host", "badge-cors"]);
-    if (row.allow && row.allow.length) flags.push(["allow " + row.allow.length, row.allow.join(", "), "badge-accent"]);
-    if (row.protect) flags.push(["password", "Password protected on: " + protectScopeNames(row.protect.scopes), "badge-accent"]);
-    if (flags.length) {
-      optionsTd.className = "badges";
-      flags.forEach(function (flag) {
-        var badge = document.createElement("span");
-        badge.className = "badge " + flag[2];
-        badge.textContent = flag[0];
-        badge.title = flag[1];
-        optionsTd.appendChild(badge);
-      });
-    } else {
-      optionsTd.className = "dim";
-      optionsTd.textContent = "\\u2014";
-    }
-    tr.appendChild(optionsTd);
+    tr.appendChild(optionsCell(row));
 
     var statusTd = document.createElement("td");
     statusTd.className = "status-td";
     statusTd.appendChild(statusPill(row));
     var st = row.stats || { hits: 0, errors: 0 };
     var traffic = st.hits + " hits";
-    if (st.errors) traffic += " · " + st.errors + " err";
-    if (typeof st.avgMs === "number") traffic += " · " + Math.round(st.avgMs) + "ms";
+    if (st.errors) traffic += " \\u00b7 " + st.errors + " err";
+    if (typeof st.avgMs === "number") traffic += " \\u00b7 " + Math.round(st.avgMs) + "ms";
     var trafficLine = document.createElement("div");
     trafficLine.className = "traffic";
     trafficLine.textContent = traffic;
@@ -840,70 +940,23 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     tr.appendChild(tunnelCell(row));
 
     var actionsTd = document.createElement("td");
+    actionsTd.className = "actions-td";
     var actionsWrap = document.createElement("div");
     actionsWrap.className = "row-actions";
     actionsTd.appendChild(actionsWrap);
-    var accessBtn = document.createElement("button");
-    accessBtn.type = "button";
-    var allowCount = row.allow ? row.allow.length : 0;
-    accessBtn.className = "btn btn-sm btn-icon" + (allowCount ? " is-set" : "");
-    accessBtn.title = allowCount ? "Internal access: " + row.allow.join(", ") : "Internal access: let shared visitors reach addresses such as localhost:3000";
-    accessBtn.setAttribute("aria-label", "Internal access for " + row.host);
-    var accessSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    accessSvg.setAttribute("viewBox", "0 0 24 24");
-    accessSvg.setAttribute("aria-hidden", "true");
-    var accessPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    accessPath.setAttribute("d", "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zM9.5 12l1.8 1.8L15 10");
-    accessSvg.appendChild(accessPath);
-    accessBtn.appendChild(accessSvg);
-    accessBtn.addEventListener("click", function () { openAllowDialog(row); });
-    var protectBtn = document.createElement("button");
-    protectBtn.type = "button";
-    var protectScopesSet = row.protect ? row.protect.scopes : [];
-    protectBtn.className = "btn btn-sm btn-icon" + (protectScopesSet.length ? " is-set" : "");
-    protectBtn.title = protectScopesSet.length ? "Password protected on: " + protectScopeNames(protectScopesSet) : "Password protection: require a password before visitors reach this host";
-    protectBtn.setAttribute("aria-label", "Password protection for " + row.host);
-    var protectSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    protectSvg.setAttribute("viewBox", "0 0 24 24");
-    protectSvg.setAttribute("aria-hidden", "true");
-    var protectPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    protectPath.setAttribute("d", "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z");
-    protectSvg.appendChild(protectPath);
-    protectBtn.appendChild(protectSvg);
-    protectBtn.addEventListener("click", function () { openProtectDialog(row); });
-    var editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn btn-sm";
-    editBtn.textContent = "Edit";
-    editBtn.addEventListener("click", function () { enterEditMode(row); });
-    var removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "btn btn-sm btn-danger";
-    removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", function () {
-      (prefs.confirm ? confirmDialog({ title: "Remove host " + row.host + "?", message: "This can't be undone.", confirmLabel: "Remove host", danger: true }) : Promise.resolve(true)).then(function (ok) {
-        if (!ok) return;
-        removeBtn.disabled = true;
-        apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "DELETE" })
-          .then(function () {
-            showToast("Removed " + row.host, "success");
-            return loadHosts();
-          })
-          .catch(function (err) {
-            apiError(err, "Couldn't remove " + row.host);
-            removeBtn.disabled = false;
-          });
-      });
-    });
-    if (!row.remote) {
-      actionsWrap.appendChild(shareButton(row));
-      actionsWrap.appendChild(accessBtn);
-      actionsWrap.appendChild(protectBtn);
-      actionsWrap.appendChild(editBtn);
+    if (row.remote) {
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-sm btn-ghost";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () { removeHost(row); });
+      actionsWrap.appendChild(removeBtn);
+    } else {
+      actionsWrap.appendChild(primaryShareAction(row));
+      actionsWrap.appendChild(makeMoreButton(function () { return hostMenuItems(row); }, { label: "Actions for " + row.host, small: true }));
     }
-    actionsWrap.appendChild(removeBtn);
     tr.appendChild(actionsTd);
-    labelCells(tr, ["", "", "Options", "Status", "Public URL", ""]);
+    labelCells(tr, ["", "Options", "Status", "Public URL", ""]);
   }
 
   function enterEditMode(row) {
@@ -918,7 +971,6 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     hostName.textContent = row.host;
     hostTd.appendChild(hostName);
     tr.appendChild(hostTd);
-    tr.appendChild(makeCell("\\u2192", "arrow"));
 
     var targetInput = document.createElement("input");
     targetInput.type = "text";
@@ -1007,7 +1059,7 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     actionsWrap.appendChild(saveBtn);
     actionsWrap.appendChild(cancelBtn);
     tr.appendChild(actionsTd);
-    labelCells(tr, ["", "", "Options", "", ""]);
+    labelCells(tr, ["", "Options", "", ""]);
   }
 
   function renderHosts(hosts) {
@@ -1019,16 +1071,24 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     tableWrap.hidden = hosts.length === 0;
 
     var seen = {};
-    hosts.forEach(function (row) {
+    hosts.forEach(function (row, i) {
       seen[row.host] = true;
       if (editingHost === row.host) return;
       var tr = rowElements[row.host];
+      var isNew = !tr;
       if (!tr) {
         tr = document.createElement("tr");
         rowElements[row.host] = tr;
       }
       buildDisplayRow(tr, row);
       tbody.appendChild(tr);
+      if (isNew) animateIn(tr, i);
+      if (pendingHighlightHost === row.host) {
+        pendingHighlightHost = null;
+        tr.classList.add("row-highlight");
+        if (typeof tr.scrollIntoView === "function") tr.scrollIntoView({ block: "nearest", behavior: motionOk() ? "smooth" : "auto" });
+        setTimeout(function () { tr.classList.remove("row-highlight"); }, 2200);
+      }
     });
     Object.keys(rowElements).forEach(function (host) {
       if (!seen[host]) {
@@ -1060,22 +1120,28 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     return fetch("/api/hosts").then(parseJsonOrThrow).then(renderHosts);
   }
 
+  var hostsTabsEl = document.querySelector('.tabs[data-tabs="hosts"]');
+  if (hostsTabsEl) {
+    initTabs(hostsTabsEl, {
+      onChange: function (tab) { if (tab === "shared") renderShareList(); }
+    });
+  }
+
 `;
 
-export const jsSharingPage = `  // ---------- public sharing page ----------
+export const jsSharingPage = `  // ---------- shared hosts tab ----------
 
   var shareListEl = document.getElementById("share-list");
   var shareEmptyEl = document.getElementById("share-empty");
   var shareCountEl = document.getElementById("share-count");
 
   function renderShareList() {
-    var hosts = (lastHosts || []).filter(function (h) { return !h.remote; });
+    var hosts = (lastHosts || []).filter(function (h) { return !h.remote && isShared(h); });
     clear(shareListEl);
     shareEmptyEl.hidden = hosts.length !== 0;
-    var shared = hosts.filter(isShared).length;
-    shareCountEl.textContent = shared + " public";
+    shareCountEl.textContent = String(hosts.length);
     shareCountEl.hidden = hosts.length === 0;
-    hosts.slice().sort(function (a, b) { return (isShared(b) ? 1 : 0) - (isShared(a) ? 1 : 0) || a.host.localeCompare(b.host); }).forEach(function (h) {
+    hosts.slice().sort(function (a, b) { return a.host.localeCompare(b.host); }).forEach(function (h, i) {
       var t = tunnelInfo(h);
       var side = document.createElement("div");
       side.className = "ov-side";
@@ -1089,10 +1155,17 @@ export const jsSharingPage = `  // ---------- public sharing page ----------
         side.appendChild(a);
         side.appendChild(makeCopyButton(function () { return t.url; }));
       }
-      side.appendChild(shareButton(h));
-      var sub = t.status === "up" ? "public" : t.status === "starting" ? "starting tunnel…" : t.status === "error" ? ("error: " + (t.error || "tunnel failed")) : h.target;
-      var dot = t.status === "up" ? "up" : t.status === "starting" ? "warn" : t.status === "error" ? "down" : "";
-      shareListEl.appendChild(ovRow(h.host, sub, side, dot));
+      var stopBtn = document.createElement("button");
+      stopBtn.type = "button";
+      stopBtn.className = "btn btn-sm btn-danger";
+      stopBtn.textContent = "Stop sharing";
+      stopBtn.addEventListener("click", function () { stopSharing(h); });
+      side.appendChild(stopBtn);
+      var sub = t.status === "up" ? "public" : t.status === "starting" ? "starting tunnel\\u2026" : t.status === "login" ? "waiting for sign-in\\u2026" : h.target;
+      var dot = t.status === "up" ? "up" : (t.status === "starting" || t.status === "login") ? "warn" : "";
+      var row = ovRow(h.host, sub, side, dot);
+      animateIn(row, i);
+      shareListEl.appendChild(row);
     });
   }
 
@@ -1100,11 +1173,20 @@ export const jsSharingPage = `  // ---------- public sharing page ----------
 
 export const hostsView = `  <section class="view" data-view="hosts" aria-label="Hosts" hidden>
     <div class="page-head">
-      <h2 class="page-title">Hosts</h2>
-      <p class="page-sub">Local hostnames and the dev servers they proxy to.</p>
+      <div>
+        <h2 class="page-title">Hosts</h2>
+        <p class="page-sub">Local hostnames and the dev servers they proxy to.</p>
+      </div>
+      <div class="page-actions">
+        <button type="button" id="add-host-btn" class="btn btn-primary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add host</button>
+      </div>
     </div>
-    <div class="layout">
-      <div class="col-primary">
+    <div class="tabs" role="tablist" data-tabs="hosts" aria-label="Hosts views">
+      <button type="button" role="tab" data-tab="all">All</button>
+      <button type="button" role="tab" data-tab="shared">Shared</button>
+    </div>
+
+    <div data-tab-panel="all">
       <section id="hosts-card" class="card" aria-label="Registered hosts">
         <div class="card-head">
           <div class="card-title-wrap">
@@ -1118,9 +1200,9 @@ export const hostsView = `  <section class="view" data-view="hosts" aria-label="
         <div id="hosts-skeleton" class="table-wrap" aria-hidden="true">
           <table>
             <tbody>
-              <tr class="skeleton-row"><td colspan="6"><span class="skel-bar"></span></td></tr>
-              <tr class="skeleton-row"><td colspan="6"><span class="skel-bar"></span></td></tr>
-              <tr class="skeleton-row"><td colspan="6"><span class="skel-bar"></span></td></tr>
+              <tr class="skeleton-row"><td colspan="5"><span class="skel-bar"></span></td></tr>
+              <tr class="skeleton-row"><td colspan="5"><span class="skel-bar"></span></td></tr>
+              <tr class="skeleton-row"><td colspan="5"><span class="skel-bar"></span></td></tr>
             </tbody>
           </table>
         </div>
@@ -1129,16 +1211,19 @@ export const hostsView = `  <section class="view" data-view="hosts" aria-label="
           <p>Hosts couldn't be loaded while the proxy is unreachable.</p>
         </div>
         <div id="empty" class="empty" hidden>
-          <span class="empty-icon" aria-hidden="true">+</span>
-          <p>No hosts registered yet. Add one from the panel, or from the CLI:</p>
+          <span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+          <p class="empty-title">No hosts yet</p>
+          <p class="empty-desc">Add your first host to start proxying a local dev server.</p>
+          <div class="empty-actions">
+            <button type="button" id="empty-add-host-btn" class="btn btn-primary">Add your first host</button>
+          </div>
           <pre class="code-block">locadot add --host app.localhost --port 3000</pre>
         </div>
         <div id="table-wrap" class="table-wrap" hidden>
-          <table id="table">
+          <table id="hosts-table">
             <thead>
               <tr>
                 <th scope="col">Host</th>
-                <th scope="col" aria-label="Flow"></th>
                 <th scope="col">Options</th>
                 <th scope="col">Status</th>
                 <th scope="col">Public URL</th>
@@ -1149,81 +1234,39 @@ export const hostsView = `  <section class="view" data-view="hosts" aria-label="
           </table>
         </div>
       </section>
-      </div>
-      <aside class="col-secondary">
-      <section id="add-card" class="card" aria-label="Add proxy host">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">Add host</h3></div>
-        </div>
-        <form id="add-form" class="card-body" novalidate>
-          <div class="form-grid">
-            <div class="field">
-              <label for="add-host">Host</label>
-              <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
-            </div>
-            <div class="field">
-              <label for="add-target">Target</label>
-              <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080, https://&hellip;" autocomplete="off" aria-describedby="add-error" required>
-            </div>
-            <div class="form-checks">
-              <div class="field field-checkbox">
-                <input type="checkbox" id="add-insecure" name="insecure">
-                <label for="add-insecure">Insecure TLS</label>
-              </div>
-              <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
-                <input type="checkbox" id="add-cors" name="cors">
-                <label for="add-cors">Bypass CORS</label>
-              </div>
-            </div>
-            <button type="submit" id="add-submit" class="btn btn-primary btn-block">Add proxy</button>
-          </div>
-          <div id="add-error" class="field-error" role="alert" hidden></div>
-        </form>
-      </section>
-      </aside>
     </div>
-  </section>
 
-`;
-
-export const sharingView = `  <section class="view" data-view="sharing" aria-label="Public sharing" hidden>
-    <div class="page-head">
-      <h2 class="page-title">Public sharing</h2>
-      <p class="page-sub">Put a single host on a public https://*.trycloudflare.com URL. Anyone with the link can reach it.</p>
-    </div>
-    <div class="layout">
+    <div data-tab-panel="shared" hidden>
       <div class="col-primary">
-        <section id="share-card" class="card" aria-label="Hosts you can share">
+        <section id="share-card" class="card" aria-label="Shared hosts">
           <div class="card-head">
-            <div class="card-title-wrap"><h3 class="card-title">Hosts</h3><span id="share-count" class="badge badge-count" hidden></span></div>
+            <div class="card-title-wrap"><h3 class="card-title">Shared hosts</h3><span id="share-count" class="badge badge-count" hidden></span></div>
           </div>
           <div id="share-list" class="ov-list"></div>
           <div id="share-empty" class="empty" hidden>
-            <span class="empty-icon" aria-hidden="true">+</span>
-            <p>Add a host first, then share it from here.</p>
+            <span class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+            <p>No hosts are public yet. Share one from the All tab.</p>
           </div>
         </section>
-      </div>
-      <aside class="col-secondary">
-      <section id="sharing-card" class="card" aria-label="Public sharing">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">Cloudflare Tunnel</h3></div>
-        </div>
-        <div class="stat-list">
-          <div class="stat-row">
-            <div class="stat-main">
-              <div class="label">Cloudflare Tunnel</div>
-              <div id="tile-cloudflared-value" class="tile-value">—</div>
-              <div id="tile-cloudflared-sub" class="tile-sub mono"></div>
-              <div class="tile-sub">Share a host on a public https://*.trycloudflare.com URL with the Share button. No Cloudflare account needed.</div>
-              <div class="tile-actions">
-                <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
+        <section id="sharing-card" class="card" aria-label="Cloudflare Tunnel">
+          <div class="card-head">
+            <div class="card-title-wrap"><h3 class="card-title">Cloudflare Tunnel</h3></div>
+          </div>
+          <div class="stat-list">
+            <div class="stat-row">
+              <div class="stat-main">
+                <div class="label">Cloudflare Tunnel</div>
+                <div id="tile-cloudflared-value" class="tile-value">—</div>
+                <div id="tile-cloudflared-sub" class="tile-sub mono"></div>
+                <div class="tile-sub">Share a host on a public https://*.trycloudflare.com URL with the Share button. No Cloudflare account needed.</div>
+                <div class="tile-actions">
+                  <button type="button" id="cloudflared-install-btn" class="btn btn-sm btn-primary" hidden>Install cloudflared</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
-      </aside>
+        </section>
+      </div>
     </div>
   </section>
 
@@ -1255,7 +1298,45 @@ export const allowDialog = `<dialog id="allow-dialog">
 </dialog>
 `;
 
-export const hostDialogs = `<dialog id="share-dialog">
+export const hostDialogs = `<dialog id="add-host-dialog">
+  <div class="modal-head">
+    <div>
+      <h3 class="modal-title">Add host</h3>
+      <p class="modal-sub">Proxy a local hostname to a dev server.</p>
+    </div>
+    <button type="button" id="add-host-close" class="btn btn-ghost modal-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <form id="add-form" novalidate>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="add-host">Host</label>
+          <input type="text" id="add-host" name="host" placeholder="app.localhost" autocomplete="off" aria-describedby="add-error" required>
+        </div>
+        <div class="field">
+          <label for="add-target">Target</label>
+          <input type="text" id="add-target" name="target" placeholder="3000, 127.0.0.1:8080, https://&hellip;" autocomplete="off" aria-describedby="add-error" required>
+        </div>
+        <div class="form-checks">
+          <div class="field field-checkbox">
+            <input type="checkbox" id="add-insecure" name="insecure">
+            <label for="add-insecure">Insecure TLS</label>
+          </div>
+          <div class="field field-checkbox" title="Send Origin/Referer as the target's own and let any origin call this host">
+            <input type="checkbox" id="add-cors" name="cors">
+            <label for="add-cors">Bypass CORS</label>
+          </div>
+        </div>
+      </div>
+      <div id="add-error" class="field-error" role="alert" hidden></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" id="add-host-cancel" class="btn">Cancel</button>
+      <button type="submit" id="add-submit" class="btn btn-primary">Add proxy</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="share-dialog">
   <div class="modal-head">
     <div>
       <h3 class="modal-title">Share publicly</h3>
@@ -1362,4 +1443,87 @@ export const hostDialogs = `<dialog id="share-dialog">
     <button type="button" id="protect-submit" class="btn btn-primary">Protect host</button>
   </div>
 </dialog>
+`;
+
+/** Styles for these pages, appended after theme.ts. */
+export const css = `
+/* ---------- Hosts page ---------- */
+
+@keyframes hosts-row-flash {
+  0% { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--accent); }
+  100% { background: transparent; box-shadow: none; }
+}
+#hosts-table tr.row-highlight { animation: hosts-row-flash 2200ms ease; }
+
+#hosts-table .status-td .pill { min-width: 96px; }
+#hosts-table td.actions-td { text-align: right; }
+#hosts-table td.badges { flex-wrap: wrap; }
+
+/* Keep every column visible without a scrollbar at the 1100-1279px desktop range
+   (theme.ts's own narrow-column rules only kick in at >=1200px). */
+#hosts-table .tunnel-status a { max-width: 130px; }
+#hosts-table .host-target { max-width: 170px; }
+#hosts-table .row-actions { gap: 6px; }
+#hosts-table th, #hosts-table td { padding-left: 8px; padding-right: 8px; }
+#hosts-table th:first-child, #hosts-table td:first-child { padding-left: 14px; }
+#hosts-table th:last-child, #hosts-table td:last-child { padding-right: 14px; }
+
+@media (pointer: coarse) {
+  #hosts-table .row-actions .btn, #hosts-table .row-actions .btn-more,
+  #share-list .btn { min-height: 44px; }
+}
+
+/* Card layout for tablet & phone: each row becomes a stacked card, not a squashed table. */
+@media (max-width: 899px) {
+  #hosts-table { min-width: 0; }
+  #hosts-table thead { display: none; }
+  #hosts-table, #hosts-table tbody { display: block; width: 100%; }
+  #hosts-table tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 16px;
+    row-gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  #hosts-table tr:last-child { border-bottom: none; }
+  #hosts-table tr.row-down { box-shadow: inset 3px 0 0 var(--down); }
+  #hosts-table td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    white-space: normal;
+    text-align: left;
+    min-width: 0;
+  }
+  #hosts-table td::before { content: attr(data-label); color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  #hosts-table td[data-label=""]::before { content: none; }
+  #hosts-table td:first-child { grid-column: 1 / 3; grid-row: 1; padding-left: 0; }
+  #hosts-table td:last-child { grid-column: 3; grid-row: 1; align-items: flex-end; justify-content: flex-start; }
+  #hosts-table td.status-td { align-items: flex-start; }
+  #hosts-table td.host-td .edit-input { margin-top: 8px; width: 100%; }
+  #hosts-table td.badges { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  #hosts-table td.badges::before { flex-basis: 100%; }
+  #hosts-table .host-target { max-width: 100%; }
+  #hosts-table .host-cell .copy-btn, #hosts-table .tunnel-status .copy-btn { opacity: 1; }
+  #hosts-table .tunnel-status, #hosts-table .tunnel-status a, #hosts-table .tunnel-error-text { max-width: 100%; min-width: 0; }
+  #hosts-table .row-actions { flex-wrap: nowrap; justify-content: flex-end; }
+}
+@media (max-width: 560px) {
+  #hosts-table tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 14px 16px; }
+  #hosts-table td:first-child { grid-column: 1 / -1; }
+  #hosts-table td:last-child { grid-column: 1 / -1; grid-row: auto; align-items: stretch; }
+  #hosts-table td:last-child .row-actions { justify-content: space-between; }
+  #hosts-table td.tunnel-td, #hosts-table td[data-label="Public URL"] { grid-column: 1 / -1; }
+}
+
+#share-list .ov-side { flex-wrap: wrap; justify-content: flex-end; gap: 8px; row-gap: 6px; }
+@media (max-width: 640px) {
+  #share-list .ov-row { flex-wrap: wrap; }
+  #share-list .ov-side { flex: 1 1 100%; min-width: 0; justify-content: flex-start; }
+  #share-list .ov-side a.ov-link { max-width: 100%; }
+}
 `;

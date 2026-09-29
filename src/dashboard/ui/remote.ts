@@ -1,6 +1,31 @@
-/** Remote access (sharing this machine) and connected machines. */
+/** Remote access (sharing this machine) and connected machines: one page, two tabs. */
 
 export const jsHub = `  // ---------- remote access: hub (sender) ----------
+
+  var remoteInviteActionBtn = document.getElementById("remote-invite-action");
+  var remoteConnectActionBtn = document.getElementById("remote-connect-action");
+  var hubSetupSection = document.getElementById("hub-setup-section");
+  var inviteSectionOpen = false;
+
+  var remoteTabsEl = document.querySelector('.tabs[data-tabs="remote"]');
+  if (remoteTabsEl) initTabs(remoteTabsEl, { onChange: function () { updatePageActions(); } });
+
+  function updatePageActions() {
+    var tab = currentTab("remote");
+    var up = !!(lastHub && lastHub.status === "up");
+    remoteInviteActionBtn.hidden = !(tab === "hub" && up);
+    remoteConnectActionBtn.hidden = tab !== "machines";
+  }
+
+  remoteInviteActionBtn.addEventListener("click", function () {
+    inviteSectionOpen = !inviteSectionOpen;
+    hubShareSection.hidden = !(lastHub && lastHub.status === "up" && inviteSectionOpen);
+    if (!hubShareSection.hidden) {
+      updateInviteHostsVisibility();
+      hubShareSection.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "nearest" });
+      inviteRoleSelect.focus();
+    }
+  });
 
   function fmtIn(iso) {
     if (!iso) return "";
@@ -15,7 +40,7 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
   function renderPeers(peers) {
     peersEmptyEl.hidden = peers.length !== 0;
     clear(peersListEl);
-    peers.forEach(function (peer) {
+    peers.forEach(function (peer, i) {
       var row = document.createElement("div");
       row.className = "peer-row";
 
@@ -31,50 +56,42 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
       main.appendChild(sub);
       row.appendChild(main);
 
-      var controls = document.createElement("div");
-      controls.className = "peer-controls";
-      var roleSelect = document.createElement("select");
-      roleSelect.className = "input input-sm";
-      roleSelect.setAttribute("aria-label", "Role for " + peer.name);
-      ["viewer", "editor", "admin"].forEach(function (r) {
-        var opt = document.createElement("option");
-        opt.value = r;
-        opt.textContent = r.charAt(0).toUpperCase() + r.slice(1);
-        if (r === peer.role) opt.selected = true;
-        roleSelect.appendChild(opt);
-      });
-      roleSelect.addEventListener("change", function () {
-        var prev = peer.role;
-        roleSelect.disabled = true;
-        apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "PUT", body: JSON.stringify({ role: roleSelect.value, hosts: peer.hosts }) })
-          .then(function () { showToast("Updated role for " + peer.name, "success"); return loadHub(); })
-          .catch(function (err) { apiError(err, "Couldn't update role"); roleSelect.value = prev; roleSelect.disabled = false; });
-      });
-      controls.appendChild(roleSelect);
+      var meta = document.createElement("div");
+      meta.className = "peer-controls";
+      var roleBadge = document.createElement("span");
+      roleBadge.className = "badge badge-accent badge-role";
+      roleBadge.textContent = peer.role;
+      meta.appendChild(roleBadge);
 
-      var revokeBtn = document.createElement("button");
-      revokeBtn.type = "button";
-      revokeBtn.className = "btn btn-sm btn-danger";
-      revokeBtn.textContent = "Revoke";
-      revokeBtn.addEventListener("click", function () {
+      function setRole(role) {
+        if (role === peer.role) return;
+        apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "PUT", body: JSON.stringify({ role: role, hosts: peer.hosts }) })
+          .then(function () { showToast("Updated role for " + peer.name, "success"); return loadHub(); })
+          .catch(function (err) { apiError(err, "Couldn't update role"); });
+      }
+      function revoke() {
         confirmDialog({ title: "Revoke " + peer.name + "?", message: "This peer will lose access immediately.", confirmLabel: "Revoke", danger: true }).then(function (ok) {
           if (!ok) return;
-          revokeBtn.disabled = true;
           apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "DELETE" })
             .then(function () { showToast("Revoked " + peer.name, "success"); return loadHub(); })
-            .catch(function (err) { apiError(err, "Couldn't revoke peer"); revokeBtn.disabled = false; });
+            .catch(function (err) { apiError(err, "Couldn't revoke peer"); });
         });
-      });
-      controls.appendChild(revokeBtn);
-      row.appendChild(controls);
+      }
+      meta.appendChild(makeMoreButton(function () {
+        return ["viewer", "editor", "admin"].map(function (r) {
+          return { label: "Set as " + r.charAt(0).toUpperCase() + r.slice(1), disabled: r === peer.role, onSelect: function () { setRole(r); } };
+        }).concat(["-", { label: "Revoke", icon: ICONS.trash, danger: true, onSelect: revoke }]);
+      }, { label: "Actions for " + peer.name, small: true }));
+      row.appendChild(meta);
       peersListEl.appendChild(row);
+      animateIn(row, i);
     });
   }
 
   function renderInvites(invites) {
     invitesEmptyEl.hidden = invites.length !== 0;
     clear(invitesListEl);
-    invites.forEach(function (invite) {
+    invites.forEach(function (invite, i) {
       var row = document.createElement("div");
       row.className = "invite-row";
       var main = document.createElement("div");
@@ -91,9 +108,10 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
 
       var revokeBtn = document.createElement("button");
       revokeBtn.type = "button";
-      revokeBtn.className = "btn btn-sm btn-ghost-danger";
-      revokeBtn.textContent = "\\u00d7";
+      revokeBtn.className = "btn btn-ghost btn-icon btn-sm";
       revokeBtn.setAttribute("aria-label", "Revoke invite");
+      revokeBtn.setAttribute("data-tip", "Revoke");
+      revokeBtn.appendChild(svgIcon(ICONS.close));
       revokeBtn.addEventListener("click", function () {
         revokeBtn.disabled = true;
         apiFetch("/api/invites/" + encodeURIComponent(invite.id), { method: "DELETE" })
@@ -102,6 +120,7 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
       });
       row.appendChild(revokeBtn);
       invitesListEl.appendChild(row);
+      animateIn(row, i);
     });
   }
 
@@ -178,43 +197,46 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
     lastHub = data.hub;
     var hub = data.hub;
     var status = hub.status;
+    var up = status === "up";
 
     var dotClass = status === "up" ? "up" : status === "starting" ? "warn" : status === "login" ? "accent" : status === "error" ? "down" : "";
     hubDot.className = "dot" + (dotClass ? " " + dotClass : "");
     var labels = { off: "Off", starting: "Starting\\u2026", login: "Login required", up: "Up", error: "Error" };
     hubStatusText.textContent = labels[status] || status;
 
-    hubUrlRow.hidden = !(status === "up" && hub.url);
-    if (status === "up" && hub.url) hubUrlEl.textContent = hub.url;
+    hubUrlRow.hidden = !(up && hub.url);
+    if (up && hub.url) hubUrlEl.textContent = hub.url;
 
     hubLoginRow.hidden = !(status === "login" && hub.loginUrl);
     if (status === "login" && hub.loginUrl) hubLoginLink.href = hub.loginUrl;
 
-    hubQuickWarning.hidden = !(status === "up" && hub.mode === "quick");
+    hubQuickWarning.hidden = !(up && hub.mode === "quick");
 
     hubLocalhostRow.hidden = !data.config;
     setSwitch(hubLocalhostSwitch, data.localhost !== false);
-    hubPanelUrl = status === "up" && hub.url ? hub.url : "";
+    hubPanelUrl = up && hub.url ? hub.url : "";
     hubPanelRow.hidden = !data.config;
     renderHubPanel(data.panel === true);
 
     hubErrorRow.hidden = !(status === "error" && hub.error);
     if (status === "error" && hub.error) hubErrorRow.textContent = hub.error;
 
-    var running = status === "starting" || status === "login" || status === "up";
-    hubNamedForm.hidden = status === "up";
-    hubQuickBtn.hidden = status === "up";
+    var running = status === "starting" || status === "login" || up;
+    hubSetupSection.hidden = up;
+    hubNamedForm.hidden = up;
+    hubQuickBtn.hidden = up;
     hubStopBtn.hidden = !running;
 
     if (data.config && data.config.mode === "named" && data.config.domain && !hubDomainInput.value) {
       hubDomainInput.value = data.config.domain;
     }
 
-    hubShareSection.hidden = status !== "up";
-    if (status === "up") updateInviteHostsVisibility();
+    hubShareSection.hidden = !(up && inviteSectionOpen);
+    if (up) updateInviteHostsVisibility();
 
     renderPeers(data.peers);
     renderInvites(data.invites);
+    updatePageActions();
   }
 
   function loadHub() {
@@ -261,6 +283,11 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
 
 export const jsReceiver = `  // ---------- remote access: connected machines (receiver) ----------
 
+  remoteConnectActionBtn.addEventListener("click", function () {
+    connectStringInput.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "center" });
+    connectStringInput.focus();
+  });
+
   function showConnectError(message) {
     connectErrorEl.textContent = message;
     connectErrorEl.hidden = false;
@@ -275,7 +302,7 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
     sbRemotesCountEl.textContent = String(remotes.length);
     sbRemotesCountEl.hidden = remotes.length === 0;
     clear(remotesListEl);
-    remotes.forEach(function (remote) {
+    remotes.forEach(function (remote, i) {
       var item = document.createElement("div");
       item.className = "remote-item";
 
@@ -293,48 +320,24 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
       main.appendChild(sub);
       head.appendChild(main);
 
-      var badges = document.createElement("div");
-      badges.className = "badges";
+      var controls = document.createElement("div");
+      controls.className = "remote-controls";
       var roleBadge = document.createElement("span");
       roleBadge.className = "badge badge-role badge-accent";
       roleBadge.textContent = remote.role;
-      badges.appendChild(roleBadge);
+      controls.appendChild(roleBadge);
       var statusBadge = document.createElement("span");
-      statusBadge.className = "badge " + (remote.status === "ok" ? "badge-up" : "badge-down");
+      statusBadge.className = "badge badge-dot " + (remote.status === "ok" ? "badge-up" : "badge-down");
       statusBadge.textContent = remote.status === "ok" ? "connected" : "error";
       if (remote.status !== "ok" && remote.error) statusBadge.title = remote.error;
-      badges.appendChild(statusBadge);
-      head.appendChild(badges);
-      item.appendChild(head);
+      controls.appendChild(statusBadge);
 
-      var urlRow = document.createElement("div");
-      urlRow.className = "hub-row";
-      var urlText = document.createElement("span");
-      urlText.className = "hub-url";
-      urlText.textContent = remote.url;
-      urlRow.appendChild(urlText);
-      var urlEditBtn = document.createElement("button");
-      urlEditBtn.type = "button";
-      urlEditBtn.className = "btn btn-sm btn-ghost";
-      urlEditBtn.textContent = "Update URL";
-      urlEditBtn.addEventListener("click", function () {
-        promptDialog({ title: "Update URL", message: "New URL for " + remote.name, label: "URL", value: remote.url, confirmLabel: "Save" }).then(function (next) {
-          if (!next || !next.trim() || next.trim() === remote.url) return;
-          apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "PUT", body: JSON.stringify({ url: next.trim() }) })
-            .then(function () { showToast("Updated URL for " + remote.name, "success"); return loadRemotes(); })
-            .catch(function (err) { apiError(err, "Couldn't update URL"); });
-        });
-      });
-      urlRow.appendChild(urlEditBtn);
-      item.appendChild(urlRow);
-      if (remote.role === "admin") item.appendChild(remoteLocalRow(remote));
-
-      var actions = document.createElement("div");
-      actions.className = "remote-controls";
       var syncBtn = document.createElement("button");
       syncBtn.type = "button";
-      syncBtn.className = "btn btn-sm";
-      syncBtn.textContent = "Sync";
+      syncBtn.className = "btn btn-ghost btn-icon btn-sm";
+      syncBtn.setAttribute("aria-label", "Sync " + remote.name);
+      syncBtn.setAttribute("data-tip", "Sync");
+      syncBtn.appendChild(svgIcon(ICONS.refresh));
       syncBtn.addEventListener("click", function () {
         syncBtn.disabled = true;
         syncBtn.classList.add("busy");
@@ -343,22 +346,49 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
           .catch(function (err) { apiError(err, "Couldn't sync " + remote.name); })
           .then(function () { syncBtn.disabled = false; syncBtn.classList.remove("busy"); });
       });
-      actions.appendChild(syncBtn);
-      var disconnectBtn = document.createElement("button");
-      disconnectBtn.type = "button";
-      disconnectBtn.className = "btn btn-sm btn-danger";
-      disconnectBtn.textContent = "Disconnect";
-      disconnectBtn.addEventListener("click", function () {
-        confirmDialog({ title: "Disconnect from " + remote.name + "?", message: "This removes its hosts too.", confirmLabel: "Disconnect", danger: true }).then(function (ok) {
-          if (!ok) return;
-          disconnectBtn.disabled = true;
-          apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "DELETE" })
-            .then(function () { showToast("Disconnected " + remote.name, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
-            .catch(function (err) { apiError(err, "Couldn't disconnect"); disconnectBtn.disabled = false; });
-        });
-      });
-      actions.appendChild(disconnectBtn);
-      item.appendChild(actions);
+      controls.appendChild(syncBtn);
+
+      controls.appendChild(makeMoreButton(function () {
+        return [
+          {
+            label: "Update URL", icon: ICONS.edit, onSelect: function () {
+              promptDialog({ title: "Update URL", message: "New URL for " + remote.name, label: "URL", value: remote.url, confirmLabel: "Save" }).then(function (next) {
+                if (!next || !next.trim() || next.trim() === remote.url) return;
+                apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "PUT", body: JSON.stringify({ url: next.trim() }) })
+                  .then(function () { showToast("Updated URL for " + remote.name, "success"); return loadRemotes(); })
+                  .catch(function (err) { apiError(err, "Couldn't update URL"); });
+              });
+            }
+          },
+          "-",
+          {
+            label: "Disconnect", icon: ICONS.trash, danger: true, onSelect: function () {
+              confirmDialog({ title: "Disconnect from " + remote.name + "?", message: "This removes its hosts too.", confirmLabel: "Disconnect", danger: true }).then(function (ok) {
+                if (!ok) return;
+                apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "DELETE" })
+                  .then(function () { showToast("Disconnected " + remote.name, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+                  .catch(function (err) { apiError(err, "Couldn't disconnect"); });
+              });
+            }
+          }
+        ];
+      }, { label: "Actions for " + remote.name, small: true }));
+      head.appendChild(controls);
+      item.appendChild(head);
+
+      var urlRow = document.createElement("div");
+      urlRow.className = "hub-row";
+      var urlText = document.createElement("span");
+      urlText.className = "hub-url";
+      urlText.textContent = remote.url;
+      urlRow.appendChild(urlText);
+      item.appendChild(urlRow);
+      if (remote.role === "admin") item.appendChild(remoteLocalRow(remote));
+
+      var hostsLabel = document.createElement("div");
+      hostsLabel.className = "label";
+      hostsLabel.textContent = "Shared hosts";
+      item.appendChild(hostsLabel);
 
       var hostsWrap = document.createElement("div");
       hostsWrap.className = "remote-hosts-list";
@@ -367,6 +397,11 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
         errLine.className = "dim";
         errLine.textContent = "Couldn't load hosts: " + (remote.error || "unknown error");
         hostsWrap.appendChild(errLine);
+      } else if (!(remote.available || []).length) {
+        var noneLine = document.createElement("div");
+        noneLine.className = "dim";
+        noneLine.textContent = "No hosts shared yet.";
+        hostsWrap.appendChild(noneLine);
       } else {
         (remote.available || []).forEach(function (h) {
           var hostRow = document.createElement("div");
@@ -374,7 +409,22 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
           var hostMain = document.createElement("div");
           hostMain.className = "mono";
           var aliases = (remote.mapped || []).filter(function (m) { return m.host === h.host; }).map(function (m) { return m.local; });
-          hostMain.textContent = h.host + (aliases.length ? " \\u2192 " + aliases.join(", ") : "");
+          hostMain.appendChild(document.createTextNode(h.host + (aliases.length ? " \\u2192 " : "")));
+          aliases.forEach(function (aliasName, idx) {
+            if (idx) hostMain.appendChild(document.createTextNode(", "));
+            var aliasRow = lastHosts.filter(function (r) { return r.host === aliasName; })[0];
+            var aliasHref = aliasRow && aliasRow.urls && (aliasRow.urls.https || aliasRow.urls.http);
+            if (aliasHref) {
+              var link = document.createElement("a");
+              link.href = aliasHref;
+              link.target = "_blank";
+              link.rel = "noopener noreferrer";
+              link.textContent = aliasName;
+              hostMain.appendChild(link);
+            } else {
+              hostMain.appendChild(document.createTextNode(aliasName));
+            }
+          });
           hostRow.appendChild(hostMain);
 
           if (!aliases.length) {
@@ -460,6 +510,7 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
       }
 
       remotesListEl.appendChild(item);
+      animateIn(item, i);
     });
   }
 
@@ -701,127 +752,151 @@ export const jsReceiver = `  // ---------- remote access: connected machines (re
 
 `;
 
-export const remoteView = `  <section class="view" data-view="remote" aria-label="Remote access" hidden>
+export const remoteView = `  <section class="view" data-view="remote" aria-label="Remote" hidden>
     <div class="page-head">
-      <h2 class="page-title">Remote access</h2>
-      <p class="page-sub">Let other locadots use this machine's hosts through a Cloudflare hostname.</p>
-    </div>
-    <div class="layout">
-      <div class="col-primary">
-      <section id="hub-card" class="card" aria-label="Remote access">
-        <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">Remote access</h3></div>
-        </div>
-        <div class="hub-section">
-          <div class="hub-row">
-            <span class="pill"><span id="hub-dot" class="dot"></span><span id="hub-status-text">Off</span></span>
-          </div>
-          <div id="hub-url-row" class="hub-row" hidden>
-            <span id="hub-url" class="hub-url"></span>
-            <button type="button" id="hub-url-copy" class="copy-btn">Copy</button>
-          </div>
-          <div id="hub-login-row" class="hub-row" hidden>
-            <a id="hub-login-link" href="#" target="_blank" rel="noopener noreferrer">Log in to Cloudflare</a>
-          </div>
-          <div id="hub-quick-warning" class="hub-warn" hidden>URL changes when locadot restarts &mdash; receivers must update it.</div>
-          <div id="hub-error-row" class="hub-warn" hidden></div>
-
-          <form id="hub-named-form" class="hub-form-row" novalidate>
-            <div class="field">
-              <label for="hub-domain">Domain</label>
-              <input type="text" id="hub-domain" placeholder="hub.example.com" autocomplete="off">
-            </div>
-            <div class="field">
-              <label for="hub-tunnel-name">Tunnel name</label>
-              <input type="text" id="hub-tunnel-name" placeholder="locadot (optional)" autocomplete="off">
-            </div>
-            <button type="submit" id="hub-named-submit" class="btn btn-sm btn-primary">Use my domain</button>
-          </form>
-          <div class="hub-actions">
-            <button type="button" id="hub-quick-btn" class="btn btn-sm">Use quick tunnel</button>
-            <button type="button" id="hub-stop-btn" class="btn btn-sm btn-danger" hidden>Stop</button>
-          </div>
-          <div id="hub-localhost-row" class="toggle-row" hidden>
-            <div>
-              <div class="label">Admins can open this dashboard and any port</div>
-              <div class="tile-sub">Admin peers get this dashboard at <span class="mono">&lt;domain&gt;.localhost</span> and this machine's localhost at <span class="mono">&lt;port&gt;.&lt;domain&gt;.localhost</span> on their side.</div>
-            </div>
-            <button type="button" id="hub-localhost" class="switch" role="switch" aria-checked="true" aria-label="Let admins open this dashboard and any port on this machine"><span class="switch-knob"></span></button>
-          </div>
-          <div id="hub-panel-row" class="toggle-row" hidden>
-            <div>
-              <div class="label">Share this dashboard</div>
-              <div id="hub-panel-sub" class="tile-sub"></div>
-            </div>
-            <button type="button" id="hub-panel" class="switch" role="switch" aria-checked="false" aria-label="Share this dashboard at the public URL, behind the dashboard password"><span class="switch-knob"></span></button>
-          </div>
-        </div>
-
-        <div id="hub-share-section" class="hub-section" hidden>
-          <div class="label">Create pairing link</div>
-          <div class="hub-form-row">
-            <div class="field">
-              <label for="invite-role">Role</label>
-              <select id="invite-role" class="input input-sm">
-                <option value="viewer">Viewer</option>
-                <option value="editor">Editor</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <button type="button" id="invite-create-btn" class="btn btn-sm btn-primary">Create pairing link</button>
-          </div>
-          <div id="invite-hosts-wrap" class="host-checks" hidden></div>
-          <div id="invite-result" class="invite-result" hidden>
-            <div class="invite-result-row">
-              <span id="invite-string" class="invite-string mono"></span>
-              <button type="button" id="invite-copy-btn" class="copy-btn">Copy</button>
-            </div>
-            <div id="invite-countdown" class="invite-countdown"></div>
-          </div>
-        </div>
-
-        <div class="hub-section">
-          <div class="label">Peers</div>
-          <div id="peers-empty" class="dim" hidden>No peers yet.</div>
-          <div id="peers-list" class="peer-list"></div>
-        </div>
-        <div class="hub-section">
-          <div class="label">Pending invites</div>
-          <div id="invites-empty" class="dim" hidden>No pending invites.</div>
-          <div id="invites-list" class="invite-list"></div>
-        </div>
-      </section>
+      <h2 class="page-title">Remote</h2>
+      <p class="page-sub">Share this machine's hosts with other locadots, or connect to one that's sharing.</p>
+      <div class="page-actions">
+        <button type="button" id="remote-invite-action" class="btn btn-primary" hidden>Create pairing link</button>
+        <button type="button" id="remote-connect-action" class="btn btn-primary" hidden>Connect a machine</button>
       </div>
-      <aside class="col-secondary">
-        <section class="card" aria-label="Roles">
-          <div class="card-head"><div class="card-title-wrap"><h3 class="card-title">How it works</h3></div></div>
-          <div class="card-body help-list">
-            <p>1. Turn on a tunnel: your own domain keeps the same address; a quick tunnel is free but its URL changes on restart.</p>
-            <p>2. Create a pairing link. It works once and expires after 5 minutes.</p>
-            <p>3. The other machine pastes it under <a href="#/machines">Connected machines</a>.</p>
-            <div class="role-table">
-              <div><strong>Viewer</strong><span>browse the hosts you pick</span></div>
-              <div><strong>Editor</strong><span>also add and change hosts here</span></div>
-              <div><strong>Admin</strong><span>also delete hosts, change sharing, and open this dashboard and any port on this machine</span></div>
+    </div>
+
+    <div class="tabs" role="tablist" data-tabs="remote" aria-label="Remote sections">
+      <button type="button" role="tab" data-tab="hub">This machine</button>
+      <button type="button" role="tab" data-tab="machines">Connected machines</button>
+    </div>
+
+    <div data-tab-panel="hub">
+      <div class="layout">
+        <div class="col-primary">
+          <section id="hub-card" class="card" aria-label="This machine">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <h3 class="card-title">This machine</h3>
+                <p class="card-desc">Share its hosts with other locadots through a Cloudflare hostname.</p>
+              </div>
             </div>
-            <p class="dim">Editors can reach anything this machine can. Change or revoke a role any time under Peers.</p>
-          </div>
-        </section>
-      </aside>
+
+            <div class="hub-section">
+              <div class="hub-hero-top">
+                <span class="pill"><span id="hub-dot" class="dot"></span><span id="hub-status-text" class="hub-status-text">Off</span></span>
+                <button type="button" id="hub-stop-btn" class="btn btn-sm btn-danger" hidden>Stop</button>
+              </div>
+              <div id="hub-url-row" class="hub-row" hidden>
+                <span id="hub-url" class="hub-url"></span>
+                <button type="button" id="hub-url-copy" class="copy-btn">Copy</button>
+              </div>
+              <div id="hub-login-row" class="hub-row" hidden>
+                <a id="hub-login-link" href="#" target="_blank" rel="noopener noreferrer">Log in to Cloudflare</a>
+              </div>
+              <div id="hub-quick-warning" class="hub-warn" hidden>URL changes when locadot restarts &mdash; receivers must update it.</div>
+              <div id="hub-error-row" class="hub-warn" hidden></div>
+            </div>
+
+            <div id="hub-setup-section" class="hub-section" hidden>
+              <div class="label">Turn on remote access</div>
+              <div class="setup-grid">
+                <div class="setup-card">
+                  <div class="setup-card-title">Use my domain</div>
+                  <p class="setup-card-desc">Your own hostname on a domain in your Cloudflare account. Stable URL.</p>
+                  <form id="hub-named-form" class="hub-form-row" novalidate>
+                    <div class="field">
+                      <label for="hub-domain">Domain</label>
+                      <input type="text" id="hub-domain" placeholder="hub.example.com" autocomplete="off">
+                    </div>
+                    <div class="field">
+                      <label for="hub-tunnel-name">Tunnel name</label>
+                      <input type="text" id="hub-tunnel-name" placeholder="locadot (optional)" autocomplete="off">
+                    </div>
+                    <button type="submit" id="hub-named-submit" class="btn btn-sm btn-primary">Use my domain</button>
+                  </form>
+                </div>
+                <div class="setup-card">
+                  <div class="setup-card-title">Quick tunnel</div>
+                  <p class="setup-card-desc">Free, no account needed. The URL changes each time it restarts.</p>
+                  <button type="button" id="hub-quick-btn" class="btn btn-sm">Use quick tunnel</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="hub-section">
+              <div id="hub-localhost-row" class="toggle-row" hidden>
+                <div>
+                  <div class="label">Admins can open this dashboard and any port</div>
+                  <div class="tile-sub">Admin peers get this dashboard at <span class="mono">&lt;domain&gt;.localhost</span> and this machine's localhost at <span class="mono">&lt;port&gt;.&lt;domain&gt;.localhost</span> on their side.</div>
+                </div>
+                <button type="button" id="hub-localhost" class="switch" role="switch" aria-checked="true" aria-label="Let admins open this dashboard and any port on this machine"><span class="switch-knob"></span></button>
+              </div>
+              <div id="hub-panel-row" class="toggle-row" hidden>
+                <div>
+                  <div class="label">Share this dashboard</div>
+                  <div id="hub-panel-sub" class="tile-sub"></div>
+                </div>
+                <button type="button" id="hub-panel" class="switch" role="switch" aria-checked="false" aria-label="Share this dashboard at the public URL, behind the dashboard password"><span class="switch-knob"></span></button>
+              </div>
+            </div>
+
+            <div class="hub-section">
+              <div class="label">Peers</div>
+              <div id="peers-empty" class="dim" hidden>No peers yet.</div>
+              <div id="peers-list" class="peer-list"></div>
+            </div>
+
+            <div class="hub-section">
+              <div class="label">Pending invites</div>
+              <div id="hub-share-section" class="invite-create" hidden>
+                <div class="hub-form-row">
+                  <div class="field">
+                    <label for="invite-role">Role</label>
+                    <select id="invite-role" class="input input-sm">
+                      <option value="viewer">Viewer</option>
+                      <option value="editor">Editor</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  <button type="button" id="invite-create-btn" class="btn btn-sm btn-primary">Create pairing link</button>
+                </div>
+                <div id="invite-hosts-wrap" class="host-checks" hidden></div>
+                <div id="invite-result" class="invite-result" hidden>
+                  <div class="invite-result-row">
+                    <span id="invite-string" class="invite-string mono"></span>
+                    <button type="button" id="invite-copy-btn" class="copy-btn">Copy</button>
+                  </div>
+                  <div id="invite-countdown" class="invite-countdown"></div>
+                </div>
+              </div>
+              <div id="invites-empty" class="dim" hidden>No pending invites.</div>
+              <div id="invites-list" class="invite-list"></div>
+            </div>
+          </section>
+        </div>
+        <aside class="col-secondary">
+          <details class="card" open>
+            <summary><div class="card-title-wrap"><h3 class="card-title">How it works</h3></div></summary>
+            <div class="card-body help-list">
+              <p>1. Turn on a tunnel: your own domain keeps the same address; a quick tunnel is free but its URL changes on restart.</p>
+              <p>2. Create a pairing link. It works once and expires after 5 minutes.</p>
+              <p>3. The other machine pastes it under <a href="#/remote/machines">Connected machines</a>.</p>
+              <div class="role-table">
+                <div><strong>Viewer</strong><span>browse the hosts you pick</span></div>
+                <div><strong>Editor</strong><span>also add and change hosts here</span></div>
+                <div><strong>Admin</strong><span>also delete hosts, change sharing, and open this dashboard and any port on this machine</span></div>
+              </div>
+              <p class="dim">Editors can reach anything this machine can. Change or revoke a role any time under Peers.</p>
+            </div>
+          </details>
+        </aside>
+      </div>
     </div>
-  </section>
 
-`;
-
-export const machinesView = `  <section class="view" data-view="machines" aria-label="Connected machines" hidden>
-    <div class="page-head">
-      <h2 class="page-title">Connected machines</h2>
-      <p class="page-sub">Other locadots you've connected to. Their hosts show up in your Hosts list.</p>
-    </div>
-
-      <section id="remotes-card" class="card" aria-label="Connected machines">
+    <div data-tab-panel="machines">
+      <section id="connect-card" class="card" aria-label="Connect a machine">
         <div class="card-head">
-          <div class="card-title-wrap"><h3 class="card-title">Connected machines</h3></div>
+          <div class="card-title-wrap">
+            <h3 class="card-title">Connect a machine</h3>
+            <p class="card-desc">Paste a one-time pairing link from another locadot.</p>
+          </div>
         </div>
         <div class="hub-section">
           <form id="connect-form" class="hub-form-row" novalidate>
@@ -841,12 +916,44 @@ export const machinesView = `  <section class="view" data-view="machines" aria-l
           </form>
           <div id="connect-error" class="field-error" role="alert" hidden></div>
         </div>
-        <div id="remotes-empty" class="empty" hidden>
-          <span class="empty-icon" aria-hidden="true">~</span>
-          <p>Not connected to anything yet. Paste a pairing link above.</p>
-        </div>
-        <div id="remotes-list" class="remote-list"></div>
       </section>
+
+      <section id="remotes-card" class="card" aria-label="Connected machines">
+        <div class="card-head">
+          <div class="card-title-wrap"><h3 class="card-title">Connected machines</h3></div>
+        </div>
+        <div class="hub-section">
+          <div id="remotes-empty" class="empty" hidden>
+            <span class="empty-icon" aria-hidden="true">~</span>
+            <p class="empty-title">Not connected to anything yet</p>
+            <p class="empty-desc">Paste a pairing link above to connect to another locadot.</p>
+          </div>
+          <div id="remotes-list" class="remote-list"></div>
+        </div>
+      </section>
+    </div>
   </section>
 
+`;
+
+/** Styles for these pages, appended after theme.ts. */
+export const css = `
+.hub-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.hub-status-text { font-size: 15px; font-weight: 600; }
+#hub-dot { width: 10px; height: 10px; }
+.setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.setup-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.setup-card-title { font-size: 13.5px; font-weight: 600; }
+.setup-card-desc { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.setup-card .hub-form-row { margin-top: 2px; flex-direction: column; align-items: stretch; }
+.setup-card .hub-form-row .field { min-width: 0; }
+.setup-card .hub-form-row > .btn { align-self: flex-start; }
+[data-view="remote"] .card-title { white-space: nowrap; }
+.setup-card > .btn { align-self: flex-start; }
+.invite-create { display: flex; flex-direction: column; gap: 10px; padding-bottom: 4px; }
+.remote-host-row a { color: var(--accent); text-decoration: none; }
+.remote-host-row a:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .setup-grid { grid-template-columns: minmax(0, 1fr); }
+}
 `;

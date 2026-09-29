@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Dashboard redesign. Pages are grouped: Hosts has All/Shared tabs (Public sharing moved in), Remote has This
+  machine/Connected machines tabs, Settings has General/Security/Preferences/Developer tabs. Old links redirect.
+- Hosts: Add host opens a dialog; each row has one main action plus a ⋯ menu (edit, share, access, password, remove).
+- Phones and tablets: bottom tab bar, bottom-sheet menus and dialogs, card layouts, icon rail below 1100px; subtle
+  enter/exit animations that respect reduced motion. Logs get level colours, copy and a sticky toolbar.
+
 ## 2.4.0 (2026-09-29)
 
 ### Added
