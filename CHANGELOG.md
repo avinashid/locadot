@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Internal access for shared mappings: `locadot allow --host app.localhost localhost:3000` (or **Access** on a row in the
+  dashboard) lets tunnel visitors and connected machines, viewers included, reach the listed internal addresses through
+  that `--cors` domain's pass-through. Normally they're limited to public hosts. locadot's own ports stay blocked.
+  `add --allow`, `PUT /api/hosts/:host {"allow": [...]}`.
+
 ## 2.2.0 (2026-09-29)
 
 ### Added

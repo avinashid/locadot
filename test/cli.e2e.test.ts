@@ -412,6 +412,29 @@ test("locadot tunnel: a public host reaches its mapping, with --cors working for
     const via = await httpGet(httpPort, publicHost, `/__locadot/x/${target}`, { headers: { "Sec-Fetch-Site": "same-origin" } });
     assert.equal(via.status, 403, target);
   }
+  // Unless the owner allowed the address; the proxy's own ports stay shut even when all of localhost is.
+  assert.equal(cli("allow", "--host", "share.localhost", "localhost").status, 0);
+  const allowedVia = () => httpGet(httpPort, publicHost, `/__locadot/x/http/localhost:${upstreamPort}/hi`, { headers: { "Sec-Fetch-Site": "same-origin" } });
+  let allowed = await allowedVia();
+  for (let i = 0; i < 30 && allowed.status !== 200; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    allowed = await allowedVia();
+  }
+  assert.equal(allowed.body, "upstream /hi");
+  for (const target of [`http/127.0.0.1:${httpPort}/healthz`, `http/localhost:${httpsPort}/`, "http/192.168.1.1/"]) {
+    const via = await httpGet(httpPort, publicHost, `/__locadot/x/${target}`, { headers: { "Sec-Fetch-Site": "same-origin" } });
+    assert.equal(via.status, 403, target);
+  }
+  // ...nor through this machine's LAN address or a name that resolves to it.
+  const lan = Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === "IPv4" && !i.internal)?.address;
+  assert.equal(cli("allow", "--host", "share.localhost", ...(lan ? [lan] : []), os.hostname().toLowerCase()).status, 0);
+  await new Promise((r) => setTimeout(r, 500));
+  for (const target of [...(lan ? [`http/${lan}:${httpPort}/api/hosts`] : []), `http/${os.hostname().toLowerCase()}:${httpPort}/api/hosts`]) {
+    const via = await httpGet(httpPort, publicHost, `/__locadot/x/${target}`, { headers: { "Sec-Fetch-Site": "same-origin" } });
+    assert.ok(via.status === 403 || via.status === 503, `${target}: ${via.status}`);
+    assert.doesNotMatch(via.body, /"target":/, target);
+  }
+  assert.equal(cli("allow", "--host", "share.localhost", "--clear").status, 0);
 
   const hosts = JSON.parse((await httpGet(httpPort, "localhost", "/api/hosts")).body);
   assert.deepEqual(hosts[0].tunnel, { enabled: true, status: "up", url: `https://${publicHost}` });

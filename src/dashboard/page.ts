@@ -347,6 +347,9 @@ td.badges .badge + .badge { margin-left: 4px; }
 .btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--muted-dim); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn-sm.btn-icon { width: 28px; padding: 0; color: var(--muted); }
+.btn-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn-icon.is-set { color: var(--accent); border-color: transparent; background: var(--accent-bg); }
 .btn-block { width: 100%; }
 .btn-primary { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
 .btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
@@ -726,6 +729,82 @@ details.card[open] summary { border-bottom: 1px solid var(--border); border-bott
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
+}
+
+/* ---------- allow dialog ---------- */
+#allow-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: var(--shadow-md);
+}
+#allow-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.modal-sub { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.modal-close { width: 28px; height: 28px; padding: 0; border-radius: 999px; flex-shrink: 0; }
+.modal-close svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-desc { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.modal-warn {
+  font-size: 12.5px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  line-height: 1.5;
+}
+.allow-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.allow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.allow-row span { font-size: 13px; word-break: break-all; }
+.allow-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.allow-remove:hover { color: var(--down); background: var(--down-bg); border-color: transparent; }
+.allow-empty { font-size: 13px; padding: 4px 0; }
+.allow-add-row { display: flex; gap: 8px; }
+.allow-add-row .input { flex: 1; }
+.allow-add-row .btn { height: auto; align-self: stretch; padding: 0 14px; }
+.modal-hint { margin: 0; font-size: 12px; color: var(--muted-dim); }
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
 }
 
 /* ---------- toasts ---------- */
@@ -2188,6 +2267,135 @@ const clientJs = `
     return shareBtn;
   }
 
+  var allowDialog = document.getElementById("allow-dialog");
+  var allowHostEl = document.getElementById("allow-host");
+  var allowWarnEl = document.getElementById("allow-warn");
+  var allowListEl = document.getElementById("allow-list");
+  var allowInput = document.getElementById("allow-input");
+  var allowAddBtn = document.getElementById("allow-add");
+  var allowErrorEl = document.getElementById("allow-error");
+  var allowCancelBtn = document.getElementById("allow-cancel");
+  var allowSaveBtn = document.getElementById("allow-save");
+  var allowCloseBtn = document.getElementById("allow-close");
+  var allowOriginal = [];
+  var allowCurrent = [];
+  var allowRow = null;
+
+  function allowListsEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  function updateAllowSave() {
+    allowSaveBtn.disabled = allowListsEqual(allowCurrent, allowOriginal);
+  }
+
+  function renderAllowList() {
+    clear(allowListEl);
+    if (!allowCurrent.length) {
+      var empty = document.createElement("div");
+      empty.className = "dim allow-empty";
+      empty.textContent = "No internal addresses. Shared visitors reach public hosts only.";
+      allowListEl.appendChild(empty);
+      return;
+    }
+    allowCurrent.forEach(function (entry) {
+      var entryRow = document.createElement("div");
+      entryRow.className = "allow-row";
+      var text = document.createElement("span");
+      text.className = "mono";
+      text.textContent = entry;
+      entryRow.appendChild(text);
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "allow-remove";
+      removeBtn.textContent = "\\u00d7";
+      removeBtn.setAttribute("aria-label", "Remove " + entry);
+      removeBtn.addEventListener("click", function () {
+        allowCurrent = allowCurrent.filter(function (item) { return item !== entry; });
+        renderAllowList();
+        updateAllowSave();
+      });
+      entryRow.appendChild(removeBtn);
+      allowListEl.appendChild(entryRow);
+    });
+  }
+
+  function allowAddEntry() {
+    var value = allowInput.value.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\\/\\//, "").replace(/\\/$/, "");
+    allowErrorEl.hidden = true;
+    allowErrorEl.textContent = "";
+    if (!value || /\\s/.test(value)) {
+      allowErrorEl.textContent = "Enter a host or host:port, e.g. localhost:3000.";
+      allowErrorEl.hidden = false;
+      return;
+    }
+    if (allowCurrent.indexOf(value) !== -1) {
+      allowErrorEl.textContent = value + " is already in the list.";
+      allowErrorEl.hidden = false;
+      return;
+    }
+    allowCurrent.push(value);
+    allowInput.value = "";
+    renderAllowList();
+    updateAllowSave();
+  }
+
+  function closeAllowDialog() {
+    allowDialog.close();
+  }
+
+  function openAllowDialog(row) {
+    allowRow = row;
+    allowOriginal = (row.allow || []).slice();
+    allowCurrent = allowOriginal.slice();
+    allowHostEl.textContent = row.host;
+    allowWarnEl.hidden = !!row.cors;
+    allowErrorEl.hidden = true;
+    allowErrorEl.textContent = "";
+    allowInput.value = "";
+    renderAllowList();
+    allowSaveBtn.disabled = true;
+    allowSaveBtn.classList.remove("busy");
+    allowCancelBtn.disabled = false;
+    allowDialog.showModal();
+    setTimeout(function () { allowInput.focus(); }, 0);
+  }
+
+  allowAddBtn.addEventListener("click", allowAddEntry);
+  allowInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); allowAddEntry(); }
+  });
+  allowCancelBtn.addEventListener("click", closeAllowDialog);
+  allowCloseBtn.addEventListener("click", closeAllowDialog);
+  allowDialog.addEventListener("click", function (e) {
+    if (e.target === allowDialog) closeAllowDialog();
+  });
+
+  allowSaveBtn.addEventListener("click", function () {
+    if (!allowRow) return;
+    var host = allowRow.host;
+    allowSaveBtn.disabled = true;
+    allowSaveBtn.classList.add("busy");
+    allowCancelBtn.disabled = true;
+    apiFetch("/api/hosts/" + encodeURIComponent(host), { method: "PUT", body: JSON.stringify({ allow: allowCurrent }) })
+      .then(function () {
+        showToast("Saved internal access for " + host, "success");
+        closeAllowDialog();
+        return loadHosts();
+      })
+      .catch(function (err) {
+        allowErrorEl.textContent = err && err.message ? err.message : String(err);
+        allowErrorEl.hidden = false;
+        allowSaveBtn.disabled = false;
+        allowSaveBtn.classList.remove("busy");
+        allowCancelBtn.disabled = false;
+      });
+  });
+
   function labelCells(tr, labels) {
     for (var i = 0; i < tr.children.length; i++) tr.children[i].setAttribute("data-label", labels[i] || "");
   }
@@ -2228,13 +2436,14 @@ const clientJs = `
 
     var optionsTd = document.createElement("td");
     var flags = [];
-    if (row.insecure) flags.push(["insecure", "Upstream TLS certificate is not verified"]);
-    if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host"]);
+    if (row.insecure) flags.push(["insecure", "Upstream TLS certificate is not verified", "badge-warn"]);
+    if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host", "badge-cors"]);
+    if (row.allow && row.allow.length) flags.push(["allow " + row.allow.length, row.allow.join(", "), "badge-accent"]);
     if (flags.length) {
       optionsTd.className = "badges";
       flags.forEach(function (flag) {
         var badge = document.createElement("span");
-        badge.className = "badge " + (flag[0] === "cors" ? "badge-cors" : "badge-warn");
+        badge.className = "badge " + flag[2];
         badge.textContent = flag[0];
         badge.title = flag[1];
         optionsTd.appendChild(badge);
@@ -2265,6 +2474,20 @@ const clientJs = `
     var actionsWrap = document.createElement("div");
     actionsWrap.className = "row-actions";
     actionsTd.appendChild(actionsWrap);
+    var accessBtn = document.createElement("button");
+    accessBtn.type = "button";
+    var allowCount = row.allow ? row.allow.length : 0;
+    accessBtn.className = "btn btn-sm btn-icon" + (allowCount ? " is-set" : "");
+    accessBtn.title = allowCount ? "Internal access: " + row.allow.join(", ") : "Internal access: let shared visitors reach addresses such as localhost:3000";
+    accessBtn.setAttribute("aria-label", "Internal access for " + row.host);
+    var accessSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    accessSvg.setAttribute("viewBox", "0 0 24 24");
+    accessSvg.setAttribute("aria-hidden", "true");
+    var accessPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    accessPath.setAttribute("d", "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zM9.5 12l1.8 1.8L15 10");
+    accessSvg.appendChild(accessPath);
+    accessBtn.appendChild(accessSvg);
+    accessBtn.addEventListener("click", function () { openAllowDialog(row); });
     var editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn btn-sm";
@@ -2289,6 +2512,7 @@ const clientJs = `
     });
     if (!row.remote) {
       actionsWrap.appendChild(shareButton(row));
+      actionsWrap.appendChild(accessBtn);
       actionsWrap.appendChild(editBtn);
     }
     actionsWrap.appendChild(removeBtn);
@@ -3650,6 +3874,30 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
   <a href="https://github.com/avinashid/locadot" target="_blank" rel="noopener noreferrer">github.com/avinashid/locadot</a>
 </footer>
 </div>
+<dialog id="allow-dialog">
+  <div class="modal-head">
+    <div>
+      <h3 class="modal-title">Internal access</h3>
+      <p id="allow-host" class="modal-sub mono"></p>
+    </div>
+    <button type="button" id="allow-close" class="btn btn-ghost modal-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <p class="modal-desc">People who open this mapping through a tunnel or remote access can only reach public hosts. Allow the internal addresses this app calls, such as its API on localhost.</p>
+    <div id="allow-warn" class="modal-warn" hidden>Bypass CORS is off for this mapping. These addresses take effect once it's on, because the page reaches them through locadot's pass-through.</div>
+    <div id="allow-list" class="allow-list"></div>
+    <div class="allow-add-row">
+      <input type="text" id="allow-input" class="input" placeholder="localhost:3000" aria-label="Address" autocomplete="off">
+      <button type="button" id="allow-add" class="btn btn-sm">Add</button>
+    </div>
+    <p class="modal-hint">host:port, or a host alone for any port. locadot's own ports are always blocked.</p>
+    <div id="allow-error" class="field-error" role="alert" hidden></div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" id="allow-cancel" class="btn">Cancel</button>
+    <button type="button" id="allow-save" class="btn btn-primary" disabled>Save changes</button>
+  </div>
+</dialog>
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 <script nonce="${safeNonce}">${clientJs}</script>
 </body>

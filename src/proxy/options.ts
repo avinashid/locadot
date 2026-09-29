@@ -2,7 +2,7 @@ import http from "http";
 import httpProxy from "http-proxy";
 import type { HostEntry } from "../types";
 import { sameOriginHeaders, type Lookup } from "./cors";
-import { publicOnlyAgents } from "./guard";
+import { notSelfAgents, publicOnlyAgents } from "./guard";
 import { viaHeaders, type Via } from "./passthrough";
 import { fromTunnel, isTls } from "./request";
 
@@ -24,14 +24,24 @@ export const proxyOptions = (req: http.IncomingMessage, entry: HostEntry, lookup
   headers: { "X-Original-Host": req.headers.host || "", ...(entry.cors ? { ...sameOriginHeaders(req, entry, lookup), ...DECODABLE } : {}) },
 });
 
-export const viaOptions = (req: http.IncomingMessage, entry: HostEntry, via: Via): httpProxy.ServerOptions => ({
+/** On the mapping's allow list: "open" goes anywhere, "not-self" anywhere but this machine (see router.ts). */
+export type Listed = "open" | "not-self" | undefined;
+
+const agentFor = (req: http.IncomingMessage, via: Via, listed: Listed) => {
+  const tls = via.scheme === "https" || via.scheme === "wss";
+  if (listed === "not-self") return { agent: tls ? notSelfAgents.https : notSelfAgents.http };
+  if (fromTunnel(req) && !listed) return { agent: tls ? publicOnlyAgents.https : publicOnlyAgents.http };
+  return {};
+};
+
+export const viaOptions = (req: http.IncomingMessage, entry: HostEntry, via: Via, listed?: Listed): httpProxy.ServerOptions => ({
   target: viaOrigin(via),
   changeOrigin: true,
   ws: true,
   secure: !entry.insecure,
   cookieDomainRewrite: { "*": "" },
   headers: { ...viaHeaders(req, via, entry.target), ...DECODABLE },
-  ...(fromTunnel(req) ? { agent: via.scheme === "https" || via.scheme === "wss" ? publicOnlyAgents.https : publicOnlyAgents.http } : {}),
+  ...agentFor(req, via, listed),
 });
 
 export const viaOrigin = (via: Via) => `${via.scheme}://${via.host}`;

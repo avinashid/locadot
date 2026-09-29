@@ -69,6 +69,7 @@ export async function startCentralProxy() {
     stats,
     lookup: (host) => registry.get().hosts[tunnels.hostFor(host) ?? host],
     tunnelFor: (host) => tunnels.hostFor(host),
+    ownPorts: () => [info.httpPort, info.httpsPort],
     remoteFor,
     localFor,
     remoteHosts: (name) =>

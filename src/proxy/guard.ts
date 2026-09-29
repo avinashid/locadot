@@ -2,6 +2,7 @@ import dns from "dns";
 import http from "http";
 import https from "https";
 import net from "net";
+import os from "os";
 
 /**
  * Tunnel visitors are the internet. Their --cors pass-through calls may only leave this machine
@@ -82,4 +83,31 @@ const publicLookup: net.LookupFunction = (hostname, options, callback) => {
 export const publicOnlyAgents = {
   http: new http.Agent({ keepAlive: true, lookup: publicLookup }),
   https: new https.Agent({ keepAlive: true, lookup: publicLookup }),
+};
+
+/** Loopback or one of this machine's own interface addresses (its LAN IP reaches the proxy just as well). */
+export const isSelfAddress = (address: string) => {
+  if (isLoopbackHost(address)) return true;
+  const own = Object.values(os.networkInterfaces()).flatMap((list) => (list || []).map((item) => item.address.toLowerCase()));
+  return own.includes(address.replace(/^\[|\]$/g, "").toLowerCase());
+};
+
+// For an allowed address on the proxy's own port: whatever the name resolves to, it must not be this machine.
+const notSelfLookup: net.LookupFunction = (hostname, options, callback) => {
+  dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, "", 0);
+    const allowed = addresses.filter((entry) => !isSelfAddress(entry.address));
+    if (!allowed.length) {
+      const error: NodeJS.ErrnoException = new Error(`${hostname} is this machine`);
+      error.code = "ESELF";
+      return callback(error, "", 0);
+    }
+    if (options.all) return (callback as unknown as (e: null, a: dns.LookupAddress[]) => void)(null, allowed);
+    callback(null, allowed[0].address, allowed[0].family);
+  });
+};
+
+export const notSelfAgents = {
+  http: new http.Agent({ keepAlive: true, lookup: notSelfLookup }),
+  https: new https.Agent({ keepAlive: true, lookup: notSelfLookup }),
 };

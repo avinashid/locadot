@@ -64,6 +64,7 @@ npx locadot open                                    # opens the dashboard at htt
 | `locadot add --host <name>.localhost --target <url>` | Map a domain to any upstream: `3000`, `127.0.0.1:8080`, `http://10.0.0.5:8080/app`, `https://google.com`. |
 | `locadot update --host <name>.localhost --port/--target …` | Change the destination of an existing domain. |
 | `locadot remove --host <name>.localhost` (`rm`) | Remove a domain. |
+| `locadot allow --host <name>.localhost [addresses…] [--rm] [--clear]` | Let people on a tunnel or remote access reach internal addresses (`localhost:3000`) through a `--cors` domain. With no addresses, shows the list. Also `add … --allow a,b`. |
 | `locadot list` (`ls`, `host`) `[--json]` | Show all mappings. |
 | `locadot clear:hosts` | Remove all mappings. |
 | `locadot open [host]` | Open a domain, or the dashboard when no host is given, in your browser. |
@@ -105,6 +106,17 @@ origin in pages rewritten to the public URL (other shared mappings get their pub
 pass-through calls may only go to public addresses: loopback, LAN, link-local and cloud-metadata addresses are refused, checked
 on the address actually dialled, so the tunnel can't be used to reach your machine or network. The dashboard can also do this:
 use **Share** / **Unshare** on a row.
+
+**Internal access.** If the shared frontend calls an internal API (`http://localhost:3000`), allow that address on the
+mapping, and tunnel visitors and connected machines (viewers included) can then reach it through the page:
+
+```sh
+locadot allow --host app.localhost localhost:3000      # add; `--rm` removes, `--clear` empties, no address lists
+```
+
+In the dashboard, click **Access** on the row. An entry is `host:port`, or a host alone for any of its ports. `127.0.0.1`
+and `0.0.0.0` count as `localhost`. Only the page's own requests can use it, and locadot's own ports stay blocked even
+when all of `localhost` is allowed. Allow only what the app needs: anyone who can open the mapping can reach these addresses.
 
 ### Remote access (locadot to locadot)
 
@@ -247,6 +259,7 @@ each time the proxy starts.
 | `GET /api/logs?lines=200` | | `{ lines: [...] }` |
 | `POST /api/hosts` | `{ "host": "app.localhost", "target": "3000", "insecure": false, "cors": false }` | Add a mapping (201; 409 if it exists). |
 | `PUT /api/hosts/:host` | `{ "target": "https://example.com", "insecure": false, "cors": true }` | Change a mapping (404 if unknown). |
+| `PUT /api/hosts/:host` | `{ "allow": ["localhost:3000"] }` | Replace the internal addresses shared visitors may reach (normalized; `[]` clears; 400 if one is invalid). |
 | `DELETE /api/hosts/:host` | | Remove a mapping. |
 | `POST /api/startup` | `{ "enabled": true }` | Start at boot on/off. |
 | `POST /api/trust` | `{ "trusted": true }` | Trust or untrust the CA. |

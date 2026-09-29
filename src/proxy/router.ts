@@ -1,4 +1,5 @@
 import http from "http";
+import net from "net";
 import type { Duplex } from "stream";
 import httpProxy from "http-proxy";
 import { proxyNotFound, remoteLocalhost, upstreamDown } from "../constants/template";
@@ -9,8 +10,9 @@ import type { HostEntry, HostStats, Remote } from "../types";
 import type { HubDecision } from "./hub";
 import { LANDING_PATH, canReachLocalhost, localOptions, remoteOptions, type LocalTarget } from "./remote";
 import { allowOrigin, isPreflight, preflightHeaders, type Lookup } from "./cors";
-import { proxyOptions, viaOptions, viaOrigin } from "./options";
-import { isLoopbackHost, isPublicHost } from "./guard";
+import { proxyOptions, viaOptions, viaOrigin, type Listed } from "./options";
+import { isLoopbackHost, isPublicHost, isSelfAddress } from "./guard";
+import { allowMatches, splitHost } from "../lib/allow";
 import { SHIM_PATH, isSameOrigin, parseVia, shimScript, type Via } from "./passthrough";
 import { fromRemote, fromTunnel, hostOf, isTls, loopbackOf, tag } from "./request";
 import { record } from "./stats";
@@ -34,6 +36,8 @@ export interface RouterContext {
   localFor?(host: string): LocalTarget | undefined;
   /** Receiver side: local names of a remote's mappings, for the landing page. */
   remoteHosts?(name: string): string[];
+  /** The proxy's own ports, which a mapping's `allow` list can never open up. */
+  ownPorts?(): number[];
 }
 
 // Cloudflare swaps an origin's 502/504 for its own "bad gateway" page, so through a tunnel say 503 and the page survives.
@@ -77,9 +81,23 @@ const peerMayReach = (req: http.IncomingMessage, via: Via) => {
   return Boolean(allowed && !allowed.includes(port));
 };
 
-/** Same-origin only, a tunnel visitor may only reach public hosts (see guard.ts), and a peer only its share of localhost. */
-const viaAllowed = (req: http.IncomingMessage, via: Via) =>
-  isSameOrigin(req) && (!fromTunnel(req) || isPublicHost(via.host)) && peerMayReach(req, via);
+/**
+ * An address on the mapping's `allow` list. The proxy's own ports on this machine never are (the dashboard is behind
+ * them): "not-self" means the name must be checked at connect time, on the address actually dialled.
+ */
+const listed = (req: http.IncomingMessage, ctx: RouterContext, entry: HostEntry, via: Via): Listed => {
+  if (!(fromTunnel(req) || fromRemote(req)) || !allowMatches(entry.allow, via.host, via.scheme)) return undefined;
+  const { host, port } = splitHost(via.host, via.scheme);
+  if (!(ctx.ownPorts?.() ?? []).includes(port)) return "open";
+  return isSelfAddress(host) ? undefined : net.isIP(host) ? "open" : "not-self";
+};
+
+/**
+ * Same-origin only, a tunnel visitor may only reach public hosts (see guard.ts), and a peer only its share of localhost,
+ * unless the mapping's owner listed the address in `allow`.
+ */
+const viaAllowed = (req: http.IncomingMessage, via: Via, allowed: Listed) =>
+  isSameOrigin(req) && (Boolean(allowed) || ((!fromTunnel(req) || isPublicHost(via.host)) && peerMayReach(req, via)));
 
 /**
  * Receiver side: `<sender host>=<our URL for it>` for every mapping of this remote, so a --cors sender rewrites
@@ -171,9 +189,13 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
       return;
     }
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;
-    if (via && !viaAllowed(req, via)) {
+    const allowed = via && listed(req, ctx, entry, via);
+    if (via && !viaAllowed(req, via, allowed)) {
       res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("locadot: the pass-through only serves the page's own requests, and only public hosts through a tunnel.\n");
+      res.end(
+        `locadot: the pass-through only serves the page's own requests, and only public hosts to shared visitors. ` +
+          `To let them reach ${via.host}, run \`locadot allow --host ${host} ${via.host}\` on this machine, or use Internal access on the mapping in the dashboard.\n`
+      );
       return;
     }
 
@@ -185,7 +207,7 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
     let options = proxyOptions(req, entry, ctx.lookup);
     if (via) {
       tag(req, { via });
-      options = viaOptions(req, entry, via);
+      options = viaOptions(req, entry, via, allowed);
       req.url = via.path;
     }
     const upstream = via ? viaOrigin(via) : entry.target;
@@ -290,14 +312,15 @@ export function handleUpgrade(req: http.IncomingMessage, socket: Duplex, head: B
       return;
     }
     const via = passThrough(req, entry) ? parseVia(req.url) : undefined;
-    if (via && !viaAllowed(req, via)) {
+    const allowed = via && listed(req, ctx, entry, via);
+    if (via && !viaAllowed(req, via, allowed)) {
       socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       return;
     }
     logger.debug(`WebSocket upgrade for ${host}`);
     let options = proxyOptions(req, entry, ctx.lookup);
     if (via) {
-      options = viaOptions(req, entry, via);
+      options = viaOptions(req, entry, via, allowed);
       req.url = via.path;
     }
     ctx.proxy.ws(req, socket, head, options, (err: NodeJS.ErrnoException) => {

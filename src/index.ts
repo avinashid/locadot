@@ -48,13 +48,21 @@ program
   .version(version)
   .helpOption("--help", "Display help for command");
 
-destinationOptions(program.command("add").description("Map a new domain to a port or URL").addOption(hostOption())).action(
-  run((options) => Commands.add(options))
-);
+destinationOptions(program.command("add").description("Map a new domain to a port or URL").addOption(hostOption()))
+  .option("--allow <addresses>", "Internal addresses shared visitors may reach through --cors, e.g. localhost:3000,localhost:4000")
+  .action(run((options) => Commands.add(options)));
 
 destinationOptions(
   program.command("update").description("Change the destination of a mapped domain").addOption(hostOption())
 ).action(run((options) => Commands.update(options)));
+
+program
+  .command("allow [addresses...]")
+  .description("Let tunnel visitors and connected machines reach internal addresses (localhost:3000) through a --cors domain")
+  .addOption(hostOption())
+  .option("--rm", "Remove the given addresses instead of adding them")
+  .option("--clear", "Remove every allowed address")
+  .action(run((addresses, options) => Commands.allow(addresses, options)));
 
 program
   .command("remove")

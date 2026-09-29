@@ -5,6 +5,8 @@ export interface HostEntry {
   insecure?: boolean;
   /** Make the upstream think requests come from itself, and let any origin call it. */
   cors?: boolean;
+  /** Internal addresses (localhost:3000) a tunnel visitor or hub peer may reach through the --cors pass-through. */
+  allow?: string[];
   /** Share on a public Cloudflare quick tunnel (https://<random>.trycloudflare.com). */
   tunnel?: boolean;
   /** Receiver side: this name forwards to a mapping on a connected sender (see lib/remotes.ts). */

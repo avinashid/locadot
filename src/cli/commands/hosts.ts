@@ -1,6 +1,7 @@
 import Localhost, { InputError } from "../../lib/localhost";
 import RegistryStore from "../../lib/registry";
 import HostOps from "../../lib/hosts";
+import { parseAllowList } from "../../lib/allow";
 import { urlFor } from "../../lib/urls";
 import type { HostEntry } from "../../types";
 import { ensureRunning, print } from "../shared";
@@ -11,6 +12,7 @@ export type TargetOptions = {
   target?: string;
   insecure?: boolean;
   cors?: boolean;
+  allow?: string;
   start?: boolean;
 };
 
@@ -28,6 +30,7 @@ const mapping = (options: TargetOptions) => ({
   target: resolveTarget(options),
   insecure: options.insecure,
   cors: options.cors,
+  allow: options.allow,
 });
 
 const warnIfDown = async (entry: HostEntry) => {
@@ -52,6 +55,27 @@ export async function update(options: TargetOptions) {
   await warnIfDown(entry);
 }
 
+export async function allow(addresses: string[], options: { host: string; rm?: boolean; clear?: boolean }) {
+  const host = Localhost.requireHost(options.host);
+  const entry = RegistryStore.read().hosts[host];
+  if (!entry) throw new InputError(`❌ ${host} isn't mapped. Add it first: locadot add --host ${host} --port <port> --cors`);
+  if (options.clear && addresses.length) throw new InputError("❌ Use either --clear or addresses, not both.");
+  if (options.rm && !addresses.length) throw new InputError("❌ Pass the addresses to remove.");
+
+  const current = entry.allow ?? [];
+  let next = current;
+  if (options.clear) next = [];
+  else if (options.rm) {
+    const drop = new Set(parseAllowList(addresses));
+    next = current.filter((item) => !drop.has(item));
+  } else if (addresses.length) next = [...current, ...parseAllowList(addresses)];
+
+  const { entry: saved } = next === current ? { entry } : await HostOps.setAllow({ host, allow: next });
+  const list = saved.allow ?? [];
+  print(list.length ? `🔓 ${urlFor(host)} lets shared visitors reach: ${list.join(", ")}` : `🔒 ${urlFor(host)} lets shared visitors reach public hosts only.`);
+  if (list.length && !saved.cors) print(`ℹ️  Takes effect once --cors is on: locadot update --host ${host} --target ${saved.target} --cors`);
+}
+
 export async function remove(options: { host: string }) {
   const { host } = await HostOps.remove(options);
   print(`🗑️  Removed ${host}.`);
@@ -69,7 +93,7 @@ export async function list(options: { json?: boolean }) {
   }
   const width = Math.max(...hosts.map(([host]) => urlFor(host).length));
   for (const [host, entry] of hosts) {
-    print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}`);
+    print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}${entry.allow?.length ? `  (allow ${entry.allow.join(", ")})` : ""}`);
   }
   print(`☑️ Total: ${hosts.length}.`);
 }

@@ -61,7 +61,7 @@ async function machine(name: string) {
     return { ...r, out: `${r.stdout}${r.stderr}` };
   };
   const registry = () => JSON.parse(fs.readFileSync(path.join(home, ".locadot-registry.json"), "utf8")).hosts;
-  return { home, httpPort, run, registry };
+  return { home, httpPort, httpsPort, run, registry };
 }
 
 
@@ -143,6 +143,34 @@ test("remote pass-through: a --cors page's localhost:<port> calls reach the send
       headers: { "Sec-Fetch-Site": "same-origin" },
     });
     assert.equal(res.status, 403);
+  });
+
+  await t.test("an address on the mapping's allow list opens it to a viewer, and only that address", async () => {
+    const other = await freePort();
+    assert.match(sender.run("allow", "--host", "app.localhost", `127.0.0.1:${apiPort}`).out, new RegExp(`localhost:${apiPort}`));
+    assert.ok(await waitFor(async () => (await via(viewer, "/auth/token", { Cookie: "sid=s3cret" })).status === 200), "viewer reaches the allowed API");
+    const blocked = await request(viewer.httpPort, `app.localhost:${viewer.httpPort}`, `/__locadot/x/http/localhost:${other}/`, {
+      headers: { "Sec-Fetch-Site": "same-origin" },
+    });
+    assert.equal(blocked.status, 403);
+    const crossSite = await via(viewer, "/auth/token", { "Sec-Fetch-Site": "cross-site" });
+    assert.equal(crossSite.status, 403);
+  });
+
+  await t.test("allowing all of localhost still keeps the sender's own proxy ports shut", async () => {
+    sender.run("allow", "--host", "app.localhost", "localhost");
+    assert.ok(await waitFor(async () => (await via(viewer, "/auth/token", { Cookie: "sid=s3cret" })).status === 200));
+    for (const port of [sender.httpPort, sender.httpsPort]) {
+      const res = await request(viewer.httpPort, `app.localhost:${viewer.httpPort}`, `/__locadot/x/http/localhost:${port}/api/hosts`, {
+        headers: { "Sec-Fetch-Site": "same-origin" },
+      });
+      assert.equal(res.status, 403, `port ${port}`);
+    }
+  });
+
+  await t.test("clearing the allow list shuts the viewer out again", async () => {
+    assert.match(sender.run("allow", "--host", "app.localhost", "--clear").out, /public hosts only/);
+    assert.ok(await waitFor(async () => (await via(viewer, "/auth/token")).status === 403));
   });
 
   await t.test("a stopped API is a 503 with locadot's page, which Cloudflare passes through", async () => {

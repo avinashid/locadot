@@ -374,7 +374,13 @@ export async function route(
       return { status: 200, body: buildSettingsBody(ctx, warnings.length ? warnings.join("; ") : undefined) };
     }
     if (path === "/api/hosts") {
-      const { host, entry } = await HostOps.add({ host: body.host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
+      const { host, entry } = await HostOps.add({
+        host: body.host,
+        target: body.target,
+        insecure: optionalBool(body.insecure, "insecure"),
+        cors: optionalBool(body.cors, "cors"),
+        allow: body.allow,
+      });
       ctx.reload();
       logger.info(`➕ dashboard: ${host} → ${entry.target}`);
       return { status: 201, body: { ok: true, host, ...entry, url: hostUrl(host, ctx) } };
@@ -389,8 +395,18 @@ export async function route(
       }
       const tunnel = optionalBool(body.tunnel, "tunnel");
       let updated;
-      if (body.target !== undefined || tunnel === undefined) {
-        updated = await HostOps.update({ host, target: body.target, insecure: optionalBool(body.insecure, "insecure"), cors: optionalBool(body.cors, "cors") });
+      if (body.allow !== undefined && body.target === undefined) {
+        updated = await HostOps.setAllow({ host, allow: body.allow });
+        logger.info(`✏️ dashboard: ${updated.host} allows ${updated.entry.allow?.join(", ") || "no internal addresses"}`);
+      }
+      if (body.target !== undefined || (tunnel === undefined && body.allow === undefined)) {
+        updated = await HostOps.update({
+          host,
+          target: body.target,
+          insecure: optionalBool(body.insecure, "insecure"),
+          cors: optionalBool(body.cors, "cors"),
+          allow: body.allow,
+        });
         logger.info(`✏️ dashboard: ${updated.host} → ${updated.entry.target}`);
       }
       if (tunnel !== undefined) {
