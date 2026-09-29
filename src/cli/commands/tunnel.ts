@@ -55,6 +55,16 @@ export async function tunnel(options: { host?: string; off?: boolean; domain?: s
     return;
   }
   if (!cloudflaredInfo(true).installed) await installTunnel();
+  // The proxy leaves a failed tunnel alone when the registry doesn't change, so clear it first to retry.
+  const current = await tunnelRows().then((rows) => rows.find((row) => row.host === host)?.tunnel, () => undefined);
+  if (current?.status === "error") {
+    await HostOps.setTunnel({ host, tunnel: false });
+    for (let i = 0; i < 20; i++) {
+      const state = await tunnelRows().then((rows) => rows.find((row) => row.host === host)?.tunnel, () => undefined);
+      if (!state || state.status === "off") break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
   await HostOps.setTunnel({ host, tunnel: true, domain: options.domain });
   await ensureRunning();
   let deadline = Date.now() + TUNNEL_TIMEOUT_MS;
@@ -64,7 +74,7 @@ export async function tunnel(options: { host?: string; off?: boolean; domain?: s
     if (state?.status === "login" && state.loginUrl && !loginShown) {
       loginShown = true;
       deadline = Date.now() + 10 * 60_000;
-      print(`🔑 Log in to Cloudflare to finish: ${state.loginUrl}`);
+      print(`🔑 Log in to Cloudflare to finish${state.domain ? ` and pick the zone ${state.domain} is in` : ""}: ${state.loginUrl}`);
     }
     if (state?.status === "up") {
       print(`🌍 ${host} is public at ${state.url}`);

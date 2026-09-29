@@ -5,7 +5,7 @@ import path from "path";
 import { spawn, spawnSync, type ChildProcess } from "child_process";
 import Constants from "../constants";
 import logger from "../utils/logger";
-import { setupNamedTunnel } from "./hub-tunnel";
+import { loggedInZones, setupDomainTunnel } from "./cloudflare-logins";
 import type { HostEntry, TunnelState } from "../types";
 
 /**
@@ -35,8 +35,10 @@ export const cloudflaredPath = () => {
 
 export interface CloudflaredInfo {
   installed: boolean;
-  /** ~/.cloudflared/cert.pem exists, so named tunnels (custom domains) can be created without a browser login. */
+  /** There's at least one Cloudflare login (origin cert). */
   loggedIn: boolean;
+  /** Zones those logins authorize; a custom domain outside them needs a Cloudflare sign-in. */
+  zones: string[];
   path?: string;
   version?: string;
 }
@@ -45,14 +47,16 @@ export interface CloudflaredInfo {
 let cached: { at: number; info: CloudflaredInfo } | undefined;
 
 export const cloudflaredInfo = (fresh = false): CloudflaredInfo => {
-  if (!fresh && cached && Date.now() - cached.at < 60_000) return cached.info;
+  // Logins change when a share signs in, and reading them is cheap; only the version check is cached.
+  const zones = loggedInZones();
+  const loggedIn = zones.length > 0 || fs.existsSync(path.join(os.homedir(), ".cloudflared", "cert.pem"));
+  if (!fresh && cached && Date.now() - cached.at < 60_000) return { ...cached.info, loggedIn, zones };
   const file = cloudflaredPath();
-  const loggedIn = fs.existsSync(path.join(os.homedir(), ".cloudflared", "cert.pem"));
-  let info: CloudflaredInfo = { installed: false, loggedIn };
+  let info: CloudflaredInfo = { installed: false, loggedIn, zones };
   if (file) {
     const result = spawnSync(file, ["--version"], { encoding: "utf8", timeout: 5000, windowsHide: true });
     const version = `${result.stdout || ""}${result.stderr || ""}`.match(/version\s+(\S+)/i)?.[1];
-    info = { installed: result.status === 0, loggedIn, path: file, ...(version ? { version } : {}) };
+    info = { installed: result.status === 0, loggedIn, zones, path: file, ...(version ? { version } : {}) };
   }
   cached = { at: Date.now(), info };
   return info;
@@ -121,7 +125,7 @@ export const installCloudflared = async () => {
   return info;
 };
 
-type Running = TunnelState & { child?: ChildProcess; publicHost?: string };
+type Running = TunnelState & { child?: ChildProcess; publicHost?: string; abort?: AbortController };
 
 /** Runs one cloudflared per mapping with `tunnel: true`; lives inside the proxy process. */
 export class TunnelManager {
@@ -138,7 +142,7 @@ export class TunnelManager {
   state(host: string): TunnelState {
     const tunnel = this.tunnels.get(host);
     if (!tunnel) return { enabled: false, status: "off" };
-    const { child, publicHost, ...state } = tunnel;
+    const { child, publicHost, abort, ...state } = tunnel;
     return state;
   }
 
@@ -177,13 +181,20 @@ export class TunnelManager {
   private startCustom(file: string, host: string, domain: string, tunnel: Running) {
     const name = `locadot-${host.replace(/[^a-z0-9-]/gi, "-")}`;
     tunnel.publicHost = domain;
-    setupNamedTunnel(domain, name, (loginUrl) => {
-      if (this.tunnels.get(host) === tunnel) Object.assign(tunnel, { status: "login", loginUrl });
-    })
-      .then(() => {
+    tunnel.abort = new AbortController();
+    setupDomainTunnel(
+      domain,
+      name,
+      (loginUrl) => {
+        if (this.tunnels.get(host) === tunnel) Object.assign(tunnel, { status: "login", loginUrl });
+      },
+      tunnel.abort.signal
+    )
+      .then(({ cert, credentials }) => {
         if (this.tunnels.get(host) !== tunnel) return;
-        Object.assign(tunnel, { status: "starting", loginUrl: undefined });
-        this.run(host, tunnel, file, ["tunnel", "--no-autoupdate", "run", "--url", this.origin(), name], (text) => {
+        Object.assign(tunnel, { status: "starting", loginUrl: undefined, abort: undefined });
+        const args = ["tunnel", "--no-autoupdate", "--origincert", cert, "run", ...(credentials ? ["--credentials-file", credentials] : []), "--url", this.origin(), name];
+        this.run(host, tunnel, file, args, (text) => {
           if (REGISTERED_PATTERN.test(text)) Object.assign(tunnel, { status: "up", url: `https://${domain}` });
         });
       })
@@ -222,6 +233,7 @@ export class TunnelManager {
     this.tunnels.delete(host);
     if (tunnel?.child || tunnel?.status === "login") logger.info(`🌍 ${host} is no longer public`);
     tunnel?.child?.kill();
+    tunnel?.abort?.abort();
   }
 
   stopAll() {

@@ -867,6 +867,15 @@ details.card[open] summary { border-bottom: 1px solid var(--border); border-bott
 .option-desc { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 .option-extra { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .option-extra .field-error { margin-top: 4px; }
+.share-progress { display: flex; gap: 14px; align-items: flex-start; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.share-progress-icon { width: 36px; height: 36px; flex-shrink: 0; border-radius: 999px; display: grid; place-items: center; background: var(--accent-bg); color: var(--accent); }
+.share-progress-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.share-progress-icon .spinner { margin: 0; }
+.share-progress-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.share-progress-title { font-size: 14px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.share-progress-text { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+.share-progress-body .btn { align-self: flex-start; margin-top: 6px; text-decoration: none; }
+.share-steps { margin: 2px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 
 /* ---------- toasts ---------- */
 .toast-container {
@@ -1221,6 +1230,7 @@ const clientJs = `
   var cfInstallBusy = false;
   var cloudflaredInstalled = false;
   var cloudflareLoggedIn = false;
+  var cloudflareZones = [];
   var proxyStopped = false;
   var pollTimer = null;
   var remotesPollTimer = null;
@@ -1439,6 +1449,7 @@ const clientJs = `
     var cf = sys.cloudflared || { installed: false };
     cloudflaredInstalled = !!cf.installed;
     cloudflareLoggedIn = !!cf.loggedIn;
+    cloudflareZones = Array.isArray(cf.zones) ? cf.zones : [];
     if (cf.installed) {
       cfValueEl.textContent = "Installed";
       cfValueEl.className = "tile-value ok";
@@ -2385,6 +2396,18 @@ const clientJs = `
   var shareDomainError = document.getElementById("share-domain-error");
   var shareDomainHint = document.getElementById("share-domain-hint");
   var shareErrorEl = document.getElementById("share-error");
+  var shareOptionsEl = document.getElementById("share-options");
+  var shareProgressEl = document.getElementById("share-progress");
+  var shareProgressIcon = document.getElementById("share-progress-icon");
+  var shareProgressTitle = document.getElementById("share-progress-title");
+  var shareProgressText = document.getElementById("share-progress-text");
+  var shareStepsEl = document.getElementById("share-steps");
+  var shareStepsDomain = document.getElementById("share-steps-domain");
+  var shareAuthLink = document.getElementById("share-auth-link");
+  var shareDescEl = shareDialogEl.querySelector(".modal-desc");
+  var sharePoll = null;
+  var shareAuthWin = null;
+  var shareAuthOpened = false;
   var shareRow = null;
   var shareMode = "random";
   var HOSTNAME_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$/;
@@ -2406,9 +2429,7 @@ const clientJs = `
     shareOptionRandom.setAttribute("aria-checked", String(mode === "random"));
     shareOptionCustom.setAttribute("aria-checked", String(mode === "custom"));
     shareCustomExtra.hidden = mode !== "custom";
-    shareDomainHint.textContent = cloudflareLoggedIn
-      ? "The DNS record is created or updated for you."
-      : "You'll be asked to log in to Cloudflare once; the login link appears on the row.";
+    updateDomainHint();
     shareDomainError.hidden = true;
     shareDomainError.textContent = "";
     shareErrorEl.hidden = true;
@@ -2416,7 +2437,108 @@ const clientJs = `
     if (mode === "custom") setTimeout(function () { shareDomainInput.focus(); }, 0);
   }
 
+  function coveringZone(hostname) {
+    for (var i = 0; i < cloudflareZones.length; i++) {
+      var zone = cloudflareZones[i];
+      if (hostname === zone || hostname.slice(-(zone.length + 1)) === "." + zone) return zone;
+    }
+    return null;
+  }
+
+  function updateDomainHint() {
+    var value = normalizeHostname(shareDomainInput.value);
+    var zone = value && !validateHostname(value) ? coveringZone(value) : null;
+    shareDomainHint.textContent = zone
+      ? "Uses your Cloudflare login for " + zone + ". The DNS record is created or updated for you."
+      : "Cloudflare opens in a new tab so you can authorize this domain's zone. Each zone you authorize is remembered.";
+  }
+
+  var ICON_CLOUD = '<svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5z"/></svg>';
+
+  function stopSharePoll() {
+    if (sharePoll) clearInterval(sharePoll);
+    sharePoll = null;
+  }
+
+  function closeAuthWindow() {
+    if (shareAuthWin && !shareAuthOpened && !shareAuthWin.closed) shareAuthWin.close();
+    shareAuthWin = null;
+  }
+
+  function showShareOptions() {
+    shareOptionsEl.hidden = false;
+    shareDescEl.hidden = false;
+    shareProgressEl.hidden = true;
+    shareSubmitBtn.hidden = false;
+    shareCancelBtn.textContent = "Cancel";
+  }
+
+  function showShareProgress(domain, t) {
+    shareOptionsEl.hidden = true;
+    shareDescEl.hidden = true;
+    shareProgressEl.hidden = false;
+    shareSubmitBtn.hidden = true;
+    shareCancelBtn.textContent = "Close";
+    shareCancelBtn.disabled = false;
+    var login = t.status === "login";
+    if (login) {
+      shareProgressIcon.innerHTML = ICON_CLOUD;
+      shareProgressTitle.textContent = "Authorize " + domain + " on Cloudflare";
+      shareProgressText.textContent = "locadot doesn't have a Cloudflare login for this domain yet.";
+    } else {
+      shareProgressIcon.innerHTML = '<span class="spinner"></span>';
+      shareProgressTitle.textContent = "Setting up " + domain;
+      shareProgressText.textContent = t.loginUrl === undefined && shareAuthOpened
+        ? "Authorized. Creating the tunnel and the DNS record\u2026"
+        : "Checking your Cloudflare login, then creating the tunnel and the DNS record\u2026";
+    }
+    shareStepsEl.hidden = !login;
+    shareStepsDomain.textContent = domain;
+    shareAuthLink.hidden = !(login && t.loginUrl);
+    if (login && t.loginUrl) {
+      shareAuthLink.href = t.loginUrl;
+      if (shareAuthWin && !shareAuthOpened && !shareAuthWin.closed) {
+        shareAuthWin.location.href = t.loginUrl;
+        shareAuthOpened = true;
+      }
+    }
+  }
+
+  function watchShare(host, domain) {
+    stopSharePoll();
+    showShareProgress(domain, { status: "starting" });
+    var tick = function () {
+      fetch("/api/hosts").then(parseJsonOrThrow).then(function (hosts) {
+        if (shareRow === null || shareRow.host !== host) return;
+        var row = null;
+        for (var i = 0; i < hosts.length; i++) if (hosts[i].host === host) row = hosts[i];
+        var t = row ? tunnelInfo(row) : { status: "error", error: host + " was removed." };
+        if (t.status === "up") {
+          stopSharePoll();
+          closeAuthWindow();
+          closeShareDialog();
+          showToast(host + " is live at " + t.url, "success");
+          renderHosts(hosts);
+        } else if (t.status === "error" || t.status === "off") {
+          stopSharePoll();
+          closeAuthWindow();
+          showShareOptions();
+          shareErrorEl.textContent = t.error || "Sharing stopped.";
+          shareErrorEl.hidden = false;
+          shareSubmitBtn.textContent = "Try again";
+          renderHosts(hosts);
+        } else {
+          showShareProgress(domain, t);
+        }
+      }).catch(function () {});
+    };
+    sharePoll = setInterval(tick, 1500);
+    tick();
+  }
+
   function closeShareDialog() {
+    stopSharePoll();
+    closeAuthWindow();
     shareRow = null;
     shareDialogEl.close();
   }
@@ -2430,6 +2552,9 @@ const clientJs = `
     shareDomainError.textContent = "";
     var hasDomain = typeof row.tunnelDomain === "string" && !!row.tunnelDomain;
     shareDomainInput.value = hasDomain ? row.tunnelDomain : "";
+    showShareOptions();
+    shareSubmitBtn.textContent = "Start sharing";
+    shareAuthOpened = false;
     setShareMode(hasDomain ? "custom" : "random");
     shareSubmitBtn.disabled = false;
     shareSubmitBtn.classList.remove("busy");
@@ -2450,6 +2575,12 @@ const clientJs = `
   shareDialogEl.addEventListener("click", function (e) {
     if (e.target === shareDialogEl) closeShareDialog();
   });
+  shareDialogEl.addEventListener("close", function () {
+    stopSharePoll();
+    closeAuthWindow();
+    shareRow = null;
+  });
+  shareDomainInput.addEventListener("input", updateDomainHint);
   shareDomainInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); shareSubmitBtn.click(); }
   });
@@ -2470,13 +2601,32 @@ const clientJs = `
     shareSubmitBtn.disabled = true;
     shareSubmitBtn.classList.add("busy");
     shareCancelBtn.disabled = true;
+    shareErrorEl.hidden = true;
+    // Opened now, inside the click, so the browser allows it; pointed at Cloudflare once the sign-in URL arrives.
+    shareAuthOpened = false;
+    closeAuthWindow();
+    if (body.domain && !coveringZone(body.domain)) {
+      shareAuthWin = window.open("", "_blank");
+      if (shareAuthWin) {
+        try {
+          shareAuthWin.document.title = "Connecting to Cloudflare\u2026";
+          shareAuthWin.document.body.style.cssText = "font:14px system-ui,sans-serif;color:#666;display:grid;place-items:center;height:100vh;margin:0";
+          shareAuthWin.document.body.textContent = "Connecting to Cloudflare\u2026";
+        } catch (e) {}
+      }
+    }
     apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify(body) })
       .then(function () {
+        if (body.domain) {
+          watchShare(row.host, body.domain);
+          return loadHosts();
+        }
         showToast("Starting tunnel for " + row.host, "success");
         closeShareDialog();
         return loadHosts();
       })
       .catch(function (err2) {
+        closeAuthWindow();
         shareErrorEl.textContent = (err2 && err2.message) ? err2.message : String(err2);
         shareErrorEl.hidden = false;
       })
@@ -4296,6 +4446,19 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
           </span>
         </span>
       </button>
+    </div>
+    <div id="share-progress" class="share-progress" hidden>
+      <div id="share-progress-icon" class="share-progress-icon" aria-hidden="true"></div>
+      <div class="share-progress-body">
+        <p id="share-progress-title" class="share-progress-title"></p>
+        <p id="share-progress-text" class="share-progress-text"></p>
+        <ol id="share-steps" class="share-steps" hidden>
+          <li>Sign in to Cloudflare in the tab that opens.</li>
+          <li>Pick the zone <span id="share-steps-domain" class="mono"></span> is in, then <strong>Authorize</strong>.</li>
+          <li>Come back here. This dialog updates by itself.</li>
+        </ol>
+        <a id="share-auth-link" class="btn btn-primary" target="_blank" rel="noopener noreferrer" hidden>Open Cloudflare &#8599;</a>
+      </div>
     </div>
     <div id="share-error" class="field-error" role="alert" hidden></div>
   </div>

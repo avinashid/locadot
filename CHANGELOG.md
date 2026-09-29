@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Sharing on a custom domain used whatever Cloudflare login was on the machine, so a hostname outside that login's zone
+  showed as live while cloudflared had created `<hostname>.<other zone>` instead. locadot now keeps one login per zone,
+  signs you in for the hostname's zone when it has none (the dashboard's Share dialog opens Cloudflare in a new tab and
+  follows the sign-in until the share is live), and fails with a clear error when the authorized zone doesn't include it.
+- `locadot tunnel --host …` retries a share that failed; it used to report the old error again.
+
 ## 2.3.0 (2026-09-29)
 
 ### Added
