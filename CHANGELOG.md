@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.4.0 (2026-09-29)
 
 ### Added
 - Password protection per mapping: `locadot protect --host app.localhost --shared --remote --local` (or the lock on a
