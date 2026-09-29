@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 (2026-09-29)
 
 ### Added
 - Share the dashboard in a browser: `locadot hub:panel on` (or **Share this dashboard** under Remote access) serves the
