@@ -19,7 +19,8 @@ HTTPS custom domains for local development. Point `https://app.localhost` at you
 - 🔁 **Any destination.** A local port (`--port 3000`), a host and port (`--target 192.168.1.5:8080`), or any URL
   (`--target https://google.com`). Redirects and cookies are rewritten so the browser stays on the `.localhost` name.
 - 🌍 **Share on a public URL.** `locadot tunnel --host app.localhost` (or **Share** in the dashboard) puts a mapping on
-  `https://<random>.trycloudflare.com` through a Cloudflare quick tunnel. No account needed.
+  `https://<random>.trycloudflare.com` through a Cloudflare quick tunnel. No account needed. Or put it on your own
+  hostname (`--domain app.example.com`) through a named tunnel in your Cloudflare account, with a URL that never changes.
 - 🔗 **Remote access, locadot to locadot.** Publish your whole locadot on a Cloudflare hostname and let other machines pair
   with it as viewer, editor or admin. Your mappings show up in their locadot. Admins can also open your dashboard and any
   port on your localhost.
@@ -95,7 +96,8 @@ Options for `add` / `update`:
 | Command | What it does |
 | --- | --- |
 | `locadot tunnel --host app.localhost` | Share a mapping on a public `https://<random>.trycloudflare.com` URL through a Cloudflare quick tunnel. No Cloudflare account is needed. `cloudflared` is downloaded on first use. |
-| `locadot tunnel --host app.localhost --off` | Stop sharing it. |
+| `locadot tunnel --host app.localhost --domain app.example.com` | Share it on your own hostname instead, on a domain in your Cloudflare account. The first time, `cloudflared` asks you to log in (the link is printed, and shown on the row in the dashboard). locadot creates a named tunnel for the mapping (`locadot-app-localhost`), points the hostname's DNS at it (replacing an existing record) and runs it. The URL stays the same across restarts. |
+| `locadot tunnel --host app.localhost --off` | Stop sharing it. The custom hostname is remembered for the dashboard; sharing again without `--domain` uses a random URL. |
 | `locadot tunnel` | List the shared mappings and their public URLs. |
 | `locadot tunnel:install` | Download `cloudflared` into the state dir (`<state>/bin`). Set `LOCADOT_CLOUDFLARED` to use your own binary; one on `PATH` is also picked up. |
 
@@ -260,6 +262,7 @@ each time the proxy starts.
 | `POST /api/hosts` | `{ "host": "app.localhost", "target": "3000", "insecure": false, "cors": false }` | Add a mapping (201; 409 if it exists). |
 | `PUT /api/hosts/:host` | `{ "target": "https://example.com", "insecure": false, "cors": true }` | Change a mapping (404 if unknown). |
 | `PUT /api/hosts/:host` | `{ "allow": ["localhost:3000"] }` | Replace the internal addresses shared visitors may reach (normalized; `[]` clears; 400 if one is invalid). |
+| `PUT /api/hosts/:host` | `{ "tunnel": true, "domain": "app.example.com" }` | Share on a public URL: with `domain`, on that hostname through a named Cloudflare tunnel, without it on a random trycloudflare.com URL. `{ "tunnel": false }` stops sharing (400 for a bad hostname, 409 if another mapping uses it). |
 | `DELETE /api/hosts/:host` | | Remove a mapping. |
 | `POST /api/startup` | `{ "enabled": true }` | Start at boot on/off. |
 | `POST /api/trust` | `{ "trusted": true }` | Trust or untrust the CA. |

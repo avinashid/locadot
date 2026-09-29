@@ -40,8 +40,8 @@ export async function installTunnel() {
   print(`✅ cloudflared ${info.version ?? ""} installed at ${info.path}`);
 }
 
-/** Shares a mapping on a public trycloudflare.com URL, or lists what's shared when no host is given. */
-export async function tunnel(options: { host?: string; off?: boolean }) {
+/** Shares a mapping on a public trycloudflare.com URL or `--domain`, or lists what's shared when no host is given. */
+export async function tunnel(options: { host?: string; off?: boolean; domain?: string }) {
   if (!options.host) {
     const shared = await tunnelRows();
     if (!shared.length) print("Nothing is shared. Share a mapping: locadot tunnel --host app.localhost");
@@ -55,11 +55,17 @@ export async function tunnel(options: { host?: string; off?: boolean }) {
     return;
   }
   if (!cloudflaredInfo(true).installed) await installTunnel();
-  await HostOps.setTunnel({ host, tunnel: true });
+  await HostOps.setTunnel({ host, tunnel: true, domain: options.domain });
   await ensureRunning();
-  const deadline = Date.now() + TUNNEL_TIMEOUT_MS;
+  let deadline = Date.now() + TUNNEL_TIMEOUT_MS;
+  let loginShown = false;
   while (Date.now() < deadline) {
     const state = (await tunnelRows()).find((row) => row.host === host)?.tunnel;
+    if (state?.status === "login" && state.loginUrl && !loginShown) {
+      loginShown = true;
+      deadline = Date.now() + 10 * 60_000;
+      print(`🔑 Log in to Cloudflare to finish: ${state.loginUrl}`);
+    }
     if (state?.status === "up") {
       print(`🌍 ${host} is public at ${state.url}`);
       print("   Anyone with the link can reach it. Stop with: locadot tunnel --host " + host + " --off");

@@ -7,8 +7,10 @@ export interface HostEntry {
   cors?: boolean;
   /** Internal addresses (localhost:3000) a tunnel visitor or hub peer may reach through the --cors pass-through. */
   allow?: string[];
-  /** Share on a public Cloudflare quick tunnel (https://<random>.trycloudflare.com). */
+  /** Share on a public Cloudflare quick tunnel (https://<random>.trycloudflare.com), or on `tunnelDomain` when set. */
   tunnel?: boolean;
+  /** Share on this hostname through a named Cloudflare tunnel in the user's account; kept after unsharing. */
+  tunnelDomain?: string;
   /** Receiver side: this name forwards to a mapping on a connected sender (see lib/remotes.ts). */
   remote?: { name: string; host: string };
   createdAt: string;
@@ -31,9 +33,13 @@ export interface HostStats {
 
 export interface TunnelState {
   enabled: boolean;
-  status: "off" | "starting" | "up" | "error";
+  status: "off" | "starting" | "login" | "up" | "error";
+  mode?: "quick" | "custom";
+  domain?: string;
   url?: string;
   error?: string;
+  /** status "login": cloudflared's browser login URL. */
+  loginUrl?: string;
 }
 
 export interface ProbeResult {

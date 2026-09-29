@@ -410,8 +410,9 @@ export async function route(
         logger.info(`✏️ dashboard: ${updated.host} → ${updated.entry.target}`);
       }
       if (tunnel !== undefined) {
-        updated = await HostOps.setTunnel({ host, tunnel });
-        logger.info(`🌍 dashboard: ${tunnel ? "sharing" : "stopped sharing"} ${updated.host}`);
+        updated = await HostOps.setTunnel({ host, tunnel, domain: body.domain });
+        const on = updated.entry.tunnelDomain && tunnel ? `sharing ${updated.host} on ${updated.entry.tunnelDomain}` : `sharing ${updated.host}`;
+        logger.info(`🌍 dashboard: ${tunnel ? on : `stopped sharing ${updated.host}`}`);
       }
       ctx.reload();
       if (tunnel) ctx.retryTunnels();

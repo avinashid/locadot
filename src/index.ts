@@ -97,8 +97,9 @@ program
 
 program
   .command("tunnel")
-  .description("Share a domain on a public https://*.trycloudflare.com URL (Cloudflare quick tunnel, no account); lists shared domains without --host")
+  .description("Share a domain on a public https://*.trycloudflare.com URL (Cloudflare quick tunnel, no account) or on your own hostname; lists shared domains without --host")
   .option("-h, --host <host>", "Domain to share, e.g. app.localhost")
+  .option("-d, --domain <hostname>", "Share on this hostname in your Cloudflare account (named tunnel), e.g. app.example.com")
   .option("--off", "Stop sharing it")
   .action(run((options) => Commands.tunnel(options)));
 program.command("tunnel:install").description("Download cloudflared into the locadot state dir").action(run(() => Commands.installTunnel()));

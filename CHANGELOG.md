@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Share on your own hostname: `locadot tunnel --host app.localhost --domain app.example.com`, or **Share** in the
+  dashboard and choose **Custom domain**. Runs a named Cloudflare tunnel for the mapping (login once, the DNS record is
+  created for you), so the URL doesn't change. `PUT /api/hosts/:host {"tunnel": true, "domain": "…"}`.
+- The dashboard no longer uses the browser's confirm and prompt boxes; confirmations and inputs open in-app dialogs.
 - Internal access for shared mappings: `locadot allow --host app.localhost localhost:3000` (or **Access** on a row in the
   dashboard) lets tunnel visitors and connected machines, viewers included, reach the listed internal addresses through
   that `--cors` domain's pass-through. Normally they're limited to public hosts. locadot's own ports stay blocked.

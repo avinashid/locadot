@@ -19,6 +19,7 @@ interface HostRow {
   insecure: boolean;
   cors: boolean;
   allow: string[];
+  tunnelDomain: string | null;
   createdAt: string;
   updatedAt: string;
   urls: { https: string; http: string };
@@ -79,6 +80,7 @@ async function buildHosts(ctx: DashboardContext): Promise<HostRow[]> {
         insecure: !!entry.insecure,
         cors: !!entry.cors,
         allow: entry.allow ?? [],
+        tunnelDomain: entry.tunnelDomain ?? null,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
         urls: hostUrls(host, httpPort, httpsPort),

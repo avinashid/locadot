@@ -355,6 +355,8 @@ td.badges .badge + .badge { margin-left: 4px; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
 .btn-danger { border-color: var(--down); color: var(--down); background: transparent; }
 .btn-danger:hover:not(:disabled) { background: var(--down-bg); border-color: var(--down); }
+.modal-foot .btn-danger { background: var(--down); border-color: var(--down); color: #fff; }
+.modal-foot .btn-danger:hover:not(:disabled) { background: var(--down); filter: brightness(0.92); }
 .btn-ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--muted); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; color: var(--fg); }
 .btn-ghost-danger { background: transparent; border-color: transparent; box-shadow: none; color: var(--muted); }
@@ -577,6 +579,8 @@ td .inline-check + .inline-check { margin-top: 4px; }
 .inline-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .tunnel-cell { white-space: normal; }
 .tunnel-status { display: flex; align-items: center; gap: 6px; max-width: 240px; }
+.tunnel-login { display: flex; flex-direction: column; gap: 2px; font-size: 12px; white-space: nowrap; }
+.tunnel-login a { font-weight: 500; }
 .tunnel-status a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; display: inline-block; vertical-align: middle; font-size: 12px; }
 .tunnel-error { color: var(--down); cursor: help; }
 .tunnel-error-text {
@@ -806,6 +810,63 @@ details.card[open] summary { border-bottom: 1px solid var(--border); border-bott
   padding: 16px 20px;
   border-top: 1px solid var(--border);
 }
+
+/* ---------- confirm / prompt / share dialogs ---------- */
+#confirm-dialog, #prompt-dialog, #share-dialog {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: var(--shadow-md);
+}
+#confirm-dialog::backdrop, #prompt-dialog::backdrop, #share-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+#confirm-dialog { width: min(420px, calc(100vw - 32px)); }
+#prompt-dialog { width: min(420px, calc(100vw - 32px)); }
+#share-dialog { width: min(480px, calc(100vw - 32px)); }
+.share-options { display: flex; flex-direction: column; gap: 10px; }
+.option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.option-card:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.option-card[aria-checked="true"] { border-color: var(--accent); background: var(--accent-bg); }
+.option-dot {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  position: relative;
+}
+.option-card[aria-checked="true"] .option-dot { border-color: var(--accent); }
+.option-card[aria-checked="true"] .option-dot::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.option-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.option-title { font-size: 13.5px; font-weight: 600; }
+.option-desc { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.option-extra { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.option-extra .field-error { margin-top: 4px; }
 
 /* ---------- toasts ---------- */
 .toast-container {
@@ -1159,6 +1220,7 @@ const clientJs = `
   var startupBusy = false;
   var cfInstallBusy = false;
   var cloudflaredInstalled = false;
+  var cloudflareLoggedIn = false;
   var proxyStopped = false;
   var pollTimer = null;
   var remotesPollTimer = null;
@@ -1376,6 +1438,7 @@ const clientJs = `
 
     var cf = sys.cloudflared || { installed: false };
     cloudflaredInstalled = !!cf.installed;
+    cloudflareLoggedIn = !!cf.loggedIn;
     if (cf.installed) {
       cfValueEl.textContent = "Installed";
       cfValueEl.className = "tile-value ok";
@@ -1457,11 +1520,13 @@ const clientJs = `
       revokeBtn.className = "btn btn-sm btn-danger";
       revokeBtn.textContent = "Revoke";
       revokeBtn.addEventListener("click", function () {
-        if (!window.confirm("Revoke " + peer.name + "?")) return;
-        revokeBtn.disabled = true;
-        apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "DELETE" })
-          .then(function () { showToast("Revoked " + peer.name, "success"); return loadHub(); })
-          .catch(function (err) { apiError(err, "Couldn't revoke peer"); revokeBtn.disabled = false; });
+        confirmDialog({ title: "Revoke " + peer.name + "?", message: "This peer will lose access immediately.", confirmLabel: "Revoke", danger: true }).then(function (ok) {
+          if (!ok) return;
+          revokeBtn.disabled = true;
+          apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "DELETE" })
+            .then(function () { showToast("Revoked " + peer.name, "success"); return loadHub(); })
+            .catch(function (err) { apiError(err, "Couldn't revoke peer"); revokeBtn.disabled = false; });
+        });
       });
       controls.appendChild(revokeBtn);
       row.appendChild(controls);
@@ -1644,13 +1709,15 @@ const clientJs = `
   });
 
   hubStopBtn.addEventListener("click", function () {
-    if (!window.confirm("Stop remote access? Connected peers will be disconnected.")) return;
-    hubStopBtn.disabled = true;
-    hubStopBtn.classList.add("busy");
-    apiFetch("/api/hub", { method: "POST", body: JSON.stringify({ mode: "off" }) })
-      .then(function () { showToast("Remote access stopped", "success"); return loadHub(); })
-      .catch(function (err) { apiError(err, "Couldn't stop remote access"); })
-      .then(function () { hubStopBtn.disabled = false; hubStopBtn.classList.remove("busy"); });
+    confirmDialog({ title: "Stop remote access?", message: "Connected peers will be disconnected.", confirmLabel: "Stop remote access", danger: true }).then(function (ok) {
+      if (!ok) return;
+      hubStopBtn.disabled = true;
+      hubStopBtn.classList.add("busy");
+      apiFetch("/api/hub", { method: "POST", body: JSON.stringify({ mode: "off" }) })
+        .then(function () { showToast("Remote access stopped", "success"); return loadHub(); })
+        .catch(function (err) { apiError(err, "Couldn't stop remote access"); })
+        .then(function () { hubStopBtn.disabled = false; hubStopBtn.classList.remove("busy"); });
+    });
   });
 
   // ---------- remote access: connected machines (receiver) ----------
@@ -1712,11 +1779,12 @@ const clientJs = `
       urlEditBtn.className = "btn btn-sm btn-ghost";
       urlEditBtn.textContent = "Update URL";
       urlEditBtn.addEventListener("click", function () {
-        var next = window.prompt("New URL for " + remote.name, remote.url);
-        if (!next || !next.trim() || next.trim() === remote.url) return;
-        apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "PUT", body: JSON.stringify({ url: next.trim() }) })
-          .then(function () { showToast("Updated URL for " + remote.name, "success"); return loadRemotes(); })
-          .catch(function (err) { apiError(err, "Couldn't update URL"); });
+        promptDialog({ title: "Update URL", message: "New URL for " + remote.name, label: "URL", value: remote.url, confirmLabel: "Save" }).then(function (next) {
+          if (!next || !next.trim() || next.trim() === remote.url) return;
+          apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "PUT", body: JSON.stringify({ url: next.trim() }) })
+            .then(function () { showToast("Updated URL for " + remote.name, "success"); return loadRemotes(); })
+            .catch(function (err) { apiError(err, "Couldn't update URL"); });
+        });
       });
       urlRow.appendChild(urlEditBtn);
       item.appendChild(urlRow);
@@ -1742,11 +1810,13 @@ const clientJs = `
       disconnectBtn.className = "btn btn-sm btn-danger";
       disconnectBtn.textContent = "Disconnect";
       disconnectBtn.addEventListener("click", function () {
-        if (!window.confirm("Disconnect from " + remote.name + "? This removes its hosts too.")) return;
-        disconnectBtn.disabled = true;
-        apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "DELETE" })
-          .then(function () { showToast("Disconnected " + remote.name, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
-          .catch(function (err) { apiError(err, "Couldn't disconnect"); disconnectBtn.disabled = false; });
+        confirmDialog({ title: "Disconnect from " + remote.name + "?", message: "This removes its hosts too.", confirmLabel: "Disconnect", danger: true }).then(function (ok) {
+          if (!ok) return;
+          disconnectBtn.disabled = true;
+          apiFetch("/api/remotes/" + encodeURIComponent(remote.name), { method: "DELETE" })
+            .then(function () { showToast("Disconnected " + remote.name, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+            .catch(function (err) { apiError(err, "Couldn't disconnect"); disconnectBtn.disabled = false; });
+        });
       });
       actions.appendChild(disconnectBtn);
       item.appendChild(actions);
@@ -1797,11 +1867,13 @@ const clientJs = `
             delBtn.className = "btn btn-sm btn-danger";
             delBtn.textContent = "Delete";
             delBtn.addEventListener("click", function () {
-              if (!window.confirm("Delete " + h.host + " on " + remote.name + "?")) return;
-              delBtn.disabled = true;
-              apiFetch("/api/remotes/" + encodeURIComponent(remote.name) + "/hosts/" + encodeURIComponent(h.host), { method: "DELETE" })
-                .then(function () { showToast("Deleted " + h.host, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
-                .catch(function (err) { apiError(err, "Couldn't delete host"); delBtn.disabled = false; });
+              confirmDialog({ title: "Delete " + h.host + " on " + remote.name + "?", message: "This can't be undone.", confirmLabel: "Delete", danger: true }).then(function (ok) {
+                if (!ok) return;
+                delBtn.disabled = true;
+                apiFetch("/api/remotes/" + encodeURIComponent(remote.name) + "/hosts/" + encodeURIComponent(h.host), { method: "DELETE" })
+                  .then(function () { showToast("Deleted " + h.host, "success"); return Promise.all([loadRemotes(), loadHosts()]); })
+                  .catch(function (err) { apiError(err, "Couldn't delete host"); delBtn.disabled = false; });
+              });
             });
             hostRow.appendChild(delBtn);
           }
@@ -2040,29 +2112,31 @@ const clientJs = `
 
   stopProxyBtn.addEventListener("click", function () {
     if (proxyStopped) return;
-    if (!window.confirm("Stop the locadot proxy? Run \\"locadot start\\" to bring it back up.")) return;
-    stopProxyBtn.disabled = true;
-    stopProxyBtn.classList.add("busy");
-    apiFetch("/api/proxy/stop", { method: "POST" })
-      .then(function () {
-        proxyStopped = true;
-        clear(stoppedBanner);
-        stoppedBanner.appendChild(document.createTextNode("Proxy stopped. Run "));
-        var code = document.createElement("code");
-        code.className = "mono";
-        code.textContent = "locadot start";
-        stoppedBanner.appendChild(code);
-        stoppedBanner.appendChild(document.createTextNode(" to bring it back."));
-        stoppedBanner.hidden = false;
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        if (remotesPollTimer) { clearInterval(remotesPollTimer); remotesPollTimer = null; }
-        showToast("Proxy stopped", "warn");
-      })
-      .catch(function (err) {
-        apiError(err, "Couldn't stop the proxy");
-        stopProxyBtn.disabled = false;
-        stopProxyBtn.classList.remove("busy");
-      });
+    confirmDialog({ title: "Stop the locadot proxy?", message: "Run \\"locadot start\\" to bring it back up.", confirmLabel: "Stop proxy", danger: true }).then(function (ok) {
+      if (!ok) return;
+      stopProxyBtn.disabled = true;
+      stopProxyBtn.classList.add("busy");
+      apiFetch("/api/proxy/stop", { method: "POST" })
+        .then(function () {
+          proxyStopped = true;
+          clear(stoppedBanner);
+          stoppedBanner.appendChild(document.createTextNode("Proxy stopped. Run "));
+          var code = document.createElement("code");
+          code.className = "mono";
+          code.textContent = "locadot start";
+          stoppedBanner.appendChild(code);
+          stoppedBanner.appendChild(document.createTextNode(" to bring it back."));
+          stoppedBanner.hidden = false;
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          if (remotesPollTimer) { clearInterval(remotesPollTimer); remotesPollTimer = null; }
+          showToast("Proxy stopped", "warn");
+        })
+        .catch(function (err) {
+          apiError(err, "Couldn't stop the proxy");
+          stopProxyBtn.disabled = false;
+          stopProxyBtn.classList.remove("busy");
+        });
+    });
   });
 
   cfInstallBtn.addEventListener("click", function () {
@@ -2211,12 +2285,36 @@ const clientJs = `
       link.textContent = t.url.replace("https://", "");
       link.title = t.url;
       statusWrap.appendChild(link);
+      if (t.mode === "custom") {
+        var modeBadge = document.createElement("span");
+        modeBadge.className = "badge badge-accent";
+        modeBadge.textContent = "custom";
+        statusWrap.appendChild(modeBadge);
+      }
       statusWrap.appendChild(makeCopyButton(function () { return t.url; }));
     } else if (t.status === "starting") {
       var spin = document.createElement("span");
       spin.className = "spinner";
       statusWrap.appendChild(spin);
       statusWrap.appendChild(document.createTextNode("Starting\\u2026"));
+    } else if (t.status === "login") {
+      var loginDot = document.createElement("span");
+      loginDot.className = "dot warn";
+      statusWrap.appendChild(loginDot);
+      var loginText = document.createElement("span");
+      loginText.className = "tunnel-login";
+      var loginLabel = document.createElement("span");
+      loginLabel.textContent = "Waiting for Cloudflare login";
+      loginText.appendChild(loginLabel);
+      if (t.loginUrl) {
+        var loginLink = document.createElement("a");
+        loginLink.href = t.loginUrl;
+        loginLink.target = "_blank";
+        loginLink.rel = "noopener noreferrer";
+        loginLink.textContent = "Log in to Cloudflare \u2197";
+        loginText.appendChild(loginLink);
+      }
+      statusWrap.appendChild(loginText);
     } else if (t.status === "error") {
       var errDot = document.createElement("span");
       errDot.className = "dot down";
@@ -2238,34 +2336,156 @@ const clientJs = `
 
   function shareButton(row) {
     var t = tunnelInfo(row);
-    var isOn = t.enabled || t.status === "up" || t.status === "starting";
+    var isOn = t.enabled || t.status === "up" || t.status === "starting" || t.status === "login";
     var isRetry = !isOn && t.status === "error";
     var shareBtn = document.createElement("button");
     shareBtn.type = "button";
     shareBtn.className = "btn btn-sm" + (isOn ? " btn-danger" : "");
     shareBtn.textContent = isOn ? "Unshare" : (isRetry ? "Retry" : "Share");
-    shareBtn.title = isOn ? "Stop the public tunnel" : (isRetry ? "Retry starting the tunnel" : "Share on a public trycloudflare.com URL");
+    shareBtn.title = isOn ? "Stop the public tunnel" : "Share on a public URL";
     if (!cloudflaredInstalled && !isOn) {
       shareBtn.disabled = true;
       shareBtn.title = "Install cloudflared first";
     }
     shareBtn.addEventListener("click", function () {
-      if (!isOn && !window.confirm("This will make " + row.host + " reachable from the internet by anyone with the link. Continue?")) return;
-      shareBtn.disabled = true;
-      shareBtn.classList.add("busy");
-      apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ tunnel: !isOn }) })
-        .then(function () {
-          showToast(isOn ? "Stopping tunnel for " + row.host : "Starting tunnel for " + row.host, "success");
-          return loadHosts();
-        })
-        .catch(function (err) {
-          apiError(err, "Couldn't change sharing for " + row.host);
-          shareBtn.disabled = false;
-          shareBtn.classList.remove("busy");
+      if (isOn) {
+        confirmDialog({ title: "Stop sharing " + row.host + "?", message: "The public URL for " + row.host + " stops working.", confirmLabel: "Stop sharing", danger: true }).then(function (ok) {
+          if (!ok) return;
+          shareBtn.disabled = true;
+          shareBtn.classList.add("busy");
+          apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify({ tunnel: false }) })
+            .then(function () {
+              showToast("Stopping tunnel for " + row.host, "success");
+              return loadHosts();
+            })
+            .catch(function (err) {
+              apiError(err, "Couldn't change sharing for " + row.host);
+              shareBtn.disabled = false;
+              shareBtn.classList.remove("busy");
+            });
         });
+      } else {
+        openShareDialog(row);
+      }
     });
     return shareBtn;
   }
+
+  // ---------- share dialog ----------
+
+  var shareDialogEl = document.getElementById("share-dialog");
+  var shareHostEl = document.getElementById("share-host");
+  var shareCloseBtn = document.getElementById("share-close");
+  var shareCancelBtn = document.getElementById("share-cancel");
+  var shareSubmitBtn = document.getElementById("share-submit");
+  var shareOptionRandom = document.getElementById("share-option-random");
+  var shareOptionCustom = document.getElementById("share-option-custom");
+  var shareCustomExtra = document.getElementById("share-custom-extra");
+  var shareDomainInput = document.getElementById("share-domain-input");
+  var shareDomainError = document.getElementById("share-domain-error");
+  var shareDomainHint = document.getElementById("share-domain-hint");
+  var shareErrorEl = document.getElementById("share-error");
+  var shareRow = null;
+  var shareMode = "random";
+  var HOSTNAME_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$/;
+
+  function normalizeHostname(value) {
+    return String(value || "").trim().toLowerCase().replace(/^https?:\\/\\//, "").replace(/\\/$/, "");
+  }
+
+  function validateHostname(raw) {
+    var value = normalizeHostname(raw);
+    if (!value) return "Enter a hostname.";
+    if (value.slice(-10) === ".localhost") return "Hostname can't be a .localhost address.";
+    if (!HOSTNAME_RE.test(value)) return "Enter a valid hostname, e.g. app.example.com.";
+    return null;
+  }
+
+  function setShareMode(mode) {
+    shareMode = mode;
+    shareOptionRandom.setAttribute("aria-checked", String(mode === "random"));
+    shareOptionCustom.setAttribute("aria-checked", String(mode === "custom"));
+    shareCustomExtra.hidden = mode !== "custom";
+    shareDomainHint.textContent = cloudflareLoggedIn
+      ? "The DNS record is created or updated for you."
+      : "You'll be asked to log in to Cloudflare once; the login link appears on the row.";
+    shareDomainError.hidden = true;
+    shareDomainError.textContent = "";
+    shareErrorEl.hidden = true;
+    shareErrorEl.textContent = "";
+    if (mode === "custom") setTimeout(function () { shareDomainInput.focus(); }, 0);
+  }
+
+  function closeShareDialog() {
+    shareRow = null;
+    shareDialogEl.close();
+  }
+
+  function openShareDialog(row) {
+    shareRow = row;
+    shareHostEl.textContent = row.host;
+    shareErrorEl.hidden = true;
+    shareErrorEl.textContent = "";
+    shareDomainError.hidden = true;
+    shareDomainError.textContent = "";
+    var hasDomain = typeof row.tunnelDomain === "string" && !!row.tunnelDomain;
+    shareDomainInput.value = hasDomain ? row.tunnelDomain : "";
+    setShareMode(hasDomain ? "custom" : "random");
+    shareSubmitBtn.disabled = false;
+    shareSubmitBtn.classList.remove("busy");
+    shareCancelBtn.disabled = false;
+    shareDialogEl.showModal();
+  }
+
+  shareOptionRandom.addEventListener("click", function () { setShareMode("random"); });
+  shareOptionCustom.addEventListener("click", function () { setShareMode("custom"); });
+  shareOptionRandom.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") { e.preventDefault(); setShareMode("custom"); shareOptionCustom.focus(); }
+  });
+  shareOptionCustom.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowUp" || e.key === "ArrowLeft") { e.preventDefault(); setShareMode("random"); shareOptionRandom.focus(); }
+  });
+  shareCancelBtn.addEventListener("click", closeShareDialog);
+  shareCloseBtn.addEventListener("click", closeShareDialog);
+  shareDialogEl.addEventListener("click", function (e) {
+    if (e.target === shareDialogEl) closeShareDialog();
+  });
+  shareDomainInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); shareSubmitBtn.click(); }
+  });
+
+  shareSubmitBtn.addEventListener("click", function () {
+    if (!shareRow) return;
+    var row = shareRow;
+    var body = { tunnel: true };
+    if (shareMode === "custom") {
+      var err = validateHostname(shareDomainInput.value);
+      if (err) {
+        shareDomainError.textContent = err;
+        shareDomainError.hidden = false;
+        return;
+      }
+      body.domain = normalizeHostname(shareDomainInput.value);
+    }
+    shareSubmitBtn.disabled = true;
+    shareSubmitBtn.classList.add("busy");
+    shareCancelBtn.disabled = true;
+    apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "PUT", body: JSON.stringify(body) })
+      .then(function () {
+        showToast("Starting tunnel for " + row.host, "success");
+        closeShareDialog();
+        return loadHosts();
+      })
+      .catch(function (err2) {
+        shareErrorEl.textContent = (err2 && err2.message) ? err2.message : String(err2);
+        shareErrorEl.hidden = false;
+      })
+      .then(function () {
+        shareSubmitBtn.disabled = false;
+        shareSubmitBtn.classList.remove("busy");
+        shareCancelBtn.disabled = false;
+      });
+  });
 
   var allowDialog = document.getElementById("allow-dialog");
   var allowHostEl = document.getElementById("allow-host");
@@ -2396,6 +2616,112 @@ const clientJs = `
       });
   });
 
+  // ---------- confirm / prompt dialogs ----------
+
+  var confirmDialogEl = document.getElementById("confirm-dialog");
+  var confirmTitleEl = document.getElementById("confirm-title");
+  var confirmMessageEl = document.getElementById("confirm-message");
+  var confirmCancelBtn = document.getElementById("confirm-cancel");
+  var confirmOkBtn = document.getElementById("confirm-ok");
+  var confirmCloseBtn = document.getElementById("confirm-close");
+  var confirmResolve = null;
+
+  function closeConfirmDialog(result) {
+    var resolve = confirmResolve;
+    confirmResolve = null;
+    confirmDialogEl.close();
+    if (resolve) resolve(result);
+  }
+
+  function confirmDialog(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      confirmResolve = resolve;
+      confirmTitleEl.textContent = opts.title || "Are you sure?";
+      confirmMessageEl.textContent = opts.message || "";
+      confirmOkBtn.textContent = opts.confirmLabel || "OK";
+      confirmOkBtn.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
+      confirmDialogEl.showModal();
+      setTimeout(function () { confirmOkBtn.focus(); }, 0);
+    });
+  }
+
+  confirmCancelBtn.addEventListener("click", function () { closeConfirmDialog(false); });
+  confirmCloseBtn.addEventListener("click", function () { closeConfirmDialog(false); });
+  confirmOkBtn.addEventListener("click", function () { closeConfirmDialog(true); });
+  confirmDialogEl.addEventListener("click", function (e) {
+    if (e.target === confirmDialogEl) closeConfirmDialog(false);
+  });
+  confirmDialogEl.addEventListener("close", function () {
+    if (confirmResolve) { var resolve = confirmResolve; confirmResolve = null; resolve(false); }
+  });
+
+  var promptDialogEl = document.getElementById("prompt-dialog");
+  var promptTitleEl = document.getElementById("prompt-title");
+  var promptMessageEl = document.getElementById("prompt-message");
+  var promptLabelEl = document.getElementById("prompt-label");
+  var promptInput = document.getElementById("prompt-input");
+  var promptErrorEl = document.getElementById("prompt-error");
+  var promptCancelBtn = document.getElementById("prompt-cancel");
+  var promptConfirmBtn = document.getElementById("prompt-confirm");
+  var promptCloseBtn = document.getElementById("prompt-close");
+  var promptResolve = null;
+  var promptValidate = null;
+
+  function closePromptDialog(result) {
+    var resolve = promptResolve;
+    promptResolve = null;
+    promptValidate = null;
+    promptDialogEl.close();
+    if (resolve) resolve(result);
+  }
+
+  function promptDialog(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      promptResolve = resolve;
+      promptValidate = typeof opts.validate === "function" ? opts.validate : null;
+      promptTitleEl.textContent = opts.title || "";
+      promptMessageEl.textContent = opts.message || "";
+      promptMessageEl.hidden = !opts.message;
+      promptLabelEl.textContent = opts.label || "";
+      promptLabelEl.hidden = !opts.label;
+      promptInput.placeholder = opts.placeholder || "";
+      promptInput.value = opts.value || "";
+      promptConfirmBtn.textContent = opts.confirmLabel || "OK";
+      promptErrorEl.hidden = true;
+      promptErrorEl.textContent = "";
+      promptDialogEl.showModal();
+      setTimeout(function () { promptInput.focus(); promptInput.select(); }, 0);
+    });
+  }
+
+  function submitPromptDialog() {
+    var value = promptInput.value;
+    if (promptValidate) {
+      var err = promptValidate(value);
+      if (err) {
+        promptErrorEl.textContent = err;
+        promptErrorEl.hidden = false;
+        return;
+      }
+    }
+    closePromptDialog(value);
+  }
+
+  promptCancelBtn.addEventListener("click", function () { closePromptDialog(null); });
+  promptCloseBtn.addEventListener("click", function () { closePromptDialog(null); });
+  promptConfirmBtn.addEventListener("click", submitPromptDialog);
+  promptInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); submitPromptDialog(); }
+  });
+  promptDialogEl.addEventListener("click", function (e) {
+    if (e.target === promptDialogEl) closePromptDialog(null);
+  });
+  promptDialogEl.addEventListener("close", function () {
+    if (promptResolve) { var resolve = promptResolve; promptResolve = null; resolve(null); }
+  });
+
   function labelCells(tr, labels) {
     for (var i = 0; i < tr.children.length; i++) tr.children[i].setAttribute("data-label", labels[i] || "");
   }
@@ -2498,17 +2824,19 @@ const clientJs = `
     removeBtn.className = "btn btn-sm btn-danger";
     removeBtn.textContent = "Remove";
     removeBtn.addEventListener("click", function () {
-      if (prefs.confirm && !window.confirm("Remove host " + row.host + "?")) return;
-      removeBtn.disabled = true;
-      apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "DELETE" })
-        .then(function () {
-          showToast("Removed " + row.host, "success");
-          return loadHosts();
-        })
-        .catch(function (err) {
-          apiError(err, "Couldn't remove " + row.host);
-          removeBtn.disabled = false;
-        });
+      (prefs.confirm ? confirmDialog({ title: "Remove host " + row.host + "?", message: "This can't be undone.", confirmLabel: "Remove host", danger: true }) : Promise.resolve(true)).then(function (ok) {
+        if (!ok) return;
+        removeBtn.disabled = true;
+        apiFetch("/api/hosts/" + encodeURIComponent(row.host), { method: "DELETE" })
+          .then(function () {
+            showToast("Removed " + row.host, "success");
+            return loadHosts();
+          })
+          .catch(function (err) {
+            apiError(err, "Couldn't remove " + row.host);
+            removeBtn.disabled = false;
+          });
+      });
     });
     if (!row.remote) {
       actionsWrap.appendChild(shareButton(row));
@@ -2678,13 +3006,15 @@ const clientJs = `
 
   logsRefreshBtn.addEventListener("click", loadLogs);
   logsClearBtn.addEventListener("click", function () {
-    if (!window.confirm("Clear logs?")) return;
-    apiFetch("/api/logs/clear", { method: "POST" })
-      .then(function () {
-        showToast("Logs cleared", "success");
-        return loadLogs();
-      })
-      .catch(function (err) { apiError(err, "Couldn't clear logs"); });
+    confirmDialog({ title: "Clear logs?", message: "This can't be undone.", confirmLabel: "Clear logs", danger: true }).then(function (ok) {
+      if (!ok) return;
+      apiFetch("/api/logs/clear", { method: "POST" })
+        .then(function () {
+          showToast("Logs cleared", "success");
+          return loadLogs();
+        })
+        .catch(function (err) { apiError(err, "Couldn't clear logs"); });
+    });
   });
 
   cliAddCopy.addEventListener("click", function () { copyText(cliAddPre.textContent, cliAddCopy); });
@@ -3110,7 +3440,8 @@ const clientJs = `
   });
 
   restartBtn.addEventListener("click", function () {
-    if (!window.confirm("Restart the proxy? Hosts are unavailable for a few seconds.")) return;
+    confirmDialog({ title: "Restart the proxy?", message: "Hosts are unavailable for a few seconds.", confirmLabel: "Restart", danger: true }).then(function (ok) {
+    if (!ok) return;
     var s = settingsLoaded;
     var nextPort = s ? ((s.env && s.env.httpPort) ? s.httpPort : ((s.saved && s.saved.httpPort) || s.httpPort)) : null;
     restartBtn.disabled = true;
@@ -3143,6 +3474,7 @@ const clientJs = `
         restartBtn.disabled = false;
         restartBtn.classList.remove("busy");
       });
+    });
   });
 
   document.getElementById("set-home-copy").addEventListener("click", function (e) { copyText(setHome.textContent, e.currentTarget); });
@@ -3896,6 +4228,80 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
   <div class="modal-foot">
     <button type="button" id="allow-cancel" class="btn">Cancel</button>
     <button type="button" id="allow-save" class="btn btn-primary" disabled>Save changes</button>
+  </div>
+</dialog>
+<dialog id="confirm-dialog">
+  <div class="modal-head">
+    <div>
+      <h3 class="modal-title" id="confirm-title"></h3>
+    </div>
+    <button type="button" id="confirm-close" class="btn btn-ghost modal-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <p class="modal-desc" id="confirm-message"></p>
+  </div>
+  <div class="modal-foot">
+    <button type="button" id="confirm-cancel" class="btn">Cancel</button>
+    <button type="button" id="confirm-ok" class="btn btn-primary">OK</button>
+  </div>
+</dialog>
+<dialog id="prompt-dialog">
+  <div class="modal-head">
+    <div>
+      <h3 class="modal-title" id="prompt-title"></h3>
+    </div>
+    <button type="button" id="prompt-close" class="btn btn-ghost modal-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <p class="modal-desc" id="prompt-message"></p>
+    <div class="field">
+      <label id="prompt-label" for="prompt-input"></label>
+      <input type="text" id="prompt-input" class="input" autocomplete="off">
+    </div>
+    <div id="prompt-error" class="field-error" role="alert" hidden></div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" id="prompt-cancel" class="btn">Cancel</button>
+    <button type="button" id="prompt-confirm" class="btn btn-primary">OK</button>
+  </div>
+</dialog>
+<dialog id="share-dialog">
+  <div class="modal-head">
+    <div>
+      <h3 class="modal-title">Share publicly</h3>
+      <p id="share-host" class="modal-sub mono"></p>
+    </div>
+    <button type="button" id="share-close" class="btn btn-ghost modal-close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="modal-body">
+    <p class="modal-desc">Anyone with the link will be able to reach this host, without signing in.</p>
+    <div id="share-options" class="share-options" role="radiogroup" aria-label="Sharing method">
+      <button type="button" id="share-option-random" class="option-card" role="radio" aria-checked="false">
+        <span class="option-dot" aria-hidden="true"></span>
+        <span class="option-body">
+          <span class="option-title">Random URL</span>
+          <span class="option-desc">https://&lt;random&gt;.trycloudflare.com &middot; No account needed. Changes each time sharing restarts.</span>
+        </span>
+      </button>
+      <button type="button" id="share-option-custom" class="option-card" role="radio" aria-checked="false">
+        <span class="option-dot" aria-hidden="true"></span>
+        <span class="option-body">
+          <span class="option-title">Custom domain</span>
+          <span class="option-desc">Your own hostname on a domain in your Cloudflare account. Stable URL.</span>
+          <span id="share-custom-extra" class="option-extra" hidden>
+            <label for="share-domain-input" class="dim">Hostname</label>
+            <input type="text" id="share-domain-input" class="input mono" placeholder="app.example.com" autocomplete="off">
+            <div id="share-domain-error" class="field-error" role="alert" hidden></div>
+            <p id="share-domain-hint" class="modal-hint"></p>
+          </span>
+        </span>
+      </button>
+    </div>
+    <div id="share-error" class="field-error" role="alert" hidden></div>
+  </div>
+  <div class="modal-foot">
+    <button type="button" id="share-cancel" class="btn">Cancel</button>
+    <button type="button" id="share-submit" class="btn btn-primary">Start sharing</button>
   </div>
 </dialog>
 <div id="toast-container" class="toast-container" aria-live="polite"></div>

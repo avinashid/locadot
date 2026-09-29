@@ -5,10 +5,12 @@ import path from "path";
 import { spawn, spawnSync, type ChildProcess } from "child_process";
 import Constants from "../constants";
 import logger from "../utils/logger";
+import { setupNamedTunnel } from "./hub-tunnel";
 import type { HostEntry, TunnelState } from "../types";
 
 /**
- * Public sharing through Cloudflare quick tunnels (https://<random>.trycloudflare.com, no account).
+ * Public sharing through Cloudflare quick tunnels (https://<random>.trycloudflare.com, no account),
+ * or through a named tunnel per mapping on the user's own hostname (`tunnelDomain`).
  * cloudflared forwards to the proxy's HTTP port with the public Host header, and the proxy maps
  * that name back to the mapping, so redirects and cookies stay on the public name.
  */
@@ -17,6 +19,7 @@ const exe = os.platform() === "win32" ? "cloudflared.exe" : "cloudflared";
 const BIN_DIR = path.join(Constants.paths.HOME, "bin");
 const RELEASES = "https://github.com/cloudflare/cloudflared/releases/latest/download/";
 const URL_PATTERN = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i;
+const REGISTERED_PATTERN = /Registered tunnel connection/i;
 
 const onPath = () => {
   const finder = os.platform() === "win32" ? "where" : "which";
@@ -32,6 +35,8 @@ export const cloudflaredPath = () => {
 
 export interface CloudflaredInfo {
   installed: boolean;
+  /** ~/.cloudflared/cert.pem exists, so named tunnels (custom domains) can be created without a browser login. */
+  loggedIn: boolean;
   path?: string;
   version?: string;
 }
@@ -42,11 +47,12 @@ let cached: { at: number; info: CloudflaredInfo } | undefined;
 export const cloudflaredInfo = (fresh = false): CloudflaredInfo => {
   if (!fresh && cached && Date.now() - cached.at < 60_000) return cached.info;
   const file = cloudflaredPath();
-  let info: CloudflaredInfo = { installed: false };
+  const loggedIn = fs.existsSync(path.join(os.homedir(), ".cloudflared", "cert.pem"));
+  let info: CloudflaredInfo = { installed: false, loggedIn };
   if (file) {
     const result = spawnSync(file, ["--version"], { encoding: "utf8", timeout: 5000, windowsHide: true });
     const version = `${result.stdout || ""}${result.stderr || ""}`.match(/version\s+(\S+)/i)?.[1];
-    info = { installed: result.status === 0, path: file, ...(version ? { version } : {}) };
+    info = { installed: result.status === 0, loggedIn, path: file, ...(version ? { version } : {}) };
   }
   cached = { at: Date.now(), info };
   return info;
@@ -123,7 +129,7 @@ export class TunnelManager {
 
   constructor(private origin: () => string) {}
 
-  /** The mapping a public trycloudflare.com Host belongs to. */
+  /** The mapping a public Host (trycloudflare.com or a custom hostname) belongs to. */
   hostFor(publicHost: string) {
     for (const [host, tunnel] of this.tunnels) if (tunnel.publicHost === publicHost) return host;
     return undefined;
@@ -138,35 +144,66 @@ export class TunnelManager {
 
   /** Starts and stops tunnels to match the registry; `retry` also restarts ones that failed. */
   sync(hosts: Record<string, HostEntry>, retry = false) {
-    for (const [host, tunnel] of [...this.tunnels]) if (!hosts[host]?.tunnel || (retry && tunnel.status === "error")) this.stop(host);
-    for (const [host, entry] of Object.entries(hosts)) if (entry.tunnel && !this.tunnels.has(host)) this.start(host);
+    for (const [host, tunnel] of [...this.tunnels]) {
+      const entry = hosts[host];
+      if (!entry?.tunnel || (retry && tunnel.status === "error") || tunnel.domain !== (entry.tunnelDomain || undefined)) this.stop(host);
+    }
+    for (const [host, entry] of Object.entries(hosts)) if (entry.tunnel && !this.tunnels.has(host)) this.start(host, entry.tunnelDomain);
   }
 
-  private start(host: string) {
+  private start(host: string, domain?: string) {
+    const mode = domain ? "custom" : "quick";
     const file = cloudflaredPath();
     if (!file) {
-      this.tunnels.set(host, { enabled: true, status: "error", error: "cloudflared is not installed. Run `locadot tunnel:install`." });
+      this.tunnels.set(host, { enabled: true, status: "error", mode, domain, error: "cloudflared is not installed. Run `locadot tunnel:install`." });
       return;
     }
-    const tunnel: Running = { enabled: true, status: "starting" };
+    const tunnel: Running = { enabled: true, status: "starting", mode, domain };
     this.tunnels.set(host, tunnel);
+    if (domain) {
+      this.startCustom(file, host, domain, tunnel);
+      return;
+    }
     // An empty config file keeps a user's ~/.cloudflared/config.yml (named tunnels) out of the way.
     const config = path.join(Constants.paths.HOME, "cloudflared-quick.yml");
     fs.writeFileSync(config, "");
-    const child = spawn(file, ["tunnel", "--no-autoupdate", "--config", config, "--url", this.origin()], {
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
+    this.run(host, tunnel, file, ["tunnel", "--no-autoupdate", "--config", config, "--url", this.origin()], (text) => {
+      const url = text.match(URL_PATTERN)?.[0];
+      if (url) Object.assign(tunnel, { status: "up", url, publicHost: new URL(url).hostname });
     });
+  }
+
+  /** Logs in if needed, creates the mapping's own named tunnel and points the hostname's DNS at it, then runs it. */
+  private startCustom(file: string, host: string, domain: string, tunnel: Running) {
+    const name = `locadot-${host.replace(/[^a-z0-9-]/gi, "-")}`;
+    tunnel.publicHost = domain;
+    setupNamedTunnel(domain, name, (loginUrl) => {
+      if (this.tunnels.get(host) === tunnel) Object.assign(tunnel, { status: "login", loginUrl });
+    })
+      .then(() => {
+        if (this.tunnels.get(host) !== tunnel) return;
+        Object.assign(tunnel, { status: "starting", loginUrl: undefined });
+        this.run(host, tunnel, file, ["tunnel", "--no-autoupdate", "run", "--url", this.origin(), name], (text) => {
+          if (REGISTERED_PATTERN.test(text)) Object.assign(tunnel, { status: "up", url: `https://${domain}` });
+        });
+      })
+      .catch((error: any) => {
+        if (this.tunnels.get(host) !== tunnel) return;
+        Object.assign(tunnel, { status: "error", error: error?.message || String(error), loginUrl: undefined });
+        logger.warn(`🌍 tunnel for ${host} failed: ${tunnel.error}`);
+      });
+  }
+
+  private run(host: string, tunnel: Running, file: string, args: string[], onData: (text: string) => void) {
+    const child = spawn(file, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     tunnel.child = child;
     let tail = "";
     const read = (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       tail = (tail + text).slice(-2000);
-      const url = text.match(URL_PATTERN)?.[0];
-      if (url && tunnel.status !== "up") {
-        Object.assign(tunnel, { status: "up", url, publicHost: new URL(url).hostname });
-        logger.info(`🌍 ${host} is public at ${url}`);
-      }
+      if (tunnel.status === "up") return;
+      onData(text);
+      if ((tunnel.status as TunnelState["status"]) === "up") logger.info(`🌍 ${host} is public at ${tunnel.url}`);
     };
     child.stdout?.on("data", read);
     child.stderr?.on("data", read);
@@ -174,7 +211,8 @@ export class TunnelManager {
     child.on("exit", (code) => {
       if (this.tunnels.get(host) !== tunnel) return;
       const reason = tail.split(/\r?\n/).filter((line) => /ERR|error|failed/i.test(line)).pop()?.trim();
-      Object.assign(tunnel, { status: "error", error: reason || `cloudflared exited (${code})`, url: undefined, publicHost: undefined, child: undefined });
+      Object.assign(tunnel, { status: "error", error: reason || `cloudflared exited (${code})`, url: undefined, child: undefined });
+      if (!tunnel.domain) tunnel.publicHost = undefined;
       logger.warn(`🌍 tunnel for ${host} stopped: ${tunnel.error}`);
     });
   }
@@ -182,10 +220,8 @@ export class TunnelManager {
   stop(host: string) {
     const tunnel = this.tunnels.get(host);
     this.tunnels.delete(host);
-    if (tunnel?.child) {
-      tunnel.child.kill();
-      logger.info(`🌍 ${host} is no longer public`);
-    }
+    if (tunnel?.child || tunnel?.status === "login") logger.info(`🌍 ${host} is no longer public`);
+    tunnel?.child?.kill();
   }
 
   stopAll() {

@@ -437,7 +437,8 @@ test("locadot tunnel: a public host reaches its mapping, with --cors working for
   assert.equal(cli("allow", "--host", "share.localhost", "--clear").status, 0);
 
   const hosts = JSON.parse((await httpGet(httpPort, "localhost", "/api/hosts")).body);
-  assert.deepEqual(hosts[0].tunnel, { enabled: true, status: "up", url: `https://${publicHost}` });
+  assert.deepEqual(hosts[0].tunnel, { enabled: true, status: "up", mode: "quick", url: `https://${publicHost}` });
+  assert.equal(hosts[0].tunnelDomain, null);
   const status = JSON.parse((await httpGet(httpPort, "localhost", "/api/status")).body);
   assert.equal(status.system.cloudflared.version, "2099.1.0");
 
