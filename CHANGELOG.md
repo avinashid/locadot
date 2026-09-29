@@ -9,6 +9,10 @@
   `GET /api/hub` reports `panel`; `PUT /api/hub/panel` turns it on or off.
 
 ### Fixed
+- Start at boot on macOS: `sudo locadot startup:enable` wrote a LaunchAgent into root's home, which never runs; it now
+  installs a LaunchDaemon that starts at boot, before login, as the sudo user with their state dir. Without sudo, the
+  LaunchAgent (starts at login) now clears a disabled override left by an earlier `startup:disable`, carries port
+  overrides, escapes paths, and survives a dashboard restart. Enabling or disabling no longer stops a running proxy.
 - `locadot trust` on macOS failed with "The authorization was denied since no user interaction was possible". It ran
   `security` through an osascript admin prompt, which can't show the trust-settings dialog macOS requires; it now runs
   `sudo security` in the terminal (or `security` directly from the dashboard). `sudo locadot trust` is refused on macOS,

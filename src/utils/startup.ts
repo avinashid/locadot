@@ -11,6 +11,7 @@ const SERVICE_NAME = "locadot-proxy";
 const MAC_LABEL = "com.locadot.proxy";
 const CRON_MARK = "# locadot-proxy";
 const MARKER = path.join(Constants.paths.HOME, "startup.json");
+const markerIn = (state: string) => path.join(state, "startup.json");
 // Per-user Startup folder: unlike an ONLOGON scheduled task it needs no admin rights.
 const windowsLauncher = () =>
   path.join(
@@ -20,7 +21,81 @@ const windowsLauncher = () =>
 // Earlier versions registered an ONLOGON scheduled task and kept the script in the state dir.
 const LEGACY_LAUNCHER = path.join(Constants.paths.HOME, "startup-hidden.vbs");
 
-const plistPath = () => path.join(os.homedir(), "Library", "LaunchAgents", `${MAC_LABEL}.plist`);
+// Tests point these elsewhere.
+export const macDirs = { daemons: "/Library/LaunchDaemons" };
+const agentPath = (home = os.homedir()) => path.join(home, "Library", "LaunchAgents", `${MAC_LABEL}.plist`);
+const daemonPath = () => path.join(macDirs.daemons, `${MAC_LABEL}.plist`);
+
+const xml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Home of the user behind `sudo`, so root mode starts their proxy, not root's. */
+const sudoUserHome = (user: string) => {
+  try {
+    const out = execFileSync("dscl", [".", "-read", `/Users/${user}`, "NFSHomeDirectory"], { encoding: "utf8", windowsHide: true });
+    const home = out.split(":").slice(1).join(":").trim();
+    if (home) return home;
+  } catch {}
+  return path.join("/Users", user);
+};
+
+/**
+ * Who the boot job runs as and which state dir it uses. As root under plain `sudo`, HOME is /var/root, so the
+ * state dir is re-derived for SUDO_USER; LOCADOT_HOME or `sudo -E` already point at the right one.
+ */
+const macTarget = () => {
+  const root = process.getuid?.() === 0;
+  const user = root ? process.env.SUDO_USER : undefined;
+  if (!user || user === "root") return { root, user: undefined, home: os.homedir(), state: Constants.paths.HOME };
+  const home = sudoUserHome(user);
+  const own = process.env.LOCADOT_HOME || Constants.paths.HOME.startsWith(`${home}/`);
+  return { root, user, home, state: own ? Constants.paths.HOME : path.join(home, "Library", "Application Support", "locadot") };
+};
+
+export const macPlist = (label: string, argv: string[], opts: { state: string; user?: string; home?: string; env?: Record<string, string> }) => {
+  const env = { ...(opts.home ? { HOME: opts.home } : {}), ...opts.env };
+  const dict = (entries: Record<string, string>) =>
+    Object.entries(entries).map(([k, v]) => `    <key>${xml(k)}</key>\n    <string>${xml(v)}</string>`).join("\n");
+  const log = path.join(opts.state, ".locadot.log");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${xml(label)}</string>
+  <key>ProgramArguments</key>
+  <array>
+    ${argv.map((arg) => `<string>${xml(arg)}</string>`).join("\n    ")}
+  </array>${opts.user ? `\n  <key>UserName</key>\n  <string>${xml(opts.user)}</string>` : ""}${Object.keys(env).length ? `\n  <key>EnvironmentVariables</key>\n  <dict>\n${dict(env)}\n  </dict>` : ""}
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- A dashboard restart spawns the new proxy and exits; launchd must not take it down with the old one. -->
+  <key>AbandonProcessGroup</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${xml(log)}</string>
+  <key>StandardErrorPath</key>
+  <string>${xml(log)}</string>
+</dict>
+</plist>
+`;
+};
+
+/** Port vars only when the user set them; otherwise the proxy reads the ports saved in the state dir. */
+const userPortVars = (): Record<string, string> => {
+  const set = Constants.userPortEnv();
+  if (set === "none") return {};
+  const vars: Record<string, string> = { LOCADOT_USER_PORTS: set };
+  if (set.includes("LOCADOT_HTTP_PORT")) vars.LOCADOT_HTTP_PORT = String(Constants.server.httpPort);
+  if (set.includes("LOCADOT_HTTPS_PORT")) vars.LOCADOT_HTTPS_PORT = String(Constants.server.httpsPort);
+  return vars;
+};
+
+/** Clears a disabled override (left by `launchctl unload -w`), which would keep the job from ever running. */
+const launchctlEnable = (domain: string) => {
+  try {
+    execFileSync("launchctl", ["enable", `${domain}/${MAC_LABEL}`], { stdio: "ignore", windowsHide: true });
+  } catch {}
+};
 
 const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
@@ -104,30 +179,37 @@ export default class Startup {
         break;
       }
       case "mac": {
-        // macOS (10.14+) lets unprivileged processes bind 80/443, so a user LaunchAgent is enough.
-        const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>${MAC_LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    ${[command, ...args].map((arg) => `<string>${arg}</string>`).join("\n    ")}
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>${Constants.paths.LOGS}</string>
-  <key>StandardErrorPath</key>
-  <string>${Constants.paths.LOGS}</string>
-</dict>
-</plist>`;
-        fs.mkdirSync(path.dirname(plistPath()), { recursive: true });
-        fs.writeFileSync(plistPath(), plist);
-        execFileSync("launchctl", ["load", "-w", plistPath()], { stdio: "inherit", windowsHide: true });
-        method = "launch-agent";
-        break;
+        // Not loaded now: a second proxy would only fail to bind next to the running one. launchd reads
+        // LaunchAgents at login and LaunchDaemons at boot on its own.
+        const target = macTarget();
+        const argv = [command, ...args.slice(0, -1), target.state];
+        if (target.root) {
+          // Root mode: a LaunchDaemon starts at boot, before anyone logs in, as the sudo user when there is one.
+          fs.mkdirSync(macDirs.daemons, { recursive: true });
+          fs.writeFileSync(daemonPath(), macPlist(MAC_LABEL, argv, { state: target.state, user: target.user, home: target.user ? target.home : undefined, env: userPortVars() }));
+          // launchd skips daemon plists that aren't root-owned or are group/world writable.
+          fs.chmodSync(daemonPath(), 0o644);
+          fs.rmSync(agentPath(target.home), { force: true });
+          launchctlEnable("system");
+          method = "launch-daemon";
+        } else {
+          // macOS (10.14+) lets unprivileged processes bind 80/443, so a user LaunchAgent is enough. It starts at login.
+          fs.mkdirSync(path.dirname(agentPath()), { recursive: true });
+          fs.writeFileSync(agentPath(), macPlist(MAC_LABEL, argv, { state: target.state, env: userPortVars() }));
+          fs.chmodSync(agentPath(), 0o644);
+          if (fs.existsSync(daemonPath())) await execSudo(`rm -f ${quote(daemonPath())}`);
+          launchctlEnable(`gui/${process.getuid?.()}`);
+          method = "launch-agent";
+        }
+        fs.mkdirSync(target.state, { recursive: true });
+        fs.writeFileSync(markerIn(target.state), JSON.stringify({ platform, method, enabledAt: new Date().toISOString() }, null, 2));
+        if (target.user) {
+          // Written as root into the user's state dir; the user's own proxy has to be able to replace them.
+          const { uid, gid } = fs.statSync(target.home);
+          for (const file of [target.state, markerIn(target.state)]) fs.chownSync(file, uid, gid);
+        }
+        logger.info(`✅ locadot will start at ${method === "launch-daemon" ? "boot" : "login"} (${method}).`);
+        return;
       }
       default:
         throw new Error("Unknown platform");
@@ -151,14 +233,17 @@ export default class Startup {
         if (method === "root-crontab") await execSudo(`sh -c ${quote(cronEdit())}`);
         else execFileSync("sh", ["-c", cronEdit()], { stdio: "inherit", windowsHide: true });
         break;
-      case "mac":
-        if (fs.existsSync(plistPath())) {
-          try {
-            execFileSync("launchctl", ["unload", "-w", plistPath()], { stdio: "ignore", windowsHide: true });
-          } catch {}
-          fs.rmSync(plistPath(), { force: true });
+      case "mac": {
+        // Only the plist goes: unloading the job would also stop a proxy launchd started.
+        const target = macTarget();
+        fs.rmSync(agentPath(target.home), { force: true });
+        if (fs.existsSync(daemonPath())) {
+          if (target.root) fs.rmSync(daemonPath(), { force: true });
+          else await execSudo(`rm -f ${quote(daemonPath())}`);
         }
+        fs.rmSync(markerIn(target.state), { force: true });
         break;
+      }
       default:
         throw new Error("Unknown platform");
     }
@@ -192,7 +277,7 @@ export default class Startup {
           if (marker?.method === "root-crontab") return true;
           return execFileSync("sh", ["-c", "crontab -l 2>/dev/null || true"], { encoding: "utf8", windowsHide: true }).includes(CRON_MARK);
         case "mac":
-          return fs.existsSync(plistPath());
+          return fs.existsSync(agentPath()) || fs.existsSync(daemonPath());
         case "windows":
           return fs.existsSync(windowsLauncher());
         default:
