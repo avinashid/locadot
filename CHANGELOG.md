@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.6.0 (2026-09-30)
 
 ### Added
 - http → https redirect. `locadot https:redirect on` (or Settings → Proxy in the dashboard, or
