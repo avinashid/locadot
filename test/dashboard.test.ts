@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+// Isolated state: a dashboard password in the real state dir would turn every request into a 401.
+process.env.LOCADOT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-dashboard-"));
 
 const { handleDashboardRequest } = require("../src/dashboard");
 
