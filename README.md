@@ -215,7 +215,7 @@ working on the same URL, since they authenticate with their own tokens. Some det
 | `locadot clear:logs` | Clear the log file. |
 | `locadot path` | Show every file locadot uses. `path:logs` and `path:hosts` print a single path. |
 | `locadot token` | Print the dashboard API token, for scripts and AI agents. |
-| `locadot startup:enable` / `startup:disable` / `startup:status` | Start the proxy at boot (Linux cron; macOS LaunchDaemon with `sudo`, running as you) or logon (macOS LaunchAgent without `sudo`; a hidden script in the Windows Startup folder, no admin needed). |
+| `locadot startup:enable` / `startup:disable` / `startup:status` | Start the proxy at boot (Linux cron; macOS LaunchDaemon) or logon (macOS LaunchAgent; a hidden script in the Windows Startup folder, no admin needed). On ports below 1024 it asks for your password (sudo in a terminal, the system dialog from the dashboard), since macOS and Linux need root to bind them on loopback; the boot job then runs as root. |
 
 ---
 

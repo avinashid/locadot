@@ -1,7 +1,7 @@
 import fs from "fs";
 import { execFileSync } from "child_process";
 import Constants from "../constants";
-import Startup from "../utils/startup";
+import Startup, { macLowPortsNeedRoot } from "../utils/startup";
 import { isCATrusted } from "../utils/trust";
 import type { SystemStatus } from "../types";
 
@@ -30,9 +30,11 @@ export const unprivilegedPortStart = (): number | null => {
   }
 };
 
-/** macOS (since 10.14) and Windows let any user bind 80/443; Linux depends on the sysctl. */
+/** Windows lets any user bind 80/443; macOS only on the wildcard address; Linux depends on the sysctl. */
 export const canBindPrivileged = () => {
-  if (process.platform !== "linux" || isElevated()) return true;
+  if (process.platform === "win32" || isElevated()) return true;
+  if (process.platform === "darwin") return !macLowPortsNeedRoot();
+  if (process.platform !== "linux") return true;
   const start = unprivilegedPortStart();
   return start !== null && start <= Math.min(Constants.server.httpPort, Constants.server.httpsPort);
 };

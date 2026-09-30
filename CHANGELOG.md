@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- `startup:enable` on ports 80/443 now asks for admin rights. macOS only lets non-root bind ports below 1024 on
+  all interfaces, and locadot listens on loopback, so the login LaunchAgent couldn't bind; it now installs a root
+  LaunchDaemon (after a password prompt), and `sudo startup:enable` no longer drops the job to your user. On Linux
+  a terminal gets a plain `sudo` prompt instead of a desktop-only dialog, and a missing prompt fails with a clear
+  message. The dashboard and `doctor` report on macOS that 80/443 need root.
+
 ## 2.6.0 (2026-09-30)
 
 ### Added

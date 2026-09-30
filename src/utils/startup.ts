@@ -1,7 +1,7 @@
 import path from "path";
 import os from "os";
 import fs from "fs";
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import sudo from "@expo/sudo-prompt";
 import Constants from "../constants";
 import locadotFile from "../lib/locadot-file";
@@ -135,6 +135,40 @@ function execSudo(cmd: string): Promise<void> {
   });
 }
 
+/**
+ * In a terminal, plain sudo asks for the password right there. Elsewhere (the dashboard's proxy) sudo-prompt shows
+ * the system dialog: osascript on macOS, pkexec or kdesudo on Linux, which servers and SSH sessions often lack.
+ */
+export const elevate = async (cmd: string, command: string) => {
+  if (process.stdin.isTTY) {
+    logger.info("The boot job for ports below 1024 runs as root; sudo will ask for your password.");
+    const result = spawnSync("sudo", ["sh", "-c", cmd], { stdio: "inherit", windowsHide: true });
+    if (!result.error) {
+      if (result.status === 0) return;
+      throw new Error(`sudo failed (${result.status ?? result.signal}).`);
+    }
+  }
+  try {
+    await execSudo(`sh -c ${quote(cmd)}`);
+  } catch (error: any) {
+    throw new Error(
+      `This needs admin rights and no password prompt is available here (${String(error?.message || error).trim()}). ` +
+        `Run \`${command}\` in a terminal.`
+    );
+  }
+};
+
+// Tests swap this out.
+export const privilege = { run: elevate };
+
+/**
+ * macOS (10.14+) lets any user bind ports below 1024, but only on the wildcard address. locadot listens on loopback
+ * by default, so 80/443 still need root there.
+ */
+export const macLowPortsNeedRoot = () =>
+  Math.min(Constants.server.httpPort, Constants.server.httpsPort) < 1024 &&
+  Constants.server.bind.some((host) => host !== "0.0.0.0" && host !== "::");
+
 /** Linux needs root for ports below 1024 unless the sysctl allows otherwise. */
 const linuxNeedsRoot = () => {
   if (process.getuid?.() === 0) return false;
@@ -170,7 +204,7 @@ export default class Startup {
         const line = `@reboot ${env} ${[command, ...args].map(quote).join(" ")} >> ${quote(Constants.paths.LOGS)} 2>&1 ${CRON_MARK}`;
         const edit = cronEdit(line);
         if (linuxNeedsRoot()) {
-          await execSudo(`sh -c ${quote(edit)}`);
+          await privilege.run(edit, "locadot startup:enable");
           method = "root-crontab";
         } else {
           execFileSync("sh", ["-c", edit], { stdio: "inherit", windowsHide: true });
@@ -183,21 +217,40 @@ export default class Startup {
         // LaunchAgents at login and LaunchDaemons at boot on its own.
         const target = macTarget();
         const argv = [command, ...args.slice(0, -1), target.state];
+        const needsRoot = macLowPortsNeedRoot();
         if (target.root) {
-          // Root mode: a LaunchDaemon starts at boot, before anyone logs in, as the sudo user when there is one.
+          // Root mode: a LaunchDaemon starts at boot, before anyone logs in, as the sudo user when there is one
+          // and the ports don't need root.
+          const user = needsRoot ? undefined : target.user;
           fs.mkdirSync(macDirs.daemons, { recursive: true });
-          fs.writeFileSync(daemonPath(), macPlist(MAC_LABEL, argv, { state: target.state, user: target.user, home: target.user ? target.home : undefined, env: userPortVars() }));
+          fs.writeFileSync(daemonPath(), macPlist(MAC_LABEL, argv, { state: target.state, user, home: target.user ? target.home : undefined, env: userPortVars() }));
           // launchd skips daemon plists that aren't root-owned or are group/world writable.
           fs.chmodSync(daemonPath(), 0o644);
           fs.rmSync(agentPath(target.home), { force: true });
           launchctlEnable("system");
+          method = "launch-daemon";
+        } else if (needsRoot) {
+          // A LaunchAgent runs as the user and couldn't bind, so install a root LaunchDaemon, asking for the password.
+          const dir = fs.mkdtempSync(path.join(os.tmpdir(), "locadot-daemon-"));
+          const tmp = path.join(dir, `${MAC_LABEL}.plist`);
+          fs.writeFileSync(tmp, macPlist(MAC_LABEL, argv, { state: target.state, home: target.home, env: userPortVars() }));
+          try {
+            await privilege.run(
+              `mkdir -p ${quote(macDirs.daemons)} && install -m 644 -o root -g wheel ${quote(tmp)} ${quote(daemonPath())} && ` +
+                `(launchctl enable system/${MAC_LABEL} || true)`,
+              "locadot startup:enable"
+            );
+          } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+          }
+          fs.rmSync(agentPath(target.home), { force: true });
           method = "launch-daemon";
         } else {
           // macOS (10.14+) lets unprivileged processes bind 80/443, so a user LaunchAgent is enough. It starts at login.
           fs.mkdirSync(path.dirname(agentPath()), { recursive: true });
           fs.writeFileSync(agentPath(), macPlist(MAC_LABEL, argv, { state: target.state, env: userPortVars() }));
           fs.chmodSync(agentPath(), 0o644);
-          if (fs.existsSync(daemonPath())) await execSudo(`rm -f ${quote(daemonPath())}`);
+          if (fs.existsSync(daemonPath())) await privilege.run(`rm -f ${quote(daemonPath())}`, "locadot startup:enable");
           launchctlEnable(`gui/${process.getuid?.()}`);
           method = "launch-agent";
         }
@@ -230,7 +283,7 @@ export default class Startup {
         fs.rmSync(windowsLauncher(), { force: true });
         break;
       case "linux":
-        if (method === "root-crontab") await execSudo(`sh -c ${quote(cronEdit())}`);
+        if (method === "root-crontab") await privilege.run(cronEdit(), "locadot startup:disable");
         else execFileSync("sh", ["-c", cronEdit()], { stdio: "inherit", windowsHide: true });
         break;
       case "mac": {
@@ -239,7 +292,7 @@ export default class Startup {
         fs.rmSync(agentPath(target.home), { force: true });
         if (fs.existsSync(daemonPath())) {
           if (target.root) fs.rmSync(daemonPath(), { force: true });
-          else await execSudo(`rm -f ${quote(daemonPath())}`);
+          else await privilege.run(`rm -f ${quote(daemonPath())}`, "locadot startup:disable");
         }
         fs.rmSync(markerIn(target.state), { force: true });
         break;

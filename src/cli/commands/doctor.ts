@@ -5,6 +5,7 @@ import locadotProxy from "../../lib/proxy-control";
 import RegistryStore from "../../lib/registry";
 import Constants from "../../constants";
 import { isCATrusted, trustInstructions } from "../../utils/trust";
+import { macLowPortsNeedRoot } from "../../utils/startup";
 import { print } from "../shared";
 
 export async function doctor(options: { host?: string }) {
@@ -42,6 +43,14 @@ export async function doctor(options: { host?: string }) {
       canBind || Boolean(info),
       "Allowed to bind ports 80/443",
       "Run with sudo, or allow it once: `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80` (persist in /etc/sysctl.d/)."
+    );
+  }
+
+  if (os.platform() === "darwin" && macLowPortsNeedRoot()) {
+    check(
+      process.getuid?.() === 0 || Boolean(info),
+      "Allowed to bind ports 80/443",
+      "macOS lets non-root bind ports below 1024 only on all interfaces, and locadot listens on loopback. Run `sudo locadot start`."
     );
   }
 
