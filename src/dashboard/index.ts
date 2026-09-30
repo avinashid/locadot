@@ -22,6 +22,8 @@ interface HostRow {
   allow: string[];
   tunnelDomain: string | null;
   protect: { scopes: ProtectScope[]; updatedAt: string | null } | null;
+  /** null: follows the global setting. */
+  httpsRedirect: boolean | null;
   createdAt: string;
   updatedAt: string;
   urls: { https: string; http: string };
@@ -84,6 +86,7 @@ async function buildHosts(ctx: DashboardContext): Promise<HostRow[]> {
         allow: entry.allow ?? [],
         tunnelDomain: entry.tunnelDomain ?? null,
         protect: entry.protect ? { scopes: entry.protect.scopes, updatedAt: HostAuth.updatedAt(host) ?? null } : null,
+        httpsRedirect: entry.httpsRedirect ?? null,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
         urls: hostUrls(host, httpPort, httpsPort),

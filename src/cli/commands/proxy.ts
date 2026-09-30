@@ -1,10 +1,9 @@
-import fs from "fs";
 import { InputError } from "../../lib/localhost";
 import locadotProxy from "../../lib/proxy-control";
 import RegistryStore from "../../lib/registry";
 import { urlFor } from "../../lib/urls";
 import Constants from "../../constants";
-import FileModule from "../../utils/file";
+import ConfigStore from "../../lib/config";
 import Startup from "../../utils/startup";
 import { isCATrusted } from "../../utils/trust";
 import { print } from "../shared";
@@ -24,8 +23,7 @@ const usePorts = (options: PortOptions) => {
   const httpsPort = parse(options.httpsPort, "--https-port") ?? Constants.server.httpsPort;
   if (httpPort === httpsPort) throw new InputError(`❌ HTTP and HTTPS can't share port ${httpPort}.`);
   Object.assign(Constants.server, { httpPort, httpsPort });
-  FileModule.ensureDir();
-  fs.writeFileSync(Constants.paths.CONFIG_FILE, JSON.stringify({ httpPort, httpsPort }, null, 2) + "\n");
+  ConfigStore.write({ httpPort, httpsPort });
   return true;
 };
 
@@ -43,6 +41,7 @@ export async function status(options: { json?: boolean }) {
     bind: info?.bind ?? Constants.server.bind,
     hosts,
     caTrusted: trusted,
+    httpsRedirect: ConfigStore.httpsRedirect(),
     startupEnabled: startup,
     dashboard: urlFor("localhost"),
     stateDir: Constants.paths.HOME,
@@ -55,6 +54,7 @@ export async function status(options: { json?: boolean }) {
   print(`   Ports:     http ${report.httpPort}, https ${report.httpsPort} on ${report.bind.join(", ")}`);
   print(`   Hosts:     ${hosts}`);
   print(`   CA:        ${trusted === undefined ? "unknown" : trusted ? "trusted" : "not trusted (run `locadot trust`)"}`);
+  print(`   Redirect:  ${report.httpsRedirect ? "http → https" : "off"}`);
   print(`   Startup:   ${startup ? "enabled" : "disabled"}`);
   print(`   Dashboard: ${report.dashboard}`);
   print(`   State dir: ${report.stateDir}`);
@@ -84,6 +84,15 @@ export async function restart(options: PortOptions = {}) {
   usePorts(options);
   const info = await locadotProxy.restart();
   print(`☑️ Proxy restarted on http ${info.httpPort}, https ${info.httpsPort} (pid ${info.pid}).`);
+}
+
+/** The global http → https redirect; the running proxy picks the change up without a restart. */
+export async function httpsRedirect(value?: string) {
+  if (value !== undefined && value !== "on" && value !== "off") throw new InputError('❌ Use "on" or "off".');
+  if (value !== undefined) ConfigStore.write({ httpsRedirect: value === "on" || undefined });
+  const on = ConfigStore.httpsRedirect();
+  print(on ? `🔒 Plain http is redirected to https (${urlFor("localhost")}).` : "☑️ Plain http is served as-is (no https redirect).");
+  print("   Per domain: locadot update --host <host> --https-redirect on|off|default");
 }
 
 export async function kill() {

@@ -40,6 +40,7 @@ const destinationOptions = (command: Command) =>
     .option("-k, --insecure", "Don't verify the TLS certificate of an https target")
     .option("--cors", "Send Origin/Referer as the target's own and let any origin call this domain")
     .option("--no-cors", "Turn --cors off again (update)")
+    .option("--https-redirect <mode>", "Send plain http to https: on, off, or default (follow `locadot https:redirect`)")
     .option("--no-start", "Only save the mapping; don't start the proxy");
 
 program
@@ -124,6 +125,10 @@ const portOptions = (command: Command) =>
 portOptions(program.command("start").description("Start the central proxy")).action(run((options) => Commands.start(options)));
 program.command("stop").description("Stop the central proxy (keeps hosts and logs)").action(run(() => Commands.stop()));
 portOptions(program.command("restart").description("Restart the central proxy")).action(run((options) => Commands.restart(options)));
+program
+  .command("https:redirect [onOrOff]")
+  .description("Redirect plain http to https for every domain and the dashboard (on/off); shows the setting without an argument")
+  .action(run((value?: string) => Commands.httpsRedirect(value)));
 program.command("kill").description("Stop the proxy, remove all hosts and clear logs").action(run(() => Commands.kill()));
 
 program.command("trust").description("Install the locadot CA in the system trust store (sudo)").action(run(() => Commands.trust()));

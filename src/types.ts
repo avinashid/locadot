@@ -16,6 +16,8 @@ export interface HostEntry {
   tunnelDomain?: string;
   /** Ask for a password on these paths in; the password itself is in HOST_PASSWORDS_FILE (see lib/host-auth.ts). */
   protect?: { scopes: ProtectScope[] };
+  /** Send plain-http requests to https (true) or never (false); absent follows the global `httpsRedirect` setting. */
+  httpsRedirect?: boolean;
   /** Receiver side: this name forwards to a mapping on a connected sender (see lib/remotes.ts). */
   remote?: { name: string; host: string };
   createdAt: string;

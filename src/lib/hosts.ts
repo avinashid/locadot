@@ -30,8 +30,11 @@ export const parseTunnelDomain = (value: unknown) => {
   return domain;
 };
 
+/** A mapping's https redirect: true/false override the global setting, null goes back to following it. */
+export type HttpsRedirect = boolean | null;
+
 export default class HostOps {
-  static async add(input: { host: unknown; target: unknown; insecure?: boolean; cors?: boolean; allow?: unknown }) {
+  static async add(input: { host: unknown; target: unknown; insecure?: boolean; cors?: boolean; allow?: unknown; httpsRedirect?: HttpsRedirect }) {
     const host = Localhost.requireHost(input.host);
     const target = requireTarget(input.target);
     const allow = input.allow === undefined ? [] : parseAllowList(input.allow);
@@ -43,13 +46,13 @@ export default class HostOps {
           `❌ ${host} is already mapped to ${existing.target}. Use \`locadot update --host ${host} ...\` instead.`
         );
       }
-      registry.hosts[host] = { target, insecure: input.insecure || undefined, cors: input.cors || undefined, allow: allow.length ? allow : undefined, createdAt: now, updatedAt: now };
+      registry.hosts[host] = { target, insecure: input.insecure || undefined, cors: input.cors || undefined, allow: allow.length ? allow : undefined, httpsRedirect: input.httpsRedirect ?? undefined, createdAt: now, updatedAt: now };
       return registry.hosts[host];
     });
     return { host, entry };
   }
 
-  static async update(input: { host: unknown; target: unknown; insecure?: boolean; cors?: boolean; allow?: unknown }) {
+  static async update(input: { host: unknown; target: unknown; insecure?: boolean; cors?: boolean; allow?: unknown; httpsRedirect?: HttpsRedirect }) {
     const host = Localhost.requireHost(input.host);
     const target = requireTarget(input.target);
     const allow = input.allow === undefined ? undefined : parseAllowList(input.allow);
@@ -65,8 +68,20 @@ export default class HostOps {
         insecure: insecure || undefined,
         cors: cors || undefined,
         allow: list?.length ? list : undefined,
+        httpsRedirect: input.httpsRedirect === undefined ? existing.httpsRedirect : input.httpsRedirect ?? undefined,
         updatedAt: new Date().toISOString(),
       };
+      return registry.hosts[host];
+    });
+    return { host, entry };
+  }
+
+  static async setHttpsRedirect(input: { host: unknown; httpsRedirect: HttpsRedirect }) {
+    const host = Localhost.requireHost(input.host);
+    const entry = await RegistryStore.mutate((registry) => {
+      const existing = registry.hosts[host];
+      if (!existing) throw new NotFoundError(`${Constants.proxyInfo.hostNotFound} (${host})`);
+      registry.hosts[host] = { ...existing, httpsRedirect: input.httpsRedirect ?? undefined, updatedAt: new Date().toISOString() };
       return registry.hosts[host];
     });
     return { host, entry };

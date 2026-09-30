@@ -79,6 +79,7 @@ Options for `add` / `update`:
 | `-t, --target <url>` | Any http(s) upstream. A bare `host:port` means `http://host:port`. |
 | `-k, --insecure` | Don't verify the TLS certificate of an `https` target (self-signed upstreams). |
 | `--cors` / `--no-cors` | Bypass CORS for this domain. The upstream gets `Origin`/`Referer` as its own origin, preflights are answered locally, any origin may read responses (with credentials), and cookies become `SameSite=None` over HTTPS. The page's calls to other domains go through locadot automatically, with no extra mapping (see [Sites that call other domains](#sites-that-call-other-domains---cors)). |
+| `--https-redirect on\|off\|default` | Send plain `http://` requests for this domain to `https://` (`on`), never (`off`), or follow `locadot https:redirect` (`default`, the initial state). `locadot update --host h --https-redirect on` changes only this, without a target. |
 | `--no-start` | Save the mapping without starting the proxy. |
 
 ### Proxy
@@ -88,6 +89,7 @@ Options for `add` / `update`:
 | `locadot start [--port 8080] [--https-port 8443]` | Start the central proxy. Default ports are 80 and 443. Ports you pass are remembered for later commands and start-at-boot, and a running proxy is moved to them. Fails loudly with the reason if it can't bind its ports. |
 | `locadot stop` | Stop the proxy. Mappings and logs are kept. |
 | `locadot restart [--port …] [--https-port …]` | Stop, then start. |
+| `locadot https:redirect [on\|off]` | Redirect plain `http://` requests to `https://` (307) for every domain and the dashboard; without an argument, show the setting. Off by default. A domain's own `--https-redirect` wins. Applies at once, without a restart. Shared links, remote access, WebSockets and the dashboard's `/api` and `/healthz` are never redirected. |
 | `locadot kill` | Stop the proxy, remove all mappings and clear the logs. |
 | `locadot status [--json]` | Is it running, its PID, ports, number of hosts, CA trust, start-at-boot, dashboard URL. |
 | `locadot doctor [--host h]` | Check the proxy, ports, permissions, CA trust, the registry and every target. Exits 1 if anything fails. |
@@ -276,6 +278,7 @@ each time the proxy starts.
 | `GET /api/logs?lines=200` | | `{ lines: [...] }` |
 | `POST /api/hosts` | `{ "host": "app.localhost", "target": "3000", "insecure": false, "cors": false }` | Add a mapping (201; 409 if it exists). |
 | `PUT /api/hosts/:host` | `{ "target": "https://example.com", "insecure": false, "cors": true }` | Change a mapping (404 if unknown). |
+| `PUT /api/hosts/:host` | `{ "httpsRedirect": true }` | Redirect this mapping's plain http to https (`true`), never (`false`), or follow the global setting (`null`). Also accepted by `POST /api/hosts` and alongside `target`. Rows show `httpsRedirect: true \| false \| null`. |
 | `PUT /api/hosts/:host` | `{ "allow": ["localhost:3000"] }` | Replace the internal addresses shared visitors may reach (normalized; `[]` clears; 400 if one is invalid). |
 | `PUT /api/hosts/:host` | `{ "protect": { "password": "…", "scopes": ["shared", "remote", "local"] } }` | Ask for a password on those paths in (at least one; `password` may be left out to keep the current one). `{ "protect": null }` removes it. Rows show `protect: { scopes, updatedAt }`, never the password. |
 | `PUT /api/hosts/:host` | `{ "tunnel": true, "domain": "app.example.com" }` | Share on a public URL: with `domain`, on that hostname through a named Cloudflare tunnel, without it on a random trycloudflare.com URL. `{ "tunnel": false }` stops sharing (400 for a bad hostname, 409 if another mapping uses it). |
@@ -284,8 +287,9 @@ each time the proxy starts.
 | `POST /api/trust` | `{ "trusted": true }` | Trust or untrust the CA. |
 | `POST /api/logs/clear` | | Clear the log. |
 | `POST /api/proxy/stop` | | Stop the proxy. Use `locadot start` to bring it back. |
-| `GET /api/settings` | | Running ports/bind, `logLevel`, `stateDir`, `saved`/`env` overrides, and `restartRequired`. |
+| `GET /api/settings` | | Running ports/bind, `logLevel`, `stateDir`, `saved`/`env` overrides, `restartRequired` and `httpsRedirect`. |
 | `PUT /api/settings` | `{ "httpPort": 8080, "httpsPort": 8443 }` | Save new ports to the config file (400 if invalid or equal). Takes effect after a restart. |
+| `PUT /api/settings` | `{ "httpsRedirect": true }` | Turn the global http → https redirect on or off; takes effect at once. |
 | `POST /api/proxy/restart` | | Restart the proxy (e.g. to pick up saved ports). |
 | `PUT /api/settings/ui-password` | `{ "password": "…", "current": "…" }` or `{ "enabled": false, "current": "…" }` | Set, change or remove the dashboard password (`current` is required once one is set). |
 | `GET /api/hub` | | Hub status/config, plus `localhost` (sender: is localhost access on) and `panel` (is the dashboard shared). |

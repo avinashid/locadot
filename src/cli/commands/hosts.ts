@@ -1,6 +1,6 @@
 import Localhost, { InputError } from "../../lib/localhost";
 import RegistryStore from "../../lib/registry";
-import HostOps from "../../lib/hosts";
+import HostOps, { type HttpsRedirect } from "../../lib/hosts";
 import { parseAllowList } from "../../lib/allow";
 import { urlFor } from "../../lib/urls";
 import type { HostEntry } from "../../types";
@@ -13,8 +13,20 @@ export type TargetOptions = {
   insecure?: boolean;
   cors?: boolean;
   allow?: string;
+  httpsRedirect?: string;
   start?: boolean;
 };
+
+const parseRedirect = (value: string | undefined): HttpsRedirect | undefined => {
+  if (value === undefined) return undefined;
+  if (value === "on") return true;
+  if (value === "off") return false;
+  if (value === "default") return null;
+  throw new InputError(`❌ --https-redirect takes on, off or default, got "${value}".`);
+};
+
+const redirectNote = (entry: HostEntry) =>
+  entry.httpsRedirect === undefined ? "" : entry.httpsRedirect ? "  (https redirect)" : "  (no https redirect)";
 
 const resolveTarget = (options: TargetOptions) => {
   if (options.port !== undefined && options.target !== undefined) {
@@ -31,6 +43,7 @@ const mapping = (options: TargetOptions) => ({
   insecure: options.insecure,
   cors: options.cors,
   allow: options.allow,
+  httpsRedirect: parseRedirect(options.httpsRedirect),
 });
 
 const warnIfDown = async (entry: HostEntry) => {
@@ -49,6 +62,12 @@ export async function add(options: TargetOptions) {
 }
 
 export async function update(options: TargetOptions) {
+  if (options.port === undefined && options.target === undefined && options.httpsRedirect !== undefined) {
+    const { host, entry } = await HostOps.setHttpsRedirect({ host: options.host, httpsRedirect: parseRedirect(options.httpsRedirect) as HttpsRedirect });
+    await ensureRunning(options);
+    print(`✅ ${urlFor(host)}: ${entry.httpsRedirect === undefined ? "https redirect follows the global setting (locadot https:redirect)" : entry.httpsRedirect ? "plain http redirects to https" : "plain http is never redirected"}`);
+    return;
+  }
   const { host, entry } = await HostOps.update(mapping(options));
   await ensureRunning(options);
   print(`✅ Updated ${urlFor(host)} → ${entry.target}`);
@@ -93,7 +112,7 @@ export async function list(options: { json?: boolean }) {
   }
   const width = Math.max(...hosts.map(([host]) => urlFor(host).length));
   for (const [host, entry] of hosts) {
-    print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}${entry.allow?.length ? `  (allow ${entry.allow.join(", ")})` : ""}${entry.protect ? `  (password: ${entry.protect.scopes.join(", ")})` : ""}`);
+    print(`${urlFor(host).padEnd(width)}  →  ${entry.target}${entry.insecure ? "  (insecure)" : ""}${entry.cors ? "  (cors)" : ""}${entry.allow?.length ? `  (allow ${entry.allow.join(", ")})` : ""}${entry.protect ? `  (password: ${entry.protect.scopes.join(", ")})` : ""}${redirectNote(entry)}`);
   }
   print(`☑️ Total: ${hosts.length}.`);
 }

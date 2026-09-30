@@ -209,6 +209,8 @@ export const jsHostsTable = `  // ---------- hosts table ----------
     if (row.cors) flags.push(["cors", "Origin/Referer rewritten to the target; any origin may call this host", "badge-cors"]);
     if (row.allow && row.allow.length) flags.push(["internal access", "Internal access: " + row.allow.join(", "), "badge-accent"]);
     if (row.protect) flags.push(["password", "Password protected on: " + protectScopeNames(row.protect.scopes), "badge-accent"]);
+    if (row.httpsRedirect === true) flags.push(["https only", "Plain http redirects to https, whatever the global setting", "badge-accent"]);
+    if (row.httpsRedirect === false) flags.push(["http allowed", "Plain http is never redirected, whatever the global setting", "badge-warn"]);
     if (flags.length) {
       td.className = "badges";
       flags.forEach(function (flag) {
@@ -997,6 +999,20 @@ export const jsHostRows = `  function labelCells(tr, labels) {
     corsLabel.appendChild(corsInput);
     corsLabel.appendChild(document.createTextNode("cors"));
     insecureTd.appendChild(corsLabel);
+    var redirectLabel = document.createElement("label");
+    redirectLabel.className = "inline-check";
+    var redirectInput = document.createElement("select");
+    redirectInput.className = "input input-sm";
+    [["", "https redirect: global"], ["on", "https redirect: on"], ["off", "https redirect: off"]].forEach(function (opt) {
+      var o = document.createElement("option");
+      o.value = opt[0];
+      o.textContent = opt[1];
+      redirectInput.appendChild(o);
+    });
+    redirectInput.value = row.httpsRedirect === true ? "on" : row.httpsRedirect === false ? "off" : "";
+    redirectInput.setAttribute("aria-label", "https redirect for " + row.host);
+    redirectLabel.appendChild(redirectInput);
+    insecureTd.appendChild(redirectLabel);
     tr.appendChild(insecureTd);
 
     var hintTd = makeCell("Enter to save \\u00b7 Esc to cancel", "dim edit-hint");
@@ -1029,7 +1045,12 @@ export const jsHostRows = `  function labelCells(tr, labels) {
       cancelBtn.disabled = true;
       apiFetch("/api/hosts/" + encodeURIComponent(row.host), {
         method: "PUT",
-        body: JSON.stringify({ target: newTarget, insecure: !!insecureInput.checked, cors: !!corsInput.checked })
+        body: JSON.stringify({
+          target: newTarget,
+          insecure: !!insecureInput.checked,
+          cors: !!corsInput.checked,
+          httpsRedirect: redirectInput.value === "on" ? true : redirectInput.value === "off" ? false : null
+        })
       })
         .then(function () {
           editingHost = null;

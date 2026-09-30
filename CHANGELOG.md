@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- http → https redirect. `locadot https:redirect on` (or Settings → Proxy in the dashboard, or
+  `PUT /api/settings {"httpsRedirect": true}`) sends plain `http://` requests for every domain and the dashboard to
+  `https://` with a 307. Per domain, `locadot add/update --https-redirect on|off|default` (the edit row in the
+  dashboard, `httpsRedirect: true|false|null` in the API) overrides it either way. Off by default; applies without a
+  restart. Shared links, remote access, WebSockets and the dashboard's `/api` and `/healthz` are left alone.
+
+### Fixed
+- `locadot start --port/--https-port` no longer drops other settings saved in the config file.
+
 ## 2.5.0 (2026-09-29)
 
 ### Changed

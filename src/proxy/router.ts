@@ -17,6 +17,7 @@ import { SHIM_PATH, isSameOrigin, parseVia, shimScript, type Via } from "./passt
 import { fromRemote, fromTunnel, hostOf, isTls, loopbackOf, tag } from "./request";
 import { record } from "./stats";
 import { guard, guardUpgrade } from "./protect";
+import { redirectToHttps, wantsHttps } from "./https-redirect";
 
 export interface RouterContext {
   proxy: httpProxy;
@@ -39,6 +40,9 @@ export interface RouterContext {
   remoteHosts?(name: string): string[];
   /** The proxy's own ports, which a mapping's `allow` list can never open up. */
   ownPorts?(): number[];
+  /** The global `httpsRedirect` setting; a mapping's own `httpsRedirect` wins over it. */
+  httpsRedirect?(): boolean;
+  httpsPort?(): number;
 }
 
 // Cloudflare swaps an origin's 502/504 for its own "bad gateway" page, so through a tunnel say 503 and the page survives.
@@ -155,6 +159,10 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
   }
   const host = resolveHost(req, ctx, hub);
   try {
+    if (wantsHttps(req, ctx, host, hub)) {
+      redirectToHttps(req, res, ctx);
+      return;
+    }
     if (Constants.dashboardHosts.includes(host)) {
       ctx.dashboard(req, res);
       return;

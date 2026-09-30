@@ -11,6 +11,7 @@ import { HubTunnel } from "../proxy/hub-tunnel";
 import { classify, handleHubApi } from "../proxy/hub";
 import { localFor, remoteFor } from "../proxy/remote";
 import HubConfigStore from "../lib/hub-config";
+import ConfigStore from "../lib/config";
 import FileModule from "../utils/file";
 import logger from "../utils/logger";
 import { createSNICallback, defaultContext } from "../utils/certs";
@@ -70,6 +71,8 @@ export async function startCentralProxy() {
     lookup: (host) => registry.get().hosts[tunnels.hostFor(host) ?? host],
     tunnelFor: (host) => tunnels.hostFor(host),
     ownPorts: () => [info.httpPort, info.httpsPort],
+    httpsRedirect: () => ConfigStore.httpsRedirect(),
+    httpsPort: () => info.httpsPort,
     remoteFor,
     localFor,
     remoteHosts: (name) =>

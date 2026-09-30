@@ -255,6 +255,7 @@ export const jsSettings = `  // ---------- settings page ----------
   var portsSave = document.getElementById("ports-save");
   var restartBtn = document.getElementById("restart-proxy-btn");
   var restartNote = document.getElementById("restart-note");
+  var setHttpsRedirect = document.getElementById("set-https-redirect");
   var setBind = document.getElementById("set-bind");
   var setBindNote = document.getElementById("set-bind-note");
   var setHome = document.getElementById("set-home");
@@ -282,6 +283,7 @@ export const jsSettings = `  // ---------- settings page ----------
     if (s.env && s.env.httpsPort) notes.push("LOCADOT_HTTPS_PORT is set and overrides the saved HTTPS port.");
     portsNote.textContent = notes.join(" ");
     restartNote.hidden = !s.restartRequired;
+    setSwitch(setHttpsRedirect, !!s.httpsRedirect);
     setBind.textContent = (s.bind || []).join(", ");
     setBindNote.textContent = s.env && s.env.bind ? "Set by LOCADOT_BIND." : "Loopback only. Set LOCADOT_BIND to change it.";
     setHome.textContent = s.stateDir || "";
@@ -311,6 +313,19 @@ export const jsSettings = `  // ---------- settings page ----------
       })
       .catch(function (err) { portsError.textContent = err.message; portsError.hidden = false; })
       .then(function () { portsSave.disabled = false; portsSave.classList.remove("busy"); });
+  });
+
+  setHttpsRedirect.addEventListener("click", function () {
+    var next = !(settingsLoaded && settingsLoaded.httpsRedirect);
+    setHttpsRedirect.disabled = true;
+    apiFetch("/api/settings", { method: "PUT", body: JSON.stringify({ httpsRedirect: next }) })
+      .then(function (s) {
+        renderSettings(s);
+        showToast(next ? "Plain http now redirects to https" : "https redirect off", "success");
+        loadHosts();
+      })
+      .catch(function (err) { apiError(err, "Couldn't change the redirect"); })
+      .then(function () { setHttpsRedirect.disabled = false; });
   });
 
   restartBtn.addEventListener("click", function () {
@@ -578,6 +593,8 @@ export const settingsView = `  <section class="view" data-view="settings" aria-l
                 <div id="restart-note" class="hub-warn" hidden>Saved. Restart the proxy to use the new ports.</div>
               </form>
               <div class="stat-list">
+                <div class="stat-row"><div class="stat-main"><div class="label">Redirect http to https</div><div class="tile-sub">Plain http on this machine goes to https, for every host and the dashboard. A host's own setting wins.</div></div>
+                  <div class="stat-side"><button type="button" id="set-https-redirect" class="switch" role="switch" aria-checked="false" aria-label="Redirect http to https"><span class="switch-knob"></span></button></div></div>
                 <div class="stat-row"><div class="stat-main"><div class="label">Listening on</div><div id="set-bind" class="tile-value mono">—</div><div id="set-bind-note" class="tile-sub"></div></div></div>
                 <div class="stat-row"><div class="stat-main"><div class="label">State directory</div><div id="set-home" class="tile-value mono">—</div></div><div class="stat-side"><button type="button" id="set-home-copy" class="copy-btn">Copy</button></div></div>
                 <div class="stat-row"><div class="stat-main"><div class="label">Log level</div><div id="set-loglevel" class="tile-value mono">—</div><div class="tile-sub">Set LOCADOT_LOG_LEVEL before starting to change it.</div></div></div>

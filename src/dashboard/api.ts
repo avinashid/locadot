@@ -19,6 +19,7 @@ import HubConfigStore from "../lib/hub-config";
 import Remotes, { RemoteError } from "../lib/remotes";
 import type { DashboardContext, HubConfig, Peer, Remote, Role } from "../types";
 import UiAuth from "../lib/ui-auth";
+import ConfigStore from "../lib/config";
 import { peerOriginOf } from "../proxy/request";
 
 const MAX_BODY = 64 * 1024;
@@ -108,6 +109,12 @@ const optionalBool = (value: unknown, name: string) => {
   return value;
 };
 
+/** A mapping's https redirect: true/false, or null to follow the global setting. */
+const optionalRedirect = (value: unknown): boolean | null | undefined => {
+  if (value === undefined || value === null || typeof value === "boolean") return value;
+  throw new ApiError(400, "`httpsRedirect` must be true, false or null (follow the global setting).");
+};
+
 const requiredBool = (value: unknown, name: string) => {
   const result = optionalBool(value, name);
   if (result === undefined) throw new ApiError(400, `\`${name}\` is required (true or false).`);
@@ -174,18 +181,8 @@ const sanitizeRemote = (remote: Remote) => {
   return rest;
 };
 
-/** Reads CONFIG_FILE as-is (whatever `locadot start --port/--https-port` last wrote), tolerating a missing/corrupt file. */
-function readConfig(): Record<string, unknown> {
-  try {
-    const raw = JSON.parse(fs.readFileSync(Constants.paths.CONFIG_FILE, "utf8"));
-    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  } catch {
-    return {};
-  }
-}
-
 const savedPorts = (): { httpPort?: number; httpsPort?: number } => {
-  const config = readConfig();
+  const config = ConfigStore.read();
   return {
     httpPort: Constants.validPort(config.httpPort),
     httpsPort: Constants.validPort(config.httpsPort),
@@ -212,6 +209,7 @@ function buildSettingsBody(ctx: DashboardContext, warning?: string) {
     saved,
     env,
     restartRequired,
+    httpsRedirect: ConfigStore.httpsRedirect(),
     uiAuth: { enabled: UiAuth.enabled(), updatedAt: UiAuth.read()?.updatedAt },
     ...(warning ? { warning } : {}),
   };
@@ -352,24 +350,31 @@ export async function route(
     if (path === "/api/settings" && method === "PUT") {
       const newHttp = validPortInput(body.httpPort, "httpPort");
       const newHttps = validPortInput(body.httpsPort, "httpsPort");
-      if (newHttp === undefined && newHttps === undefined) throw new ApiError(400, "Provide `httpPort` and/or `httpsPort`.");
-
-      const config = readConfig();
-      const saved = savedPorts();
-      const finalHttp = newHttp ?? saved.httpPort ?? ctx.proxyInfo.httpPort;
-      const finalHttps = newHttps ?? saved.httpsPort ?? ctx.proxyInfo.httpsPort;
-      if (finalHttp === finalHttps) throw new ApiError(400, "`httpPort` and `httpsPort` can't be the same.");
-
-      FileModule.ensureDir();
-      fs.writeFileSync(Constants.paths.CONFIG_FILE, JSON.stringify({ ...config, httpPort: finalHttp, httpsPort: finalHttps }, null, 2) + "\n");
-      logger.info(`⚙️ dashboard: settings saved → http ${finalHttp}, https ${finalHttps}`);
-
-      const warnings: string[] = [];
-      if (newHttp !== undefined && Constants.userEnvPort("LOCADOT_HTTP_PORT") !== undefined) {
-        warnings.push("LOCADOT_HTTP_PORT is set and overrides this");
+      const httpsRedirect = optionalBool(body.httpsRedirect, "httpsRedirect");
+      if (newHttp === undefined && newHttps === undefined && httpsRedirect === undefined) {
+        throw new ApiError(400, "Provide `httpPort`, `httpsPort` and/or `httpsRedirect`.");
       }
-      if (newHttps !== undefined && Constants.userEnvPort("LOCADOT_HTTPS_PORT") !== undefined) {
-        warnings.push("LOCADOT_HTTPS_PORT is set and overrides this");
+
+      if (httpsRedirect !== undefined) {
+        ConfigStore.write({ httpsRedirect: httpsRedirect || undefined });
+        logger.info(`⚙️ dashboard: http → https redirect ${httpsRedirect ? "on" : "off"}`);
+      }
+      const warnings: string[] = [];
+      if (newHttp !== undefined || newHttps !== undefined) {
+        const saved = savedPorts();
+        const finalHttp = newHttp ?? saved.httpPort ?? ctx.proxyInfo.httpPort;
+        const finalHttps = newHttps ?? saved.httpsPort ?? ctx.proxyInfo.httpsPort;
+        if (finalHttp === finalHttps) throw new ApiError(400, "`httpPort` and `httpsPort` can't be the same.");
+
+        ConfigStore.write({ httpPort: finalHttp, httpsPort: finalHttps });
+        logger.info(`⚙️ dashboard: settings saved → http ${finalHttp}, https ${finalHttps}`);
+
+        if (newHttp !== undefined && Constants.userEnvPort("LOCADOT_HTTP_PORT") !== undefined) {
+          warnings.push("LOCADOT_HTTP_PORT is set and overrides this");
+        }
+        if (newHttps !== undefined && Constants.userEnvPort("LOCADOT_HTTPS_PORT") !== undefined) {
+          warnings.push("LOCADOT_HTTPS_PORT is set and overrides this");
+        }
       }
       return { status: 200, body: buildSettingsBody(ctx, warnings.length ? warnings.join("; ") : undefined) };
     }
@@ -380,6 +385,7 @@ export async function route(
         insecure: optionalBool(body.insecure, "insecure"),
         cors: optionalBool(body.cors, "cors"),
         allow: body.allow,
+        httpsRedirect: optionalRedirect(body.httpsRedirect),
       });
       ctx.reload();
       logger.info(`➕ dashboard: ${host} → ${entry.target}`);
@@ -408,13 +414,19 @@ export async function route(
         const scopes = updated.entry.protect?.scopes;
         logger.info(`🔒 dashboard: ${scopes ? `${updated.host} asks for a password on ${scopes.join(", ")}${protect?.password ? " (new password)" : ""}` : `${updated.host} is no longer password protected`}`);
       }
-      if (body.target !== undefined || (tunnel === undefined && body.allow === undefined && body.protect === undefined)) {
+      const httpsRedirect = optionalRedirect(body.httpsRedirect);
+      if (httpsRedirect !== undefined && body.target === undefined) {
+        updated = await HostOps.setHttpsRedirect({ host, httpsRedirect });
+        logger.info(`✏️ dashboard: ${updated.host} https redirect ${httpsRedirect === null ? "follows the global setting" : httpsRedirect ? "on" : "off"}`);
+      }
+      if (body.target !== undefined || (tunnel === undefined && body.allow === undefined && body.protect === undefined && httpsRedirect === undefined)) {
         updated = await HostOps.update({
           host,
           target: body.target,
           insecure: optionalBool(body.insecure, "insecure"),
           cors: optionalBool(body.cors, "cors"),
           allow: body.allow,
+          httpsRedirect,
         });
         logger.info(`✏️ dashboard: ${updated.host} → ${updated.entry.target}`);
       }
