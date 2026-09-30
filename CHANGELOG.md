@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.6.1 (2026-09-30)
 
 ### Fixed
 - `startup:enable` on ports 80/443 now asks for admin rights. macOS only lets non-root bind ports below 1024 on
