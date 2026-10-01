@@ -108,6 +108,18 @@ test("dashboard password", async (t) => {
     assert.equal((await request(port, "GET", "/healthz")).status, 200);
   });
 
+  await t.test("signed out: the favicon still loads, and the login page links it", async () => {
+    for (const p of ["/favicon.svg", "/favicon.ico"]) {
+      const res = await request(port, "GET", p);
+      assert.equal(res.status, 200, p);
+      assert.equal(res.headers["content-type"], "image/svg+xml");
+      assert.match(res.body, /^<svg [^>]*viewBox="0 0 64 64"/);
+    }
+    const page = await request(port, "GET", "/");
+    assert.match(page.body, /<link rel="icon" type="image\/svg\+xml" href="\/favicon.svg">/);
+    assert.match(String(page.headers["content-security-policy"]), /img-src 'self' data:/);
+  });
+
   await t.test("a wrong password is refused, a cross-site post too", async () => {
     const bad = await login(port, "nope-nope-nope");
     assert.equal(bad.status, 401);

@@ -20,6 +20,7 @@
  *   Motion        .anim-in (one element), .anim-list (children stagger in); all motion off under prefers-reduced-motion
  *   Tooltips      data-tip="text" on any element (data-tip-pos="right|bottom|top")
  */
+import { LOGO_DATA_URI } from "../logo";
 
 export const lightVars = `
   color-scheme: light;
@@ -198,19 +199,10 @@ header {
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .logo {
   width: 24px; height: 24px;
-  border-radius: 7px;
-  background: linear-gradient(145deg, #4f8ff7, var(--accent) 55%, #1e4fd6);
-  position: relative;
+  border-radius: 6px;
+  background: url("${LOGO_DATA_URI}") center / contain no-repeat;
   flex-shrink: 0;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 1px 2px rgba(37, 99, 235, 0.35);
-}
-.logo::after {
-  content: "";
-  position: absolute;
-  left: 8px; top: 8px;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #fff;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.35);
 }
 .wordmark {
   font-size: 15px;

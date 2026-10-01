@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/avinashid/locadot/main/docs/logo.svg" alt="" width="72" align="right">
+
 # locadot 🔐
 
 [![npm](https://img.shields.io/npm/v/locadot.svg)](https://www.npmjs.com/package/locadot)

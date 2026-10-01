@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- A locadot logo (a padlock whose keyhole is the "dot"). The dashboard and sign-in page use it as their favicon
+  (`/favicon.svg`; `/favicon.ico` serves the same) and in the sidebar.
+
 ## 2.6.1 (2026-09-30)
 
 ### Fixed

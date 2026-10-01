@@ -3,6 +3,7 @@ import crypto from "crypto";
 import type { TLSSocket } from "tls";
 import logger from "../utils/logger";
 import { escapeHtml } from "./escape";
+import { LOGO_DATA_URI } from "./logo";
 import { isDashboardOrigin } from "./api";
 import UiAuth, { SESSION_COOKIE, SESSION_TTL_SEC, cookieOf } from "../lib/ui-auth";
 import { isPanel, isTls } from "../proxy/request";
@@ -17,6 +18,7 @@ const loginPage = (nonce: string, error?: string) => `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <title>Sign in · locadot</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style nonce="${escapeHtml(nonce)}">
 :root { --bg: #f6f7f9; --surface: #fff; --border: #e3e6eb; --fg: #111827; --muted: #6b7280; --accent: #2563eb; --down: #dc2626; }
 @media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --fg: #e6edf3; --muted: #8b949e; --accent: #3b82f6; --down: #f87171; } }
@@ -24,8 +26,7 @@ const loginPage = (nonce: string, error?: string) => `<!doctype html>
 body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 form { width: 100%; max-width: 340px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 14px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
-.logo { width: 24px; height: 24px; border-radius: 7px; background: var(--accent); position: relative; }
-.logo::after { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #fff; }
+.logo { width: 24px; height: 24px; background: url("${LOGO_DATA_URI}") center / contain no-repeat; }
 p { margin: 0; color: var(--muted); }
 label { font-weight: 600; font-size: 13px; }
 input { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; }
@@ -79,7 +80,7 @@ const cookie = (req: http.IncomingMessage, value: string, maxAge: number) =>
 
 const sendLogin = (res: http.ServerResponse, method: string, nonce: string, status: number, error?: string) => {
   // The dashboard's CSP forbids form posts; the login form needs one.
-  res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${nonce}'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);
+  res.setHeader("Content-Security-Policy", `default-src 'none'; style-src 'nonce-${nonce}'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);
   res.statusCode = status;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.end(method === "HEAD" ? undefined : loginPage(nonce, error));
@@ -176,7 +177,7 @@ export function gate(req: http.IncomingMessage, res: http.ServerResponse, url: U
     return true;
   }
 
-  if (path === "/healthz" || path === "/favicon.ico") return false;
+  if (path === "/healthz" || path === "/favicon.ico" || path === "/favicon.svg") return false;
   if (signedIn(req) || hasToken(req, token)) return false;
 
   if (path.startsWith("/api/")) {
