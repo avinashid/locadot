@@ -37,6 +37,7 @@ export function renderPage(nonce: string, token: string, uiAuth = false): string
 <meta name="locadot-token" content="${safeToken}">
 <meta name="locadot-ui-auth" content="${uiAuth ? "on" : "off"}">
 <title>locadot dashboard</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script nonce="${safeNonce}">try { var t = localStorage.getItem("locadot.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); var s = localStorage.getItem("locadot.sidebar"); if (s === "collapsed" || (s !== "expanded" && window.innerWidth < 1100)) document.documentElement.setAttribute("data-sidebar", "collapsed"); } catch (e) {}</script>
 <style nonce="${safeNonce}">${css}${hostsCss}${remoteCss}${systemCss}</style>
 </head>

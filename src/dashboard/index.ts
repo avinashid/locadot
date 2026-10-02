@@ -3,6 +3,7 @@ import http from "http";
 import { DashboardContext, HostEntry, HostStats, ProbeResult, ProtectScope, Role, TunnelState } from "../types";
 import HostAuth from "../lib/host-auth";
 import { renderPage } from "./page";
+import { LOGO_SVG } from "./logo";
 import { ApiError, PEER_TOKEN, assertTrusted, readJson, route } from "./api";
 import { peerOriginOf } from "../proxy/request";
 import { gate, loginIp, sessionCookie } from "./login";
@@ -146,9 +147,10 @@ export function handleDashboardRequest(req: http.IncomingMessage, res: http.Serv
     case "/":
       sendBody(res, method, 200, "text/html; charset=utf-8", renderPage(nonce, peerOriginOf(req) ? PEER_TOKEN : ctx.token, UiAuth.enabled()));
       return;
+    case "/favicon.svg":
     case "/favicon.ico":
-      res.statusCode = 204;
-      res.end();
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      sendBody(res, method, 200, "image/svg+xml", LOGO_SVG);
       return;
     case "/healthz":
       sendBody(res, method, 200, "text/plain; charset=utf-8", "ok");

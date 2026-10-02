@@ -9,6 +9,8 @@
 - Opening an unmapped `*.localhost` on a connected machine syncs with the machines it's connected to first, then
   carries on to the page if the name turned up. Otherwise the "not mapped" page says what each sync found, or its
   error, and has a **Sync again** link.
+- A locadot logo (a padlock whose keyhole is the "dot"). The dashboard and sign-in page use it as their favicon
+  (`/favicon.svg`; `/favicon.ico` serves the same) and in the sidebar.
 
 ### Changed
 - Syncing a connection now also removes mappings (and aliases) the sender no longer shares with you, instead of
