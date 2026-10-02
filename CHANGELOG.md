@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.7.0 (2026-10-02)
 
 ### Added
 - Change which hosts a viewer sees after pairing: ⋯ → **Choose hosts…** on a viewer under Remote → Peers, `locadot
