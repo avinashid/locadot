@@ -144,14 +144,14 @@ test("router: an unmapped name syncs connected machines first", async (t) => {
     const res = await get(port, "/x?a=b", { Host: "missing.localhost" });
     assert.equal(res.status, 502);
     assert.match(res.body, /Not mapped/);
-    assert.match(res.body, /<code>alice<\/code>: synced, nothing new/);
+    assert.match(res.body, /class="name">alice<\/span><span class="detail">synced, nothing new/);
     assert.match(res.body, /href="\/x\?a=b&amp;locadot-sync=1">🔄 Sync again/);
   });
 
   await t.test("a failing sync shows its error", async () => {
     fail = true;
     const res = await get(port, "/", { Host: "missing.localhost" });
-    assert.match(res.body, /<code>alice<\/code>: couldn't sync, sender unreachable/);
+    assert.match(res.body, /class="name">alice<\/span><span class="detail">couldn't sync: sender unreachable/);
     fail = false;
   });
 
@@ -168,7 +168,7 @@ test("router: an unmapped name syncs connected machines first", async (t) => {
     const plainPort = await listen(plain);
     const res = await get(plainPort, "/", { Host: "missing.localhost" });
     plain.close();
-    assert.match(res.body, /Add one with/);
+    assert.match(res.body, /<h2>Map it<\/h2>/);
     assert.doesNotMatch(res.body, /Sync again/);
   });
 });

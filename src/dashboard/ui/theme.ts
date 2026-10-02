@@ -59,8 +59,7 @@ export const lightVars = `
   --shadow-lg: 0 16px 40px rgba(16, 16, 24, 0.16), 0 2px 6px rgba(16, 16, 24, 0.06);
 `;
 
-export const css = `
-:root {
+export const darkVars = `
   color-scheme: dark;
   --bg: #09090b;
   --surface: #111114;
@@ -95,7 +94,10 @@ export const css = `
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+`;
 
+export const css = `
+:root {${darkVars}
   --radius-xs: 6px;
   --radius-sm: 8px;
   --radius-md: 10px;

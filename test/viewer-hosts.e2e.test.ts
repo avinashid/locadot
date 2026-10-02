@@ -102,7 +102,7 @@ test("viewer hosts: the sender reassigns them, the viewer syncs on an unknown na
   await t.test("a name not shared yet: the viewer syncs, then explains, with Sync again", async () => {
     const res = await request(viewer.httpPort, "extra.localhost", "/");
     assert.equal(res.status, 502);
-    assert.match(res.body, /<code>alice<\/code>: synced, nothing new/);
+    assert.match(res.body, /class="name">alice<\/span><span class="detail">synced, nothing new/);
     assert.match(res.body, /locadot-sync=1">🔄 Sync again/);
   });
 

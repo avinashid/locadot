@@ -1,6 +1,6 @@
 /**
  * The locadot mark: a padlock on a blue tile, its body the "dot". Served as the favicon and used by the
- * sidebar and sign-in page (.logo background). assets/logo.svg is the same drawing for the README.
+ * sidebar and sign-in page (.logo background). docs/logo.svg is the same drawing for the README.
  */
 export const LOGO_SVG =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +

@@ -15,6 +15,8 @@
 ### Changed
 - Syncing a connection now also removes mappings (and aliases) the sender no longer shares with you, instead of
   leaving them behind. `remote:sync` lists them.
+- The proxy's own pages ("not mapped", "upstream unreachable" and a remote's localhost page) have the dashboard's
+  look: light and dark themes, the logo, buttons for the dashboard and docs, and copyable `locadot add` commands.
 
 ## 2.6.1 (2026-09-30)
 
