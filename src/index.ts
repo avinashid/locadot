@@ -215,6 +215,12 @@ program
   .description("Change a peer's role")
   .option("--hosts <hosts>", "Comma separated hosts (viewer role only)")
   .action(run((id, role, options) => Commands.peersRole(id, role, options)));
+program
+  .command("peers:hosts <id> [hosts]")
+  .description("Show or change the hosts a viewer peer sees (comma separated hosts replace the list)")
+  .option("--add <hosts>", "Comma separated hosts to add")
+  .option("--remove <hosts>", "Comma separated hosts to remove")
+  .action(run((id, hosts, options) => Commands.peersHosts(id, hosts, options)));
 program.command("peers:revoke <id>").description("Revoke a peer").action(run((id) => Commands.peersRevoke(id)));
 
 program

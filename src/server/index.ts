@@ -10,6 +10,8 @@ import { TunnelManager } from "../proxy/tunnel";
 import { HubTunnel } from "../proxy/hub-tunnel";
 import { classify, handleHubApi } from "../proxy/hub";
 import { localFor, remoteFor } from "../proxy/remote";
+import { createAutoSync } from "../proxy/auto-sync";
+import Remotes from "../lib/remotes";
 import HubConfigStore from "../lib/hub-config";
 import ConfigStore from "../lib/config";
 import FileModule from "../utils/file";
@@ -73,6 +75,11 @@ export async function startCentralProxy() {
     ownPorts: () => [info.httpPort, info.httpsPort],
     httpsRedirect: () => ConfigStore.httpsRedirect(),
     httpsPort: () => info.httpsPort,
+    autoSync: createAutoSync({
+      remotes: () => Remotes.list().map((remote) => remote.name),
+      sync: (name) => Remotes.sync(name),
+      changed: registry.reload,
+    }),
     remoteFor,
     localFor,
     remoteHosts: (name) =>

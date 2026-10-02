@@ -1,4 +1,5 @@
 import { escapeHtml } from "../dashboard/escape";
+import type { SyncReport } from "../proxy/auto-sync";
 
 const page = (title: string, body: string, dashboardUrl: string) => `<!DOCTYPE html>
 <html lang="en">
@@ -50,12 +51,26 @@ const page = (title: string, body: string, dashboardUrl: string) => `<!DOCTYPE h
 </html>
 `;
 
-const proxyNotFound = (host: string, dashboardUrl: string) =>
+const syncLine = (r: SyncReport) => {
+  if (!r.ok) return `<li>❌ <code>${escapeHtml(r.name)}</code>: couldn't sync, ${escapeHtml(r.error || "unknown error")}</li>`;
+  const changes = [...r.added.map((h) => `+${h}`), ...r.removed.map((h) => `−${h}`)];
+  return `<li>✅ <code>${escapeHtml(r.name)}</code>: synced${changes.length ? `, ${escapeHtml(changes.join(", "))}` : ", nothing new"}</li>`;
+};
+
+/** `sync`: when there are connected machines, what syncing with them just now found, and the "Sync again" link. */
+const proxyNotFound = (host: string, dashboardUrl: string, sync?: { reports: SyncReport[]; href: string }) =>
   page(
     "locadot: host not mapped",
     `<strong style="color: #ff6b6b;">Not mapped:</strong>
     no locadot mapping exists for <code>${escapeHtml(host)}</code>.<br/><br/>
-    Add one with<br/>
+    ${
+      sync
+        ? `Synced with your connected machines, and none of them shares <code>${escapeHtml(host)}</code> with you:
+    <ul style="margin: 8px 0 12px; padding-left: 20px;">${sync.reports.map(syncLine).join("")}</ul>
+    <a href="${escapeHtml(sync.href)}">🔄 Sync again</a><br/><br/>
+    If it should be shared with you, ask whoever shared their locadot to add it to your hosts. Or map it here with<br/>`
+        : `Add one with<br/>`
+    }
     <code>npx locadot add --host ${escapeHtml(host)} --port PORT</code><br/>
     or<br/>
     <code>npx locadot add --host ${escapeHtml(host)} --target https://example.com</code>`,

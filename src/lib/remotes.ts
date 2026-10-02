@@ -258,14 +258,22 @@ export default class Remotes {
     const hosts: RemoteHost[] = hostsRes.hosts;
 
     const now = new Date().toISOString();
+    const added: string[] = [];
+    const removed: string[] = [];
     await RegistryStore.mutate((registry) => {
       const already = new Set<string>();
       const flags = new Map(hosts.map((h) => [h.host, h]));
       for (const [local, entry] of Object.entries(registry.hosts)) {
         if (entry.remote?.name !== name) continue;
-        already.add(entry.remote.host);
         const h = flags.get(entry.remote.host);
-        if (h && Boolean(h.cors) !== Boolean(entry.cors)) registry.hosts[local] = { ...entry, cors: h.cors || undefined };
+        // No longer shared with us (unassigned from a viewer, or deleted on the sender): drop it, aliases too.
+        if (!h) {
+          delete registry.hosts[local];
+          removed.push(local);
+          continue;
+        }
+        already.add(entry.remote.host);
+        if (Boolean(h.cors) !== Boolean(entry.cors)) registry.hosts[local] = { ...entry, cors: h.cors || undefined };
       }
       const taken = new Set(Object.keys(registry.hosts));
       for (const h of hosts) {
@@ -274,6 +282,7 @@ export default class Remotes {
         if (!local) continue;
         taken.add(local);
         registry.hosts[local] = { target: updated.url, remote: { name, host: h.host }, ...inherited(h), createdAt: now, updatedAt: now };
+        added.push(local);
       }
     });
 
@@ -282,7 +291,7 @@ export default class Remotes {
       .filter(([, e]) => e.remote?.name === name)
       .map(([local, e]) => ({ local, host: e.remote!.host }));
 
-    return { remote: updated, hosts, mapped, domain: updated.domain };
+    return { remote: updated, hosts, mapped, added, removed, domain: updated.domain };
   }
 
   static async alias(name: string, remoteHost: string, localHost: string): Promise<void> {

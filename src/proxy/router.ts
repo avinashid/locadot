@@ -18,6 +18,7 @@ import { fromRemote, fromTunnel, hostOf, isTls, loopbackOf, tag } from "./reques
 import { record } from "./stats";
 import { guard, guardUpgrade } from "./protect";
 import { redirectToHttps, wantsHttps } from "./https-redirect";
+import { SYNC_PARAM, mayAutoSync, wantsForcedSync, withoutSyncParam, type SyncReport } from "./auto-sync";
 
 export interface RouterContext {
   proxy: httpProxy;
@@ -43,6 +44,8 @@ export interface RouterContext {
   /** The global `httpsRedirect` setting; a mapping's own `httpsRedirect` wins over it. */
   httpsRedirect?(): boolean;
   httpsPort?(): number;
+  /** Receiver side: sync connected machines (throttled), for a name that isn't mapped yet. */
+  autoSync?(force: boolean): Promise<SyncReport[] | undefined>;
 }
 
 // Cloudflare swaps an origin's 502/504 for its own "bad gateway" page, so through a tunnel say 503 and the page survives.
@@ -146,6 +149,31 @@ const localTarget = (req: http.IncomingMessage, ctx: RouterContext, host: string
   return ctx.localFor?.(host);
 };
 
+/** An unknown name may be one a connected machine shared since the last sync: sync, then retry or explain. */
+function notMapped(req: http.IncomingMessage, res: http.ServerResponse, ctx: RouterContext, host: string, hub: HubDecision | undefined) {
+  const notFound = (reports?: SyncReport[]) => {
+    res.writeHead(downStatus(req), { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    const href = (path: string) => `${path}${path.includes("?") ? "&" : "?"}${SYNC_PARAM}=1`;
+    res.end(proxyNotFound(host, dashboardUrl(req), reports && { reports, href: href(withoutSyncParam(req.url || "/")) }));
+  };
+  if (!ctx.autoSync || !mayAutoSync(req, hub)) return notFound();
+  ctx
+    .autoSync(wantsForcedSync(req))
+    .then((reports) => {
+      if (res.headersSent || res.destroyed) return;
+      if (reports && (ctx.lookup(host) || localTarget(req, ctx, host, hub))) {
+        res.writeHead(307, { Location: withoutSyncParam(req.url || "/"), "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      notFound(reports);
+    })
+    .catch((error) => {
+      logger.warn(`auto-sync for ${host}: ${error?.message || error}`);
+      if (!res.headersSent) notFound();
+    });
+}
+
 export function handleRequest(req: http.IncomingMessage, res: http.ServerResponse, ctx: RouterContext) {
   const hub = ctx.hub?.classify(req);
   if (hub?.kind === "api") {
@@ -175,8 +203,7 @@ export function handleRequest(req: http.IncomingMessage, res: http.ServerRespons
         forwardLocal(req, res, ctx, host, local);
         return;
       }
-      res.writeHead(downStatus(req), { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-      res.end(proxyNotFound(host, dashboardUrl(req)));
+      notMapped(req, res, ctx, host, hub);
       return;
     }
 

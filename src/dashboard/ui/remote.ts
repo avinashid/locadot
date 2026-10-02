@@ -54,6 +54,13 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
       sub.className = "muted";
       sub.textContent = "last seen " + fmtRelative(peer.lastSeen);
       main.appendChild(sub);
+      if (peer.role === "viewer") {
+        var seesLine = document.createElement("div");
+        seesLine.className = "muted peer-hosts";
+        var sees = peer.hosts || [];
+        seesLine.textContent = sees.length ? "sees " + sees.join(", ") : "sees no hosts";
+        main.appendChild(seesLine);
+      }
       row.appendChild(main);
 
       var meta = document.createElement("div");
@@ -78,14 +85,66 @@ export const jsHub = `  // ---------- remote access: hub (sender) ----------
         });
       }
       meta.appendChild(makeMoreButton(function () {
-        return ["viewer", "editor", "admin"].map(function (r) {
+        var items = peer.role === "viewer" ? [{ label: "Choose hosts\\u2026", icon: ICONS.edit, onSelect: function () { choosePeerHosts(peer); } }, "-"] : [];
+        return items.concat(["viewer", "editor", "admin"].map(function (r) {
           return { label: "Set as " + r.charAt(0).toUpperCase() + r.slice(1), disabled: r === peer.role, onSelect: function () { setRole(r); } };
-        }).concat(["-", { label: "Revoke", icon: ICONS.trash, danger: true, onSelect: revoke }]);
+        })).concat(["-", { label: "Revoke", icon: ICONS.trash, danger: true, onSelect: revoke }]);
       }, { label: "Actions for " + peer.name, small: true }));
       row.appendChild(meta);
       peersListEl.appendChild(row);
       animateIn(row, i);
     });
+  }
+
+  // Which of this machine's hosts a viewer peer sees; the peer picks the change up on its next sync.
+  var peerHostsDialog = null;
+  function choosePeerHosts(peer) {
+    if (!peerHostsDialog) {
+      peerHostsDialog = document.createElement("dialog");
+      peerHostsDialog.id = "peer-hosts-dialog";
+      peerHostsDialog.innerHTML =
+        '<div class="modal-head"><div><h3 class="modal-title"></h3><p class="modal-desc">They see only the hosts you tick. Changes reach them on their next sync.</p></div>' +
+        '<button type="button" class="btn btn-ghost modal-close" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>' +
+        '<div class="modal-body"><div class="host-checks"></div><p class="dim" data-empty hidden>No hosts on this machine yet.</p></div>' +
+        '<div class="modal-foot"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn btn-primary" data-save>Save</button></div>';
+      document.body.appendChild(peerHostsDialog);
+      Array.prototype.forEach.call(peerHostsDialog.querySelectorAll("[data-close]"), function (b) {
+        b.addEventListener("click", function () { peerHostsDialog.close(); });
+      });
+      peerHostsDialog.addEventListener("click", function (e) { if (e.target === peerHostsDialog) peerHostsDialog.close(); });
+    }
+    var dialog = peerHostsDialog;
+    dialog.querySelector(".modal-title").textContent = "Hosts " + peer.name + " sees";
+    var checks = dialog.querySelector(".host-checks");
+    clear(checks);
+    var current = {};
+    (peer.hosts || []).forEach(function (h) { current[h] = true; });
+    var own = lastHosts.filter(function (r) { return !r.remote; }).map(function (r) { return r.host; });
+    // Keep assigned names that have no mapping right now, so saving doesn't drop them silently.
+    (peer.hosts || []).forEach(function (h) { if (own.indexOf(h) < 0) own.push(h); });
+    own.forEach(function (h) {
+      var label = document.createElement("label");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = h;
+      cb.checked = Boolean(current[h]);
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(h));
+      checks.appendChild(label);
+    });
+    dialog.querySelector("[data-empty]").hidden = own.length !== 0;
+    var save = dialog.querySelector("[data-save]");
+    var fresh = save.cloneNode(true);
+    save.parentNode.replaceChild(fresh, save);
+    fresh.addEventListener("click", function () {
+      var hosts = Array.prototype.filter.call(checks.querySelectorAll("input"), function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+      fresh.disabled = true;
+      apiFetch("/api/peers/" + encodeURIComponent(peer.id), { method: "PUT", body: JSON.stringify({ hosts: hosts }) })
+        .then(function () { dialog.close(); showToast("Updated hosts for " + peer.name, "success"); return loadHub(); })
+        .catch(function (err) { apiError(err, "Couldn't update hosts"); })
+        .then(function () { fresh.disabled = false; });
+    });
+    dialog.showModal();
   }
 
   function renderInvites(invites) {

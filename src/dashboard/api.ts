@@ -508,8 +508,9 @@ export async function route(
 
     if (peerMatch && method === "PUT") {
       const id = decodeURIComponent(peerMatch[1]);
-      if (!isRole(body.role)) throw new ApiError(400, "`role` must be viewer, editor or admin.");
       const hosts = optionalHosts(body.hosts);
+      if (body.role === undefined && hosts !== undefined) return { status: 200, body: { peer: sanitizePeer(Links.setHosts(id, hosts)) } };
+      if (!isRole(body.role)) throw new ApiError(400, "`role` must be viewer, editor or admin.");
       const peer = Links.setRole(id, body.role, hosts);
       return { status: 200, body: { peer: sanitizePeer(peer) } };
     }

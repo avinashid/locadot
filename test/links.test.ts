@@ -71,6 +71,20 @@ test("setRole / revoke", () => {
   assert.ok(!peers.find((p: any) => p.id === peer.id));
 });
 
+test("setHosts: a viewer's hosts change after pairing; editors and admins have no list", () => {
+  const { code } = Links.createInvite({ role: "viewer", hosts: ["app.localhost"] });
+  const { peer } = Links.redeem(code, "Viewer");
+  const updated = Links.setHosts(peer.id, ["b.localhost", " A.localhost ", "b.localhost", ""]);
+  assert.deepEqual(updated.hosts, ["a.localhost", "b.localhost"]);
+  assert.deepEqual(Links.list().peers.find((p: any) => p.id === peer.id).hosts, ["a.localhost", "b.localhost"]);
+  assert.deepEqual(Links.setHosts(peer.id, []).hosts, []);
+  assert.throws(() => Links.setHosts("missing-id", []), is404);
+
+  Links.setRole(peer.id, "editor");
+  assert.throws(() => Links.setHosts(peer.id, ["a.localhost"]), (e: any) => e.status === 400);
+  Links.revoke(peer.id);
+});
+
 test("revokeInvite", () => {
   const { invite, code } = Links.createInvite({ role: "viewer" });
   Links.revokeInvite(invite.id);

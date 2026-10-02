@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Change which hosts a viewer sees after pairing: ⋯ → **Choose hosts…** on a viewer under Remote → Peers, `locadot
+  peers:hosts <id> [hosts] [--add …] [--remove …]`, or `PUT /api/peers/:id {"hosts": [...]}`. Peers now show the hosts
+  they see.
+- Opening an unmapped `*.localhost` on a connected machine syncs with the machines it's connected to first, then
+  carries on to the page if the name turned up. Otherwise the "not mapped" page says what each sync found, or its
+  error, and has a **Sync again** link.
+
+### Changed
+- Syncing a connection now also removes mappings (and aliases) the sender no longer shares with you, instead of
+  leaving them behind. `remote:sync` lists them.
+
 ## 2.6.1 (2026-09-30)
 
 ### Fixed

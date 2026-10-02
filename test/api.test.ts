@@ -14,6 +14,7 @@ const FileModule = require("../src/utils/file").default;
 const Constants = require("../src/constants").default;
 const Remotes = require("../src/lib/remotes").default;
 const HubConfigStore = require("../src/lib/hub-config").default;
+const Links = require("../src/lib/links").default;
 
 function readJson(req: http.IncomingMessage): Promise<any> {
   return new Promise((resolve) => {
@@ -439,6 +440,26 @@ test("dashboard api", async (t) => {
     assert.equal(off.json.remote.domain, undefined);
 
     await Remotes.disconnect("carol");
+  });
+
+  await t.test("PUT /api/peers/:id {hosts}: changes a viewer's hosts without touching the role", async () => {
+    const { code } = Links.createInvite({ role: "viewer", hosts: ["app.localhost"] });
+    const { peer } = Links.redeem(code, "Viewer");
+    const put = (body: unknown) =>
+      request(port, "PUT", `/api/peers/${peer.id}`, { headers: authed({ "content-type": "application/json" }), body: JSON.stringify(body) });
+
+    const ok = await put({ hosts: ["app.localhost", "api.localhost"] });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.peer.role, "viewer");
+    assert.deepEqual(ok.json.peer.hosts, ["api.localhost", "app.localhost"]);
+    assert.equal(ok.json.peer.tokenHash, undefined);
+
+    assert.equal((await put({ hosts: "app.localhost" })).status, 400);
+    assert.equal((await put({})).status, 400);
+    Links.setRole(peer.id, "editor");
+    assert.equal((await put({ hosts: ["app.localhost"] })).status, 400);
+    assert.equal((await request(port, "PUT", "/api/peers/nope", { headers: authed({ "content-type": "application/json" }), body: '{"hosts":[]}' })).status, 404);
+    Links.revoke(peer.id);
   });
 
   await t.test("unknown /api/nope 404s", async () => {

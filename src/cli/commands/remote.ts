@@ -5,7 +5,7 @@ import { InputError } from "../../lib/localhost";
 import { urlFor } from "../../lib/urls";
 import RegistryStore from "../../lib/registry";
 import FileModule from "../../utils/file";
-import Links from "../../lib/links";
+import Links, { LinkError } from "../../lib/links";
 import HubConfigStore from "../../lib/hub-config";
 import { setupNamedTunnel } from "../../proxy/hub-tunnel";
 import Remotes from "../../lib/remotes";
@@ -214,6 +214,22 @@ export async function peersRole(id: string, role: string, options: { hosts?: str
   print(`✅ ${peer.name} is now ${peer.role}${peer.hosts ? ` [${peer.hosts.join(", ")}]` : ""}.`);
 }
 
+/** A viewer's hosts: replace them, or --add / --remove some; with neither, print them. */
+export async function peersHosts(id: string, hosts: string | undefined, options: { add?: string; remove?: string }) {
+  const peer = Links.list().peers.find((p) => p.id === id);
+  if (!peer) throw new LinkError(404, "Peer not found.");
+  if (hosts === undefined && !options.add && !options.remove) {
+    print(peer.role === "viewer" ? `${peer.name}: ${peer.hosts?.length ? peer.hosts.join(", ") : "no hosts"}` : `${peer.name} is ${peer.role} and sees every host.`);
+    return;
+  }
+  const remove = new Set(splitHosts(options.remove)?.map((h) => h.toLowerCase()));
+  const next = [...(hosts !== undefined ? splitHosts(hosts) ?? [] : peer.hosts ?? []), ...(splitHosts(options.add) ?? [])].filter(
+    (h) => !remove.has(h.toLowerCase())
+  );
+  const updated = Links.setHosts(id, next);
+  print(`✅ ${updated.name} now sees ${updated.hosts?.length ? updated.hosts.join(", ") : "no hosts"}. They get the change on their next sync.`);
+}
+
 export async function peersRevoke(id: string) {
   Links.revoke(id);
   print(`🗑️  Revoked peer ${id}.`);
@@ -264,9 +280,10 @@ export async function remotes(options: { json?: boolean }) {
 }
 
 export async function remoteSync(name: string) {
-  const { remote, mapped } = await Remotes.sync(name);
+  const { remote, mapped, removed } = await Remotes.sync(name);
   print(`✅ ${name} synced.`);
   for (const m of mapped) print(`   + ${urlFor(m.local)}  →  ${m.host}`);
+  for (const local of removed) print(`   - ${urlFor(local)}  (no longer shared)`);
   printDomain(remote);
 }
 

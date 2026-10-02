@@ -137,6 +137,17 @@ export default class Links {
     return peer;
   }
 
+  /** A viewer's mappings, changed after pairing. Editors and admins see everything, so they have no list. */
+  static setHosts(peerId: string, hosts: string[]): Peer {
+    const data = load();
+    const peer = data.peers.find((p) => p.id === peerId);
+    if (!peer) throw new LinkError(404, "Peer not found.");
+    if (peer.role !== "viewer") throw new LinkError(400, `${peer.name} is ${peer.role === "admin" ? "an admin" : "an editor"} and already sees every host.`);
+    peer.hosts = [...new Set(hosts.map((h) => h.trim().toLowerCase()).filter(Boolean))].sort();
+    save(data);
+    return peer;
+  }
+
   static revoke(peerId: string): void {
     const data = load();
     const peers = data.peers.filter((p) => p.id !== peerId);

@@ -184,6 +184,24 @@ test("remotes (receiver)", async (t) => {
     await assert.rejects(() => Remotes.alias(remoteName, "fresh.localhost", "myalias.localhost"), ConflictError);
   });
 
+  await t.test("sync: a host no longer shared is unmapped, aliases too, and comes back when shared again", async () => {
+    const fresh = state.hosts.find((h) => h.host === "fresh.localhost")!;
+    state.hosts = state.hosts.filter((h) => h !== fresh);
+    const gone = await Remotes.sync(remoteName);
+    assert.deepEqual([...gone.removed].sort(), ["fresh.localhost", "myalias.localhost"]);
+    assert.deepEqual(gone.added, []);
+    const registry = RegistryStore.read();
+    assert.equal(registry.hosts["fresh.localhost"], undefined);
+    assert.equal(registry.hosts["myalias.localhost"], undefined);
+    assert.ok(registry.hosts["app.localhost"], "still-shared hosts stay");
+
+    state.hosts.push(fresh);
+    const back = await Remotes.sync(remoteName);
+    assert.deepEqual(back.added, ["fresh.localhost"]);
+    assert.deepEqual(back.removed, []);
+    assert.equal(RegistryStore.read().hosts["fresh.localhost"].remote.host, "fresh.localhost");
+  });
+
   await t.test("setUrl updates the stored remote", () => {
     Remotes.setUrl(remoteName, `${baseUrl}/`);
     assert.equal(Remotes.get(remoteName).url, baseUrl);

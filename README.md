@@ -152,8 +152,9 @@ short-lived pairing string, and the sender's mappings then show up in the receiv
 | `locadot hub:panel <on\|off>` | Sender: serve this dashboard to any browser at the hub's public URL, behind the [dashboard password](#dashboard-password). Off by default. See [Sharing the dashboard](#sharing-the-dashboard-in-a-browser). |
 | `locadot share --role viewer\|editor\|admin [--hosts a.localhost,b.localhost]` | Sender: print a pairing string. It works once and expires after 5 minutes. `--hosts` limits a viewer to those mappings. |
 | `locadot peers` / `peers:role <id> <role>` / `peers:revoke <id>` | Sender: list the connected machines, change a role, or cut one off. |
+| `locadot peers:hosts <id> [a.localhost,b.localhost] [--add …] [--remove …]` | Sender: show or change the mappings a viewer sees after pairing. A list replaces them; `--add`/`--remove` edit them. Taking one away cuts it off at once; the viewer gets the new list on its next sync. Also under ⋯ → **Choose hosts…** on a viewer in the dashboard. |
 | `locadot connect "<pairing string>" [--name alice] [--domain dev]` | Receiver: connect and import the sender's mappings. If a name clashes, `app.localhost` becomes `app.alice.localhost`. Admins get a local domain that opens the sender's dashboard and localhost (see below); `--domain` picks it, otherwise it's a random `adjective-noun`. |
-| `locadot remotes` / `remote:sync <name>` / `disconnect <name>` | Receiver: list the connections (with their domain), pull new mappings, or remove the connection and its names. |
+| `locadot remotes` / `remote:sync <name>` / `disconnect <name>` | Receiver: list the connections (with their domain), pull new mappings and drop ones no longer shared, or remove the connection and its names. |
 | `locadot remote:domain <name> [domain] [--off]` | Receiver, admin only: set the local domain for a remote's localhost, randomize it (no domain given), or remove it (`--off`). |
 | `locadot remote:alias <name> <remote host> <local host>` | Receiver: give a sender mapping another local name, e.g. `he.localhost`. |
 | `locadot remote:add\|remote:update\|remote:rm <name> …` | Receiver: change mappings on the sender (editor or admin). |
@@ -174,6 +175,11 @@ headers work as they do locally, and origins in the sender's pages are rewritten
 `http://localhost:8000` in a page becomes `http://api.alice.localhost` if that's the receiver's name for `api.localhost`).
 An admin's `<port>.<domain>.localhost` gets the same treatment when a `--cors` mapping points at that port.
 `remote:sync` picks up a sender turning `--cors` on or off.
+
+Opening a name that isn't mapped on the receiver (say a host the sender just added, or assigned to you) syncs every
+connected machine first, then sends the browser back to the same URL if the name turned up. If it didn't, the "not mapped"
+page lists what each sync found or why it failed, with a **Sync again** link. Requests through a tunnel or the hub never
+trigger a sync, and a sync less than 10 seconds old is reused (2 seconds for **Sync again**).
 
 When a target is down, requests through the hub or a public share get a **503** with locadot's "upstream unreachable" page.
 Cloudflare replaces an origin's 502 with its own generic "bad gateway" error, which would hide the real cause.
@@ -295,6 +301,7 @@ each time the proxy starts.
 | `GET /api/hub` | | Hub status/config, plus `localhost` (sender: is localhost access on) and `panel` (is the dashboard shared). |
 | `PUT /api/hub/localhost` | `{ "enabled": true }` | Sender: turn localhost access for admin peers on/off (400 if the hub isn't configured). |
 | `PUT /api/hub/panel` | `{ "enabled": true }` | Sender: share the dashboard at the hub's public URL on/off (400 if the hub isn't configured, or no dashboard password is set). |
+| `PUT /api/peers/:id` | `{ "role": "viewer", "hosts": ["app.localhost"] }` or `{ "hosts": [...] }` | Sender: change a peer's role, or only a viewer's mappings (400 for an editor or admin, 404 unknown). |
 | `GET /api/remotes` | | Every remote (never the token), including `domain` and `localhost`. |
 | `POST /api/remotes` | `{ "string": "<pairing string>", "name": "alice", "domain": "dev" }` | Receiver: connect using a pairing string; `domain` is optional (admin only, random if omitted). |
 | `PUT /api/remotes/:name` | `{ "domain": "dev" }` or `{ "domain": "random" }` or `{ "domain": null }` | Receiver: set, randomize or remove a remote's local domain (400 invalid, 409 clash, 404 unknown). |
